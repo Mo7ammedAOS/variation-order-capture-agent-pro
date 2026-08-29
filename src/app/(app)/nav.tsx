@@ -88,20 +88,28 @@ export function MobileNav() {
  * The capture button. Deliberately the single most reachable control in the
  * app — the whole product depends on a change being filed in the minute it is
  * noticed, not at the end of the day when the detail has gone.
+ *
+ * On a phone it is a plain circle. A floating pill wide enough to read is also
+ * wide enough to sit on top of the register it floats over, and on a 390px
+ * screen it covered a card title and part of a chart. The label returns as
+ * soon as there is width to spare for it; below that the icon carries the
+ * meaning and `aria-label` carries it for a screen reader.
  */
 export function ReportChangeFab() {
   return (
     <Link
       href="/report-change"
+      aria-label="Report change"
       className={cn(
-        'fixed end-4 bottom-20 z-50 flex items-center gap-2 rounded-full bg-primary px-5 py-3.5',
-        'text-sm font-semibold text-primary-foreground shadow-lg transition-transform',
-        'hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'focus-visible:ring-offset-2 md:bottom-6',
+        'fixed end-4 bottom-20 z-50 flex items-center justify-center gap-2 rounded-full',
+        'bg-primary text-sm font-semibold text-primary-foreground shadow-lg',
+        'size-14 sm:size-auto sm:px-5 sm:py-3.5',
+        'transition-transform hover:scale-105 focus-visible:outline-none',
+        'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:bottom-6',
       )}
     >
-      <Plus aria-hidden className="size-5" />
-      Report Change
+      <Plus aria-hidden className="size-6 sm:size-5" />
+      <span className="hidden sm:inline">Report Change</span>
     </Link>
   );
 }

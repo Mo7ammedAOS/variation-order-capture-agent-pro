@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, X } from 'lucide-react';
+import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const STATUSES = [
   'new_potential_change', 'notice_assessment', 'notice_required', 'needs_evidence',
@@ -16,6 +18,14 @@ const STATUSES = [
  * Filters live in the URL rather than component state, so a filtered register
  * is a link someone can paste into a message. "Look at the four overdue ones"
  * is a far more useful thing to send than a screenshot.
+ *
+ * On a phone the three dropdowns collapse behind a toggle. Stacked, they and
+ * the search box filled the entire first screen, so the register itself began
+ * below the fold — someone opening this on site had to scroll past the
+ * controls to reach the one thing they came for. Search stays visible because
+ * it is the field actually used in a corridor; the count on the toggle keeps a
+ * collapsed filter from being an invisible one, which is the failure mode that
+ * makes people think records have gone missing.
  */
 export function RegisterFilters({ projects }: { projects: { id: string; label: string }[] }) {
   const router = useRouter();
@@ -28,7 +38,10 @@ export function RegisterFilters({ projects }: { projects: { id: string; label: s
     router.replace(`/variations?${next.toString()}`);
   }
 
+  const [openOnMobile, setOpenOnMobile] = useState(false);
+
   const hasFilters = [...params.keys()].length > 0;
+  const activeCount = ['projectId', 'status', 'risk'].filter((key) => params.get(key)).length;
 
   return (
     <Card className="p-4">
@@ -52,6 +65,38 @@ export function RegisterFilters({ projects }: { projects: { id: string; label: s
           </div>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setOpenOnMobile((value) => !value)}
+          aria-expanded={openOnMobile}
+          aria-controls="register-filter-fields"
+          className={cn(
+            'flex h-10 items-center justify-between rounded-md border border-input px-3',
+            'text-sm font-medium sm:hidden',
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal aria-hidden className="size-4" />
+            Filters
+            {activeCount > 0 ? (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                {activeCount}
+              </span>
+            ) : null}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={cn('size-4 transition-transform', openOnMobile && 'rotate-180')}
+          />
+        </button>
+
+        <div
+          id="register-filter-fields"
+          className={cn(
+            'grid gap-3 sm:contents',
+            openOnMobile ? 'grid' : 'hidden',
+          )}
+        >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="filter-project">Project</Label>
           <Select
@@ -96,6 +141,7 @@ export function RegisterFilters({ projects }: { projects: { id: string; label: s
             <option value="amber">Warning</option>
             <option value="green">Low</option>
           </Select>
+        </div>
         </div>
       </div>
 

@@ -15,19 +15,29 @@ import { toAuthenticatedUser, type AuthenticatedUser } from '@/lib/auth/provider
  *
  * `cache` dedupes this within a single request, so a page that renders six
  * components does one lookup.
+ *
+ * The token is verified with `getClaims()`, not `getUser()`. Both are real
+ * verification, but this project signs with ES256, so `getClaims()` checks the
+ * signature locally against the cached JWKS in about a millisecond, while
+ * `getUser()` spends a round trip to the Supabase region — measured at ~220ms
+ * from here, on every request, twice per page once middleware is counted. If
+ * the project ever moves back to symmetric HS256, `getClaims()` falls back to
+ * that same network call on its own: slower, still correct.
+ *
+ * The claim we trust is `sub`, and only that. Role and active status are read
+ * from our own `users` table, never from the token, so revoking someone takes
+ * effect on their next request instead of when their JWT happens to expire.
  */
 
 export const getCurrentUser = cache(async (): Promise<AuthenticatedUser | null> => {
   const supabase = await createSupabaseServerClient();
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getClaims();
+  const userId = data?.claims?.sub;
 
-  if (error || !user) return null;
+  if (error || !userId) return null;
 
-  const record = await prisma.user.findUnique({ where: { id: user.id } });
+  const record = await prisma.user.findUnique({ where: { id: userId } });
 
   // An identity with no profile row, or a deactivated one, is not signed in.
   // A leaver keeps their Supabase identity so the audit trail still resolves

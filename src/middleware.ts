@@ -48,9 +48,14 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local signature check against the cached JWKS, not a round trip to the
+  // Supabase region. This runs on EVERY request including prefetches, so a
+  // ~220ms network call here is the single most expensive thing in a
+  // navigation. `getClaims()` still verifies the token properly; it just does
+  // it in process, and falls back to the network by itself if the project ever
+  // returns to symmetric signing keys.
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims?.sub ? { id: claims.claims.sub } : null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));

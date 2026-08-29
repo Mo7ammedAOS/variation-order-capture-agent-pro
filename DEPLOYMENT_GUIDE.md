@@ -25,23 +25,49 @@ Create a project (region close to the UAE), then from **Settings → Database**
 and **Settings → API**:
 
 ```bash
-DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=10&pool_timeout=20"
+DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?connection_limit=10&pool_timeout=20"
 DIRECT_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres"
 NEXT_PUBLIC_SUPABASE_URL="https://<ref>.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJ…"
 SUPABASE_SERVICE_ROLE_KEY="eyJ…"
 ```
 
-- `DATABASE_URL` is the **transaction pooler** (port **6543**). `pgbouncer=true`
-  is required, or Prisma attempts prepared statements that transaction-mode
-  pooling cannot support.
+- `DATABASE_URL` is the **session pooler** (port **5432**), not the transaction
+  pooler. This is a deliberate reversal of the common advice, and it is worth
+  understanding before someone "corrects" it back.
+
+  The transaction pooler (6543) needs `pgbouncer=true`, because transaction-mode
+  pooling cannot carry prepared statements between queries. That flag is not
+  free. Measured against `ap-southeast-1` from the UAE, where one network round
+  trip is **160ms**:
+
+  | Connection | Query cost | 120 concurrent operations |
+  |---|---|---|
+  | Session pooler `:5432` | **159ms** — one round trip | 120/120 clean |
+  | Transaction `:6543` + `pgbouncer=true` | 799ms — about five | 120/120 clean |
+  | Transaction `:6543`, flag removed | — | **fails**, `26000 prepared statement "sN" does not exist` |
+
+  So the flag costs 5x, and removing it while staying on 6543 is not an option —
+  the third row is what that looks like under load. The session pooler gives each
+  client a real session, so prepared statements work and a query costs the one
+  round trip it should. It suits us because this app is a **long-lived
+  container**: the transaction pooler exists for serverless, where thousands of
+  short-lived instances each need a connection for milliseconds. We are the
+  opposite shape.
+
+  Revisit this only if you move to serverless or run enough replicas to approach
+  the session-mode connection limit. Both mean going back to 6543 **with** the
+  flag, and accepting the 5x.
 - `connection_limit`: Prisma's docs suggest `1` for **serverless**, where many
   short-lived instances would each open a pool and exhaust the pooler. This app
   is a **long-lived container**, where a pool of 1 serialises every concurrent
   request — eight simultaneous captures would have seven time out. `10` suits one
   container; raise it in step with replicas, well under the pooler limit.
-- `DIRECT_URL` is port **5432**. Migrations need a real session and fail through
-  the transaction pooler.
+- `DIRECT_URL` is port **5432** as well, and migrations need a real session for
+  the same reason. With the change above both URLs now point at the same host and
+  port; they stay separate variables because Prisma requires it, and because a
+  deployment that ever moves `DATABASE_URL` back to 6543 must not drag migrations
+  along with it.
 - **If `DIRECT_URL` fails with `P1001`**, the direct host `db.<ref>.supabase.co`
   is **IPv6-only** and your network is not. Use the **session pooler** instead:
   same pooler host, port 5432, user `postgres.<ref>`. IPv4-reachable, real

@@ -10,10 +10,15 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 let currentUser: { id: string } | null = null;
 
+// `getClaims()` verifies the JWT locally rather than spending a round trip on
+// `getUser()`. The mock mirrors its shape — claims, with the user id in `sub`.
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: {
-      getUser: async () => ({ data: { user: currentUser }, error: null }),
+      getClaims: async () => ({
+        data: currentUser ? { claims: { sub: currentUser.id } } : null,
+        error: null,
+      }),
     },
   }),
 }));
