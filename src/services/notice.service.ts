@@ -1,6 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
-import type { DeliveryStatus, Prisma } from '@prisma/client';
+import type { DeliveryStatus, NoticeStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { calculateNoticeDueDate, todayUtc } from '@/lib/dates';
@@ -132,6 +132,27 @@ export function getNoticeCountdown(
   amberThresholdDays = 7,
 ): NoticeCountdown {
   return calculateNoticeCountdown(noticeDueDate, { amberThresholdDays });
+}
+
+/**
+ * The notice statuses that still leave a deadline live.
+ *
+ * Once a notice is drafted, sent or acknowledged, the deadline has been met and
+ * a passed date is history rather than a breach. Exported because the dashboard,
+ * the register and the printed report all have to answer "is this overdue" the
+ * same way — a report that disagrees with the dashboard about how many notices
+ * are late is worse than having no report, because now nobody trusts either.
+ */
+export const NOTICE_OUTSTANDING_STATUSES = ['not_assessed', 'required'] as const;
+
+export function isNoticeOverdue(
+  noticeDueDate: Date | null,
+  noticeStatus: NoticeStatus,
+  today: Date,
+): boolean {
+  if (!noticeDueDate) return false;
+  if (!(NOTICE_OUTSTANDING_STATUSES as readonly string[]).includes(noticeStatus)) return false;
+  return noticeDueDate.getTime() < today.getTime();
 }
 
 export function recalculateNoticeDueDate(eventDate: Date, noticePeriodDays: number): Date {

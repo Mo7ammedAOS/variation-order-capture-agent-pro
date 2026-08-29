@@ -49,6 +49,7 @@ the day when the detail has gone.
 | `/my-tasks` | Overdue → due today → upcoming |
 | `/projects` | Table on desktop, cards on phone |
 | `/projects/[id]` | 8 tabs as links, so a tab is shareable and Back works |
+| `/projects/[id]/report` | The variation register report. A document, not a dashboard — printed before a progress meeting or sent to a consultant. Ordered by notice deadline rather than PC number, because sorted by number it is a filing system and sorted by deadline it is a list of what to deal with. Printing is the browser's own dialog, so "Save as PDF" gives a real PDF with selectable text and no server-side renderer to break on the VPS |
 | `/variations` | The register. 15 columns, 4 filters, card view on phone |
 | `/variations/[id]` | Owner / next action / deadline / waiting **first** |
 | `/report-change` | Mobile-first capture, required fields only, rest behind a disclosure |
@@ -98,3 +99,20 @@ Semantic landmarks, `aria-current` on active nav, `role="alert"` on form errors,
 labels tied to every input, visible focus rings, icons `aria-hidden` beside real
 text. Wide tables scroll inside their own container — the page body never
 scrolls horizontally.
+
+
+## Printing
+
+The app chrome carries `print:hidden` — sidebar, mobile header, bottom nav and
+the capture button — and `globals.css` has a `@media print` block that swaps the
+palette to black on white. The screen ground is light grey with navy text, which
+on a laser printer is a grey wash across every page for no benefit.
+
+The risk colours are the exception and deliberately survive: on this report red
+means a contractual deadline has passed, and degrading that to grey removes the
+one thing the reader is scanning for.
+
+Rows, list items and sections carry `break-inside: avoid`, headings
+`break-after: avoid-page`, and `<thead>` repeats on every page, so a register
+running to several pages does not split a change across a fold or orphan a
+heading at the foot of a page.

@@ -191,3 +191,52 @@
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/*
+  Print.
+
+  The report page is a document people put in front of a client, so paper gets
+  its own small set of rules rather than whatever the screen happened to do:
+
+  - White ground and black text. The screen palette is a light grey ground with
+    navy text, which on a laser printer becomes a grey wash over every page and
+    drains a toner cartridge for no benefit.
+  - Risk colours survive. They are the one thing that must not degrade to grey,
+    because "red" on this report means a contractual deadline has passed.
+  - Rows do not split across a page break, and a heading does not print as the
+    last line of a page with its content overleaf.
+*/
+@media print {
+  :root {
+    --background: white;
+    --foreground: black;
+    --card: white;
+    --card-foreground: black;
+    --muted-foreground: oklch(0.42 0 0);
+    --border: oklch(0.75 0 0);
+  }
+
+  body {
+    background: white;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+
+  h1, h2, h3 {
+    break-after: avoid-page;
+  }
+
+  tr, li, section {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  a[href]::after {
+    content: none;
+  }
+}

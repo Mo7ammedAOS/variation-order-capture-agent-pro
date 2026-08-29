@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar md:flex md:flex-col">
+      <aside className="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar md:flex md:flex-col print:hidden">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <HardHat aria-hidden className="size-5" />
@@ -50,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <header className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3 md:hidden">
+      <header className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3 md:hidden print:hidden">
         <Link href="/dashboard" className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <HardHat aria-hidden className="size-4" />
@@ -67,7 +67,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </header>
 
       {/* Bottom padding clears the mobile nav bar and the capture button. */}
-      <main className="flex-1 px-4 py-6 pb-36 md:px-8 md:py-8 md:pb-12">{children}</main>
+      {/* Printing drops the padding and the bottom clearance: the nav is hidden on
+          paper, so the space it reserved is a blank strip at the foot of a page. */}
+      <main className="flex-1 px-4 py-6 pb-36 md:px-8 md:py-8 md:pb-12 print:p-0">{children}</main>
 
       <MobileNav />
       <ReportChangeFab />

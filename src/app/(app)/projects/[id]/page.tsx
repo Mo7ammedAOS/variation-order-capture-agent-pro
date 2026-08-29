@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileText } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
@@ -85,7 +85,16 @@ export default async function ProjectDetailPage({
             {project.consultantName ? ` · ${project.consultantName}` : ''}
           </p>
         </div>
-        <StatusChip status={project.projectStatus} />
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/projects/${id}/report`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            <FileText aria-hidden className="size-4" />
+            Register report
+          </Link>
+          <StatusChip status={project.projectStatus} />
+        </div>
       </header>
 
       {/* Tabs are links, so a tab is shareable and the back button works. */}

@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { NOTICE_OUTSTANDING_STATUSES } from '@/services/notice.service';
 import { todayUtc } from '@/lib/dates';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { assertProjectAccess, scopeToUser, scopeProjectsToUser } from '@/services/project-access.service';
@@ -68,7 +69,7 @@ export async function getOverview(
       where: { ...openChange, noticeDueDate: { gte: today, lte: in7Days } },
     }),
     prisma.potentialChange.count({
-      where: { ...openChange, noticeDueDate: { lt: today }, noticeStatus: { in: ['not_assessed', 'required'] } },
+      where: { ...openChange, noticeDueDate: { lt: today }, noticeStatus: { in: [...NOTICE_OUTSTANDING_STATUSES] } },
     }),
     prisma.potentialChange.aggregate({ where: openChange, _sum: { estimatedValue: true } }),
     prisma.bottleneck.count({ where: { ...scope, resolvedAt: null, riskLevel: 'red' } }),
@@ -139,7 +140,7 @@ export async function getProjectDashboard(user: AuthenticatedUser, projectId: st
     where: {
       projectId,
       noticeDueDate: { lt: today },
-      noticeStatus: { in: ['not_assessed', 'required'] },
+      noticeStatus: { in: [...NOTICE_OUTSTANDING_STATUSES] },
     },
   });
 
@@ -161,7 +162,24 @@ function tally(values: string[]): { label: string; count: number }[] {
     .sort((a, b) => b.count - a.count);
 }
 
+/**
+ * Trade acronyms, which are not words and must not be title-cased into ones.
+ *
+ * `qs_pricing` became "Qs Pricing" on the printed register — a document that
+ * goes to a consultant. In this industry QS, CM and PM are how people are
+ * addressed, and getting them wrong on a commercial document reads as though
+ * the document was produced by somebody who does not work here.
+ */
+const ACRONYMS = new Set(['qs', 'pm', 'cm', 'md', 'mep', 'eot', 'vo', 'rfi', 'si', 'boq', 'hse']);
+
 export function humanise(value: string): string {
-  const text = value.replace(/_/g, ' ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  const words = value.replace(/_/g, ' ').split(' ');
+
+  return words
+    .map((word, index) => {
+      if (ACRONYMS.has(word.toLowerCase())) return word.toUpperCase();
+      if (index === 0) return word.charAt(0).toUpperCase() + word.slice(1);
+      return word;
+    })
+    .join(' ');
 }

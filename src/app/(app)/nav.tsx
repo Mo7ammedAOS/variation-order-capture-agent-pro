@@ -58,7 +58,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
     >
       <ul className="grid grid-cols-5">
         {items.map(({ href, label, icon: Icon }) => {
@@ -106,6 +106,7 @@ export function ReportChangeFab() {
         'size-14 sm:size-auto sm:px-5 sm:py-3.5',
         'transition-transform hover:scale-105 focus-visible:outline-none',
         'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:bottom-6',
+        'print:hidden',
       )}
     >
       <Plus aria-hidden className="size-6 sm:size-5" />

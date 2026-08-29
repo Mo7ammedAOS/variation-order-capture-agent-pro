@@ -8,7 +8,7 @@ Last updated 2026-08-30.
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 88 tests, 18 of them against the real database
+npm test            PASS — 98 tests, 18 of them against the real database
 npm run build       PASS
 npm run db:migrate  PASS — 4 migrations: schema, capture source fields,
                     pgvector indexes, row level security
