@@ -13,6 +13,19 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC_PATHS = ['/login', '/auth'];
 
+/**
+ * Pages and API routes fail differently on purpose.
+ *
+ * A signed-out browser wants the login screen. A signed-out `fetch` wants a
+ * 401 it can act on: redirecting it instead hands the caller login HTML with
+ * status 200, `res.ok` is true, and `res.json()` dies on `<!DOCTYPE` — a parse
+ * error where "your session expired" belonged. The body matches the shape
+ * `src/lib/api.ts` returns, so a caller parses one contract either way.
+ */
+function isApiPath(pathname: string): boolean {
+  return pathname === '/api' || pathname.startsWith('/api/');
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -43,6 +56,13 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
   if (!user && !isPublic) {
+    if (isApiPath(pathname)) {
+      return NextResponse.json(
+        { error: { code: 'UNAUTHENTICATED', message: 'Sign in required' } },
+        { status: 401 },
+      );
+    }
+
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/login';
     // Carry the intended destination so a deep link survives signing in.

@@ -26,6 +26,13 @@ Errors are uniform:
 The 4xx/5xx split is operational. Returning 500 for a bad payload would have a
 courier retry a body that can never succeed, forever.
 
+**A signed-out `/api/*` call gets the 401 above, never a redirect to `/login`.**
+Application *pages* redirect, because a browser wants the login screen; API
+routes must not, because a redirected `fetch` receives login HTML with status
+200 — `res.ok` is true and `res.json()` then fails on `<!DOCTYPE`, turning an
+expired session into a parse error. The split lives in `src/middleware.ts` and
+is covered by `tests/unit/middleware.test.ts`.
+
 ---
 
 ## Integration routes
