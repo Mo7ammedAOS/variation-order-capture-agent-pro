@@ -8,9 +8,10 @@ Last updated 2026-08-30.
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 81 tests, 18 of them against the real database
+npm test            PASS — 88 tests, 18 of them against the real database
 npm run build       PASS
-npm run db:migrate  PASS — 15 tables, 22 enums, 27 foreign keys, pgvector, RLS
+npm run db:migrate  PASS — 4 migrations: schema, capture source fields,
+                    pgvector indexes, row level security
 npm run db:seed     PASS — 12 users, 5 projects, 20 changes, 25 tasks,
                     11 bottlenecks from the real sweep, 20 local embeddings
 deploy/release.sh   NOT RUN — needs the VPS domain and a DNS A record

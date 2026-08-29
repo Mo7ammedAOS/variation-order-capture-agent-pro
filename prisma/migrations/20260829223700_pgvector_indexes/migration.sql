@@ -1,3 +1,8 @@
+-- Promoted from prisma/sql/001_vector.sql on 2026-08-30.
+-- It lived outside migration history, so any database rebuilt from
+-- `migrate deploy` came up with no HNSW indexes. Every statement is
+-- idempotent, so re-running it is safe.
+
 -- pgvector: the extension, the columns Prisma cannot express, and the indexes.
 --
 -- Run AFTER `prisma migrate` has created the tables. Prisma has no vector type,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { AlertCircle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,73 @@ function SubmitButton() {
     <Button type="submit" size="lg" className="w-full" disabled={pending}>
       {pending ? 'Filing…' : 'File this change'}
     </Button>
+  );
+}
+
+/**
+ * How the change reached us, and where and when that happened.
+ *
+ * These describe the CONVERSATION, not the change. "Where on site" above is
+ * the part of the works affected; this is the room you were standing in, the
+ * platform you were called on, or the group the message arrived in.
+ *
+ * It exists because a verbal instruction is worth exactly as much as the record
+ * of it. When a variation is challenged months later, the questions are who
+ * said it, where, and when — and a capture form that never asked cannot answer.
+ *
+ * The "where" field changes its label and placeholder with the channel rather
+ * than sitting there as a generic box, because "Where?" under WhatsApp invites
+ * someone to type the site location again, and then the two "wheres" are the
+ * same field twice and neither is reliable.
+ */
+const SOURCES = [
+  { value: 'meeting', label: 'Meeting (in person)', where: 'Where was the meeting?', hint: 'Site office, Level 3 meeting room' },
+  { value: 'meeting_online', label: 'Meeting (online)', where: 'Which platform?', hint: 'Microsoft Teams, Zoom' },
+  { value: 'whatsapp', label: 'WhatsApp', where: 'Which chat or group?', hint: 'DXB-001 Site Coordination' },
+  { value: 'email', label: 'Email', where: 'Which mailbox or thread?', hint: 'Subject line or thread' },
+  { value: 'site_instruction', label: 'Written site instruction', where: 'Where was it issued?', hint: 'SI number or place issued' },
+  { value: 'verbal', label: 'Verbal, on site', where: 'Where were you?', hint: 'Level 2 corridor, by the risers' },
+  { value: 'mobile_form', label: 'Noticed on site myself', where: 'Where exactly?', hint: 'Where you were when you saw it' },
+  { value: 'other', label: 'Something else', where: 'Where did it come from?', hint: '' },
+] as const;
+
+function SourceFields() {
+  const [sourceType, setSourceType] = useState<string>('mobile_form');
+  const source = SOURCES.find((option) => option.value === sourceType) ?? SOURCES[SOURCES.length - 1]!;
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-border p-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="sourceType">How did this come to you?</Label>
+        <Select
+          id="sourceType"
+          name="sourceType"
+          value={sourceType}
+          onChange={(event) => setSourceType(event.target.value)}
+        >
+          {SOURCES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sourceLocation">{source.where}</Label>
+          <Input id="sourceLocation" name="sourceLocation" placeholder={source.hint} />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sourceOccurredAt">When were you told?</Label>
+          <Input id="sourceOccurredAt" name="sourceOccurredAt" type="datetime-local" />
+          <p className="text-xs text-muted-foreground">
+            Leave blank if it is the same as the date below.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -88,14 +155,19 @@ export function ReportChangeForm({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="location">Location</Label>
+            <Label htmlFor="location">Where on site?</Label>
             <Input id="location" name="location" placeholder="Reception, Level 2" />
+            <p className="text-xs text-muted-foreground">
+              The part of the works affected.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="requestedBy">Who requested it?</Label>
             <Input id="requestedBy" name="requestedBy" placeholder="Name and company" />
           </div>
+
+          <SourceFields />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">

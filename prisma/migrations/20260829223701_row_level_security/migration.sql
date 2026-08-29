@@ -1,3 +1,13 @@
+-- Promoted from prisma/sql/002_rls.sql on 2026-08-30.
+--
+-- This is the one that mattered. Applied out of band, a database rebuilt
+-- from `migrate deploy` came up with ROW LEVEL SECURITY DISABLED and not
+-- one policy — and nothing would have failed or warned. The anon key would
+-- simply have read everything. Security that depends on someone remembering
+-- to run a script is not security.
+--
+-- Every statement is idempotent (DROP POLICY IF EXISTS before each CREATE).
+
 -- Row level security.
 --
 -- ══════════════════════════════════════════════════════════════════════════

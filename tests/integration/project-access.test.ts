@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { testPrisma } from '../db';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 
 /**
@@ -24,7 +24,7 @@ if (!hasDatabase) {
   );
 }
 
-const prisma = new PrismaClient();
+const prisma = testPrisma();
 const suffix = randomUUID().slice(0, 8);
 
 let projectA = '';

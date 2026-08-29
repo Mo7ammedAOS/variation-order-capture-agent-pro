@@ -65,7 +65,7 @@ Two layers, and it matters which one is load-bearing.
 | Layer | What it protects | Load-bearing? |
 |---|---|---|
 | `project-access.service.ts` | Everything the app itself reads and writes | **Yes** |
-| Postgres RLS (`prisma/sql/002_rls.sql`) | Anything arriving via the Supabase anon key or PostgREST | No — defence in depth |
+| Postgres RLS (`20260829223701_row_level_security` migration) | Anything arriving via the Supabase anon key or PostgREST | No — defence in depth |
 
 **Prisma connects with a role that bypasses RLS.** That is how Postgres works.
 Claiming RLS as the gate would be false comfort, so the service layer is the

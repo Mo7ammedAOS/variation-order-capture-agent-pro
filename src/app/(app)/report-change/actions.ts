@@ -37,7 +37,13 @@ export async function reportChange(_prev: ReportState, formData: FormData): Prom
     workStatus: formData.get('workStatus') || 'not_started',
     estimatedValue: formData.get('estimatedValue') || null,
     potentialTimeImpact: formData.get('potentialTimeImpact') === 'on',
-    sourceType: 'mobile_form',
+    // Was hardcoded to 'mobile_form', so every capture claimed it came from
+    // this form even when the person was relaying a WhatsApp message or writing
+    // up a meeting. The channel is now asked for, and the default only applies
+    // when the field is genuinely absent.
+    sourceType: formData.get('sourceType') || 'mobile_form',
+    sourceLocation: formData.get('sourceLocation') || null,
+    sourceOccurredAt: formData.get('sourceOccurredAt') || undefined,
     sourceSenderName: formData.get('requestedBy') || null,
     sourceReference: formData.get('drawingNumber') || null,
     urgency: formData.get('urgency') || 'normal',

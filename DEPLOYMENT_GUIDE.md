@@ -25,7 +25,7 @@ Create a project (region close to the UAE), then from **Settings → Database**
 and **Settings → API**:
 
 ```bash
-DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?connection_limit=10&pool_timeout=20"
+DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?connection_limit=6&pool_timeout=20"
 DIRECT_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres"
 NEXT_PUBLIC_SUPABASE_URL="https://<ref>.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJ…"
@@ -58,6 +58,22 @@ SUPABASE_SERVICE_ROLE_KEY="eyJ…"
   Revisit this only if you move to serverless or run enough replicas to approach
   the session-mode connection limit. Both mean going back to 6543 **with** the
   flag, and accepting the 5x.
+- **The session pooler caps total clients, and the cap is low.** This project
+  reports `pool_size: 15`, and it counts *idle* connections too. Exceeding it
+  gives `FATAL: (EMAXCONNSESSION) max clients reached in session mode` — which
+  surfaces through Prisma as `PrismaClientInitializationError` in whatever
+  happened to be running, so it reads like an unrelated bug. Budget it:
+
+  | Consumer | Connections |
+  |---|---|
+  | app container | 6 (`connection_limit`) |
+  | worker container | 3 |
+  | `migrate deploy` during a release | 1, briefly |
+  | headroom for a psql session | the rest |
+
+  Raise the ceiling in Supabase under **Settings → Database → Connection
+  pooling → Pool Size** before adding replicas. Locally, do not run the dev
+  server and `npm test` at once — between them they will spend the allowance.
 - `connection_limit`: Prisma's docs suggest `1` for **serverless**, where many
   short-lived instances would each open a pool and exhaust the pooler. This app
   is a **long-lived container**, where a pool of 1 serialises every concurrent
@@ -232,4 +248,4 @@ one.**
 | `Can't reach database server` | Wrong region host, or Supabase project paused |
 | Cert not issued | DNS not propagated, or 80/443 blocked |
 | Everyone sees every project | Check `system_role` — five roles carry company-wide reach by design |
-| Embeddings fail | `prisma/sql/001_vector.sql` not applied |
+| Embeddings fail | Migrations not fully applied — `npx prisma migrate status` |

@@ -27,6 +27,27 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 
 ## Additions beyond the spec, and why each is load-bearing
 
+**`potential_changes.source_location` and `.source_occurred_at`** — where and
+when the change was *raised*, which is not where and when it *happened*.
+
+`location` and `event_date` describe the change: the part of the works
+affected, and the date the notice clock counts from. These two describe the
+conversation that surfaced it — the meeting room, the video platform, the
+WhatsApp group, and the moment somebody first said so.
+
+They exist because a verbal instruction is worth exactly as much as the record
+of it. When a variation is challenged months later the questions are who
+instructed it, where, and when. Before this, the capture form hardcoded
+`source_type = 'mobile_form'`, so every change claimed to have originated in
+the app even when the person was writing up a site meeting — a record that
+answers none of the three.
+
+The gap between the two dates is evidence in its own right, and the change
+detail page states it rather than leaving it to be inferred: a change raised
+three weeks after it happened says something about notice risk before anyone
+assesses it. `SourceType` also gained `meeting_online`, so a video call is
+distinguishable from a meeting somebody attended.
+
 **`projects.pc_sequence`** — an atomic counter.
 
 ```sql
@@ -65,7 +86,8 @@ duplicate names, and a listing is not an access-control boundary.
 - **`Decimal(18,2)`** for money. Never float — 0.1 + 0.2 has no place near a
   contract sum.
 - **`Unsupported("vector(384)")`** for embeddings. Prisma has no vector type, so
-  the columns arrive via `prisma/sql/001_vector.sql` and are written with raw SQL.
+  the columns arrive via the `20260829223700_pgvector_indexes` migration and are
+  written with raw SQL.
 
 ## Indexes
 
@@ -97,9 +119,18 @@ room, so adding these is additive — no migration of existing rows.
 
 ```bash
 npx prisma migrate dev --name <what_changed>   # development
-npx prisma migrate deploy                      # production, via deploy/release.sh
-npx prisma db execute --file prisma/sql/001_vector.sql --schema prisma/schema.prisma
-npx prisma db execute --file prisma/sql/002_rls.sql   --schema prisma/schema.prisma
+npx prisma migrate deploy                      # everywhere else
 ```
 
-Both SQL files are idempotent. Run them after `migrate`, in order.
+That is the whole procedure. The pgvector indexes and the row level security
+policies used to live in `prisma/sql/*.sql`, applied by hand afterwards, and on
+2026-08-30 that proved to be a real hazard: anything that rebuilt the schema
+from the migrations came up **with RLS disabled and not one policy**, silently.
+Nothing failed, nothing warned, and the anon key would have read everything.
+They are now migrations `20260829223700_pgvector_indexes` and
+`20260829223701_row_level_security`, so `migrate deploy` cannot leave them out.
+Both remain idempotent.
+
+**Never point `--shadow-database-url` at a real database.** Prisma RESETS the
+shadow database to replay migrations into it. Aimed at a live URL it will empty
+it, which is how the above was discovered.

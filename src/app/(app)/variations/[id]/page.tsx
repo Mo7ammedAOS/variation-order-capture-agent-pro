@@ -78,6 +78,12 @@ export default async function PotentialChangeDetailPage({
   );
   const nextStatuses = allowedNextStatuses(change.currentStatus);
 
+  // How long the change sat before anyone said so. Evidence in its own right:
+  // a change raised three weeks after it happened tells you something about the
+  // notice risk before anyone assesses it, so it is stated rather than left to
+  // be worked out from two dates in different corners of the page.
+  const reportingLagDays = daysSince(change.eventDate, change.sourceOccurredAt ?? undefined);
+
   const amberThreshold = 7;
 
   return (
@@ -188,9 +194,31 @@ export default async function PotentialChangeDetailPage({
                 <Field label="Authority status">
                   <StatusChip status={change.sourceSenderAuthorityStatus} />
                 </Field>
-                <Field label="Source">{humanise(change.sourceType)}</Field>
+                <Field label="Raised via">
+                  {humanise(change.sourceType)}
+                  {change.sourceLocation ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {change.sourceLocation}
+                    </span>
+                  ) : null}
+                </Field>
+                <Field label="Raised on">
+                  {change.sourceOccurredAt ? (
+                    <>
+                      {formatDateTime(change.sourceOccurredAt)}
+                      {reportingLagDays !== null && reportingLagDays > 0 ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {reportingLagDays} {reportingLagDays === 1 ? 'day' : 'days'} after the
+                          event
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </Field>
                 <Field label="Reported by">{change.reportedBy?.fullName ?? '—'}</Field>
-                <Field label="Location" icon={MapPin}>{change.location ?? '—'}</Field>
+                <Field label="Where on site" icon={MapPin}>{change.location ?? '—'}</Field>
                 <Field label="Trade">{change.trade ?? '—'}</Field>
                 <Field label="Event date">{formatDate(change.eventDate)}</Field>
                 <Field label="Captured">{formatDateTime(change.captureDate)}</Field>

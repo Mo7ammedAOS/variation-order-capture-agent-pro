@@ -114,7 +114,10 @@ enum SourceType {
   whatsapp
   email
   document_upload
+  /// A meeting held in person. `sourceLocation` carries where it was held.
   meeting
+  /// A call or video meeting. `sourceLocation` carries the platform.
+  meeting_online
   site_instruction
   verbal
   other
@@ -535,6 +538,17 @@ model PotentialChange {
   description String
 
   sourceType                SourceType      @default(mobile_form) @map("source_type")
+  /// WHERE the change was raised, which is not where the change is.
+  /// `location` is the place on site the work is affected — "Reception, Level 2".
+  /// This is the meeting room, the platform, or the WhatsApp group the
+  /// instruction arrived through. Conflating the two loses the ability to
+  /// answer "who told us, and where were we standing", which is the question a
+  /// verbal instruction turns on.
+  sourceLocation            String?         @map("source_location")
+  /// WHEN it was raised, which is not when it happened. `eventDate` starts the
+  /// contractual clock; this is when somebody first said so. They are usually
+  /// the same day and occasionally weeks apart, and the gap is itself evidence.
+  sourceOccurredAt          DateTime?       @map("source_occurred_at")
   sourceReference           String?         @map("source_reference")
   sourceMessageId           String?         @map("source_message_id")
   sourceSenderName          String?         @map("source_sender_name")

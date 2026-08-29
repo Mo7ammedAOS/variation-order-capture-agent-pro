@@ -37,9 +37,7 @@ and test-by-test position.
 ```bash
 npm install
 cp .env.example .env          # fill in Supabase; STORAGE_PROVIDER=local to skip Drive
-npm run db:migrate
-npx prisma db execute --file prisma/sql/001_vector.sql --schema prisma/schema.prisma
-npx prisma db execute --file prisma/sql/002_rls.sql   --schema prisma/schema.prisma
+npm run db:migrate            # includes pgvector indexes and RLS policies
 npm run db:seed
 npm run dev
 ```

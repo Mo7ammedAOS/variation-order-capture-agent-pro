@@ -44,9 +44,30 @@ export const potentialChangeCreateSchema = z.object({
   sourceType: z
     .enum([
       'mobile_form', 'whatsapp', 'email', 'document_upload',
-      'meeting', 'site_instruction', 'verbal', 'other',
+      'meeting', 'meeting_online', 'site_instruction', 'verbal', 'other',
     ])
     .default('mobile_form'),
+  /**
+   * Where and when the change was RAISED, which is not where and when it
+   * happened. `location` and `eventDate` describe the change itself; these
+   * describe the conversation that surfaced it — the meeting room, the video
+   * platform, the WhatsApp group, and the moment somebody first said so.
+   *
+   * They matter because a verbal instruction is only as good as the record of
+   * it, and "who told us, where were we, and when" is precisely what gets
+   * challenged. The gap between `sourceOccurredAt` and `eventDate` is itself
+   * evidence: a change raised three weeks after it happened tells you something
+   * about the notice risk before anyone assesses it.
+   */
+  sourceLocation: z.string().trim().max(200).optional().nullable(),
+  // `.optional()` belongs INSIDE the preprocess. Outside it, a blank field is
+  // turned into undefined and then handed to z.coerce.date() anyway, which
+  // makes an Invalid Date and rejects — so leaving an optional field empty,
+  // which the form explicitly invites, would fail validation.
+  sourceOccurredAt: z.preprocess(
+    (value) => (value === '' || value === null ? undefined : value),
+    z.coerce.date().optional(),
+  ),
   sourceReference: z.string().trim().max(200).optional().nullable(),
   sourceMessageId: z.string().trim().max(200).optional().nullable(),
   sourceSenderName: z.string().trim().max(200).optional().nullable(),
@@ -188,6 +209,8 @@ export async function createPotentialChange(
           potentialTimeImpact: input.potentialTimeImpact,
           timeImpactDays: input.timeImpactDays ?? null,
           sourceType: input.sourceType,
+          sourceLocation: input.sourceLocation ?? null,
+          sourceOccurredAt: input.sourceOccurredAt ?? null,
           sourceReference: input.sourceReference ?? null,
           sourceMessageId: input.sourceMessageId ?? null,
           sourceSenderName: input.sourceSenderName ?? null,

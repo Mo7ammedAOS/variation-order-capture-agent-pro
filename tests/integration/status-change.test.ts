@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { testPrisma } from '../db';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 
 /**
@@ -19,7 +19,7 @@ if (!hasDatabase) {
   console.warn('\n  ⚠ status-change integration tests SKIPPED — no real DATABASE_URL.\n');
 }
 
-const prisma = new PrismaClient();
+const prisma = testPrisma();
 const suffix = randomUUID().slice(0, 8);
 
 let projectId = '';
