@@ -1,0 +1,24 @@
+// VO Capture & Control — database schema
+//
+// STATUS: stub. No models defined yet.
+//
+// PostgreSQL is the system of record for all commercial truth. n8n never writes
+// here; it calls authenticated app APIs which validate and write through services.
+//
+// Before adding models, read the registers listed under "Custom Application Owns"
+// in CLAUDE.md and the relevant /workflows/*.md SOP. Every table that holds a
+// commercial record needs a matching immutable audit trail.
+//
+// One database per client deployment. Never shared, never multi-tenant.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// --- models go here ---

@@ -370,6 +370,15 @@ Core rule:
 > Custom application validates.  
 > n8n delivers integration actions.**
 
+Agent specifications live in `/agents/`, one `.agent.md` per agent, with prompts in
+`/agents/prompts/`. Implementations go behind the AI-provider abstraction in
+`/src/integrations/claude/` — never a direct SDK call from a service or a route.
+
+Prompts are version-controlled **files**, never string literals in application code.
+This system drafts contractual notices; a prompt change must be a reviewable diff.
+
+See `/agents/README.md` for the full may / must-not list and the output contract.
+
 # T — Tools
 
 Tools are deterministic services and integrations.
@@ -1798,14 +1807,37 @@ the skill pack. Do not code around the discrepancy silently.
 
 ```text
 /CLAUDE.md            This file. The contract.
-/workflows/           Business SOPs. 28 documents. Source of truth for behaviour.
-/src/                 The custom application. Owns commercial truth.
+
+W — /workflows/       Business SOPs. 28 documents. Source of truth for behaviour.
+A — /agents/          AI agent specs (12) and prompts. The reasoning layer.
+T — /src/             The custom application. Deterministic. Owns commercial truth.
+
 /n8n-workflows/       Committed n8n workflow exports. Integration only.
 /prisma/              Database schema and migrations.
 /docs/decisions/      Architecture decision records.
 /.claude/skills/      The n8n skills pack.
 /.mcp.json            MCP server registration. Placeholders only, never secrets.
 /.env.example         Every variable the app needs, with placeholder values.
+```
+
+Inside `/src/`:
+
+```text
+/src/app/api/integrations/   The ONLY surface n8n may write through.
+/src/services/               14 services. Own the registers. Enforce permissions.
+/src/workers/                8 workers. Own commercial timing. Never n8n's job.
+/src/integrations/claude/    The AI-provider abstraction. All agent calls go here.
+/src/integrations/n8n/       Outbound requests to n8n. Delivery only, never truth.
+```
+
+Where a decision lives, when it is unclear:
+
+```text
+Is it a commercial rule, a deadline, or a status?      → /src/services/
+Does it decide WHEN something happens?                  → /src/workers/
+Does it read, extract, summarise, or draft?             → /agents/
+Does it move data to or from an external system?        → n8n
+Is it how the business is supposed to behave?           → /workflows/
 ```
 
 ## Documentation Stays Current

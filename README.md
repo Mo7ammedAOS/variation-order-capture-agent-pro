@@ -16,15 +16,20 @@ Change Orders, Notices of Claim, and project changes.
 tooling are in place. No application code, no database schema, no workflows.
 
 ```text
-✅  Folder structure
-✅  28 workflow SOP stubs (all sections unspecified)
-✅  n8n MCP servers wired and instance verified reachable
-✅  n8n skills pack installed
-✅  .gitignore and .env.example
+✅  Folder structure (full WAT tree)
+✅  28 workflow SOP stubs        W — all sections unspecified
+✅  12 agent specs + prompts dir A — all sections unspecified
+✅  14 service stubs             T
+✅   8 worker stubs              T
+✅  n8n integration API routes scaffolded
+✅  n8n MCP servers wired, instance verified reachable
+✅  n8n skills pack installed (18 skills)
+✅  .gitignore, .env.example, prisma/schema.prisma (datasource only)
 ✅  ADR 0001 — background job engine (PROPOSED)
-⬜  Next.js application
-⬜  Prisma schema
+⬜  Next.js install and any application code
+⬜  Any Prisma model
 ⬜  Any n8n workflow
+⬜  Any prompt
 ```
 
 ## Architecture in one line
@@ -38,10 +43,19 @@ Humans approve commercial and contractual actions.
 
 ## Layout
 
+The repository is laid out as **WAT** — Workflows, Agents, Tools.
+
 ```text
 CLAUDE.md            The contract. Read first.
-workflows/           28 business SOPs. Source of truth for behaviour.
-src/                 The custom application. Owns commercial truth.
+
+W  workflows/        28 business SOPs. Source of truth for behaviour.
+A  agents/           12 agent specs + prompts/. The AI reasoning layer.
+T  src/              The custom application. Deterministic. Owns commercial truth.
+   ├── app/api/integrations/   the ONLY surface n8n may write through
+   ├── services/               14 — own the registers, enforce permissions
+   ├── workers/                 8 — own commercial timing, not n8n's job
+   └── integrations/claude/     the AI-provider abstraction
+
 n8n-workflows/       Committed n8n exports. Integration only.
 prisma/              Database schema and migrations.
 docs/decisions/      Architecture decision records.
@@ -49,6 +63,9 @@ docs/decisions/      Architecture decision records.
 .mcp.json            MCP servers. Placeholders only, never secrets.
 .env.example         Every variable the app needs.
 ```
+
+**Every stub says "Not yet specified". That is a stop sign, not a gap to fill in.**
+Ask before writing commercial logic that no SOP or agent spec describes.
 
 ## Getting started
 
