@@ -8,13 +8,14 @@ Last updated 2026-08-30.
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 99 tests, 18 of them against the real database
+npm test            PASS — 107 tests, 20 of them against the real database
 npm run build       PASS
 npm run db:migrate  PASS — 4 migrations: schema, capture source fields,
                     pgvector indexes, row level security
 npm run db:seed     PASS — 12 users, 5 projects, 20 changes, 25 tasks,
                     11 bottlenecks from the real sweep, 20 local embeddings
-deploy/release.sh   NOT RUN — needs the VPS domain and a DNS A record
+deploy/release.sh   NOT RUN — domain settled (vo.osmanflow.com); waiting on
+                    the DNS A record and SSH access to the VPS
 ```
 
 The database is live. Outstanding: the deployment domain, and the Google Drive
@@ -87,13 +88,22 @@ What is now enforced, and where each rule came from:
 | `included_scope` and `cancelled` are ends | Reopening is a different action with different authority |
 | No move to the status it is already in | — |
 
-**Open question for Osman: the ORDER of the commercial review stages.** Whether
-pricing precedes scope review, whether CM review can be skipped below a
-threshold, what internal approval requires — none of that is written down
-anywhere, so it has not been invented. The review stages are currently mutually
-reachable and every move is audited with the mover's name and note. When the
-chain is specified it goes into `allowedNextStatuses`, and the UI narrows on its
-own, because the form asks that function what to offer.
+**Settled 2026-08-30: scope → price → CM → approval.** The PM defines what the
+change is, the QS prices what was defined, the CM reviews, then internal
+approval. Encoded in `allowedNextStatuses`; the UI narrowed by itself, because
+the form asks that function what to offer.
+
+Forward moves advance one stage and may never skip — skipping is how a change
+reaches "included in scope" with nobody having approved it. Backward moves to
+any earlier stage are allowed, because a CM who spots a pricing error needs to
+send it back, and a strictly forward chain would leave cancellation as the only
+correction.
+
+Choosing that order made `assessNotice` wrong: "notice not required" routed
+straight to `qs_pricing`, skipping scope review, and raised a QS pricing task
+for the QS. It now routes to `pm_scope_review`, raises a scope review task for
+the PM, and takes its due date from `pmScopeReviewDueDays` rather than the QS's
+allowance.
 
 ## Contract rules — `tests/integration/contract-rules.test.ts`
 

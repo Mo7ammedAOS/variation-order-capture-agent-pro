@@ -143,12 +143,33 @@ whose Drive their evidence lives in.
 
 ## 3. DNS
 
-An **A record** for `vo.osmanflow.com` → the VPS IP. Confirm before Caddy tries
-to issue a certificate:
+**Domain settled 2026-08-30: `vo.osmanflow.com`.** It is already written into
+`deploy/Caddyfile.snippet`.
+
+One **A record** is needed, and as of 2026-08-30 it does not exist —
+`dig +short vo.osmanflow.com` returns nothing.
+
+| Type | Name | Value |
+|---|---|---|
+| A | `vo` | the VPS IP |
+
+The VPS IP is whatever `n8n.osmanflow.com` already resolves to, since the app
+goes behind the same Caddy on the same box. Check it rather than trusting a
+number written in a document:
 
 ```bash
-dig +short vo.osmanflow.com
+dig +short n8n.osmanflow.com     # the VPS
+dig +short vo.osmanflow.com      # must return the same, before deploying
 ```
+
+Do this **before** reloading Caddy. Caddy asks Let's Encrypt for a certificate
+the moment the site block loads, and a challenge against a hostname that does
+not resolve counts toward Let's Encrypt's failed-validation rate limit. Enough
+failures and the domain is locked out for an hour, which turns a thirty second
+DNS fix into a wait.
+
+The apex `osmanflow.com` currently points at Squarespace addresses, not the VPS.
+Adding the `vo` subdomain does not disturb that.
 
 ## 4. Deploy
 

@@ -26,7 +26,9 @@ let projectId = '';
 let director: AuthenticatedUser;
 let engineer: AuthenticatedUser;
 
-async function newChange(status: 'notice_assessment' | 'qs_pricing' | 'included_scope') {
+async function newChange(
+  status: 'notice_assessment' | 'pm_scope_review' | 'qs_pricing' | 'included_scope',
+) {
   const change = await prisma.potentialChange.create({
     data: {
       projectId,
@@ -134,6 +136,34 @@ describeDb('potential change status transitions', () => {
     expect(entry?.oldValueJson).toMatchObject({ currentStatus: 'qs_pricing' });
     expect(entry?.newValueJson).toMatchObject({ currentStatus: 'cm_review' });
     expect(entry?.metadataJson).toMatchObject({ note: 'Pricing complete' });
+  });
+
+  it('REFUSES to skip a stage, which is how approval gets bypassed', async () => {
+    const { changeStatus } = await import('@/services/potential-change.service');
+    const { ValidationError } = await import('@/lib/errors');
+    const id = await newChange('pm_scope_review');
+
+    // Scope review straight to "included in scope" would put a change through
+    // with nobody having priced it, reviewed it or approved it — and the
+    // register would show it as settled.
+    await expect(changeStatus(director, id, 'included_scope')).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    await expect(changeStatus(director, id, 'cm_review')).rejects.toBeInstanceOf(ValidationError);
+
+    const after = await prisma.potentialChange.findUniqueOrThrow({ where: { id } });
+    expect(after.currentStatus).toBe('pm_scope_review');
+  });
+
+  it('allows rework backwards, so a pricing error does not need a cancellation', async () => {
+    const { changeStatus } = await import('@/services/potential-change.service');
+    const id = await newChange('qs_pricing');
+
+    const forward = await changeStatus(director, id, 'cm_review', 'Priced');
+    expect(forward.currentStatus).toBe('cm_review');
+
+    const back = await changeStatus(director, id, 'qs_pricing', 'Rates look wrong, re-price');
+    expect(back.currentStatus).toBe('qs_pricing');
   });
 
   it('refuses a move to the status it is already in', async () => {

@@ -341,36 +341,43 @@ export async function updatePotentialChange(
 /**
  * Which statuses may follow which.
  *
- * Only part of this is settled, and the split matters — the settled part is
- * read off the code that already exists, the rest is a placeholder that must
- * not be mistaken for a decision.
+ * Osman settled the commercial chain on 2026-08-30: scope, then price, then
+ * commercial review, then approval. The PM pins down what the change actually
+ * is before the QS prices it, so nothing is ever priced against a scope nobody
+ * has agreed.
  *
- * SETTLED, because the product already behaves this way:
+ *   new potential change
+ *      ↓
+ *   notice assessment  ── needs more info ─→  needs evidence ──┐
+ *      │                                                       │
+ *      │  (only assessNotice moves it; its outcome decides)     │
+ *      ↓                                          re-assess ←──┘
+ *   notice required  or  PM scope review
+ *      ↓
+ *   PM scope review → QS pricing → CM review → internal approval
+ *      ↓
+ *   included in scope
  *
- *   - Capture lands a change in `notice_assessment` (capture.service.ts and
- *     createPotentialChange both do this), so `new_potential_change` only ever
- *     moves forward into the assessment.
- *   - A change LEAVES `notice_assessment` only through `assessNotice`, which
- *     sends it to `notice_required`, `qs_pricing` or `needs_evidence` depending
- *     on the outcome. So `changeStatus` refuses to move it at all. Letting a
- *     status dropdown walk a change past the entitlement question would defeat
- *     the one thing this product exists to prevent — and it would do so
- *     invisibly, since the change would look like it was progressing normally.
- *   - `included_scope` and `cancelled` are ends. Nothing follows them here;
- *     reopening is a different action with different authority, not a status
- *     change.
+ * Three rules, and each earns its place:
  *
- * NOT SETTLED: the ORDER of the commercial review stages — whether pricing
- * precedes scope review, whether CM review can be skipped below a threshold,
- * what internal approval requires. That is this company's commercial process
- * and nobody has written it down yet, so the stages are mutually reachable and
- * every move is audited with the mover's name. When Osman specifies the chain,
- * it is encoded HERE and the UI narrows on its own, because the form asks this
- * function what to offer.
+ *   FORWARD, ONE STAGE AT A TIME. You may advance to the next stage, never skip
+ *   one. Skipping is how a change reaches "included in scope" without anybody
+ *   approving it, which is the failure the approval thresholds exist to prevent.
+ *
+ *   BACKWARD, ANY DISTANCE. A CM who spots a pricing error can send it back to
+ *   the QS, or to the PM if the scope itself was wrong. A strictly forward chain
+ *   would leave "cancel" as the only way to correct a mistake, which loses the
+ *   change and its history to fix an arithmetic slip.
+ *
+ *   THE ENTITLEMENT QUESTION IS ANSWERED ONCE. Nothing walks back into
+ *   `notice_assessment` — except `needs_evidence`, and that exception is the
+ *   point of the state. "Needs more information" parks the question rather than
+ *   answering it, so when the evidence arrives it has to go back to be decided.
+ *   Without that route a change waiting on evidence would be stuck for good.
+ *
+ * `cancelled` is reachable from anywhere that is not already an end.
  */
-const REVIEW_STAGES: readonly PotentialChangeStatus[] = [
-  'needs_evidence',
-  'notice_required',
+const REVIEW_CHAIN: readonly PotentialChangeStatus[] = [
   'pm_scope_review',
   'qs_pricing',
   'cm_review',
@@ -387,7 +394,19 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
 
   if (current === 'new_potential_change') return ['notice_assessment', 'cancelled'];
 
-  return [...REVIEW_STAGES.filter((status) => status !== current), ...TERMINAL_STATUSES];
+  // Parked, not answered. The evidence arrived, so ask the question again.
+  if (current === 'needs_evidence') return ['notice_assessment', 'cancelled'];
+
+  // A notice has been raised; the change now needs its scope defined.
+  if (current === 'notice_required') return ['pm_scope_review', 'cancelled'];
+
+  const position = REVIEW_CHAIN.indexOf(current);
+  if (position === -1) return ['cancelled'];
+
+  const forward = REVIEW_CHAIN[position + 1] ?? 'included_scope';
+  const rework = REVIEW_CHAIN.slice(0, position);
+
+  return [forward, ...rework, 'cancelled'];
 }
 
 export const statusChangeSchema = z.object({

@@ -45,11 +45,15 @@ export async function assessNotice(
   await assertProjectAccess(user, change.projectId, 'potentialChange.assessNotice');
 
   const rules = change.project.contractRules;
-  const qsDueDays = rules?.qsPricingDueDays ?? 7;
+  // The first stage after the assessment is scope review, so the clock that
+  // matters here is the PM's, not the QS's. Reading qsPricingDueDays would give
+  // the PM the QS's allowance, and the change would look late or early for
+  // reasons nobody could trace back to a setting.
+  const scopeDueDays = rules?.pmScopeReviewDueDays ?? 3;
 
   return prisma.$transaction(async (tx) => {
     const nextDue = new Date(todayUtc());
-    nextDue.setUTCDate(nextDue.getUTCDate() + qsDueDays);
+    nextDue.setUTCDate(nextDue.getUTCDate() + scopeDueDays);
 
     const updates: Prisma.PotentialChangeUpdateInput = {
       noticeStatus: input.outcome,
@@ -64,10 +68,19 @@ export async function assessNotice(
       updates.waitingFor = 'Notice drafting';
       updates.nextAction = 'Draft the Notice of Potential Claim';
     } else if (input.outcome === 'not_required') {
-      // No notice needed does not mean no change. It still gets priced.
-      updates.currentStatus = 'qs_pricing';
-      updates.waitingFor = 'QS pricing';
-      updates.nextAction = 'Price the change';
+      // No notice needed does not mean no change. It goes into the commercial
+      // chain at the top of it — scope first.
+      //
+      // This used to route straight to QS pricing, which skipped scope review
+      // entirely and meant a change that needed no notice was priced against
+      // whatever the original message happened to say. Osman settled the order
+      // on 2026-08-30: the PM defines the change, then the QS prices what was
+      // defined. The status guard now forbids the skip, so leaving this pointing
+      // at qs_pricing would have put changes into a state the chain says they
+      // could not have reached.
+      updates.currentStatus = 'pm_scope_review';
+      updates.waitingFor = 'PM scope review';
+      updates.nextAction = 'Define the scope of the change';
       updates.nextActionDueDate = nextDue;
     } else {
       updates.currentStatus = 'needs_evidence';
@@ -89,17 +102,19 @@ export async function assessNotice(
     });
 
     if (input.outcome === 'not_required') {
-      const qs = await tx.projectMember.findFirst({
-        where: { projectId: change.projectId, active: true, projectRole: 'quantity_surveyor' },
+      // Scope review, raised for the PM. It used to raise QS pricing for the
+      // QS, which sent the change to one person and the work to another.
+      const pm = await tx.projectMember.findFirst({
+        where: { projectId: change.projectId, active: true, projectRole: 'project_manager' },
         select: { userId: true },
       });
       await tx.task.create({
         data: {
           projectId: change.projectId,
           potentialChangeId,
-          taskType: 'qs_pricing',
-          title: `QS pricing — ${change.pcNumber}`,
-          assignedToUserId: qs?.userId ?? null,
+          taskType: 'pm_scope_review',
+          title: `Scope review — ${change.pcNumber}`,
+          assignedToUserId: pm?.userId ?? null,
           assignedByUserId: user.id,
           dueDate: nextDue,
         },
