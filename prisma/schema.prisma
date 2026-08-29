@@ -1,24 +1,780 @@
 // VO Capture & Control — database schema
 //
-// STATUS: stub. No models defined yet.
-//
 // PostgreSQL is the system of record for all commercial truth. n8n never writes
 // here; it calls authenticated app APIs which validate and write through services.
 //
-// Before adding models, read the registers listed under "Custom Application Owns"
-// in CLAUDE.md and the relevant /workflows/*.md SOP. Every table that holds a
-// commercial record needs a matching immutable audit trail.
-//
 // One database per client deployment. Never shared, never multi-tenant.
+//
+// Three additions the product spec does not list, each load-bearing — see
+// DATABASE_SCHEMA.md for the reasoning:
+//   Project.pcSequence        race-safe PC numbering
+//   IntegrationEvent          webhook idempotency (Rule 2)
+//   *.driveFolderId / driveFileId   Google Drive is the store, this table is the index
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
 }
 
-// --- models go here ---
+// ─────────────────────────────────────────────────────────────────────────────
+//  Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SystemRole {
+  company_owner
+  company_admin
+  managing_director
+  operations_director
+  commercial_director
+  commercial_manager
+  contract_administrator
+  finance_manager
+  procurement_manager
+  standard_user
+  viewer
+}
+
+enum ProjectRole {
+  project_manager
+  quantity_surveyor
+  site_engineer
+  foreman
+  commercial_manager
+  contract_administrator
+  procurement_officer
+  planning_engineer
+  finance_officer
+  document_controller
+  project_viewer
+  client_viewer
+  consultant_viewer
+}
+
+enum ProjectStatus {
+  tender
+  awarded
+  active
+  on_hold
+  completed
+  closed
+}
+
+/// The Phase 1 lifecycle. Values beyond Internal Approval arrive in Phase 2 with
+/// the Variation Order tables.
+enum PotentialChangeStatus {
+  new_potential_change
+  notice_assessment
+  notice_required
+  needs_evidence
+  pm_scope_review
+  qs_pricing
+  cm_review
+  internal_approval
+  included_scope
+  cancelled
+}
+
+enum NoticeStatus {
+  not_assessed
+  required
+  not_required
+  needs_more_information
+  drafted
+  sent
+  acknowledged
+}
+
+enum RiskLevel {
+  green
+  amber
+  red
+}
+
+enum WorkStatus {
+  not_started
+  in_progress
+  completed
+  on_hold
+}
+
+enum SourceType {
+  mobile_form
+  whatsapp
+  email
+  document_upload
+  meeting
+  site_instruction
+  verbal
+  other
+}
+
+/// Whether the person who asked for the change was actually entitled to.
+/// Never inferred by AI — set by a human against the contact authority register.
+enum AuthorityStatus {
+  unknown
+  authorised
+  unauthorised
+  pending_verification
+}
+
+enum ContactType {
+  client
+  client_representative
+  consultant
+  engineer
+  architect
+  interior_designer
+  mep_consultant
+  landlord
+  authority
+  main_contractor
+  subcontractor
+  supplier
+  internal
+  other
+}
+
+enum DocumentType {
+  contract
+  drawing
+  specification
+  boq
+  programme
+  correspondence
+  site_photo
+  voice_note
+  instruction
+  rfi
+  quotation
+  notice
+  variation_proposal
+  other
+}
+
+enum ApprovedStatus {
+  not_applicable
+  pending
+  approved
+  rejected
+  superseded
+}
+
+enum TaskType {
+  notice_assessment
+  pm_scope_review
+  qs_pricing
+  procurement_quotation
+  subcontractor_quotation
+  eot_assessment
+  cm_review
+  internal_approval
+  evidence_collection
+  client_follow_up
+  document_request
+  other
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  blocked
+  completed
+  cancelled
+}
+
+enum Priority {
+  low
+  normal
+  high
+  critical
+}
+
+enum EscalationLevel {
+  none
+  level_1
+  level_2
+  level_3
+}
+
+enum BottleneckType {
+  notice_assessment_overdue
+  notice_required_not_drafted
+  notice_drafted_not_sent
+  notice_sent_no_proof
+  pm_scope_review_overdue
+  missing_client_instruction
+  missing_drawing
+  missing_specification
+  missing_site_photo
+  missing_labour_record
+  qs_pricing_overdue
+  procurement_quotation_overdue
+  subcontractor_quotation_overdue
+  eot_assessment_overdue
+  cm_review_overdue
+  internal_approval_overdue
+  client_approval_overdue
+  client_requested_information
+  client_rejected
+  work_started_without_approval
+  other
+}
+
+enum ActivitySource {
+  web_app
+  mobile_form
+  whatsapp
+  email
+  n8n
+  background_job
+  seed
+  system
+}
+
+enum IntegrationSource {
+  whatsapp
+  email
+  document_upload
+  notification_status
+  health_check
+}
+
+enum IntegrationEventStatus {
+  received
+  processed
+  failed
+  ignored
+}
+
+enum NotificationChannel {
+  email
+  whatsapp
+  in_app
+}
+
+/// A notification is only `sent` when the courier reports back. Never sooner.
+enum DeliveryStatus {
+  pending
+  queued
+  sent
+  delivered
+  failed
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Company
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Exactly one row per deployment. Enforced by the `singleton` unique column.
+model CompanySettings {
+  id                        String   @id @default(uuid()) @db.Uuid
+  singleton                 Boolean  @unique @default(true)
+  legalCompanyName          String   @map("legal_company_name")
+  displayCompanyName        String   @map("display_company_name")
+  companyLogoUrl            String?  @map("company_logo_url")
+  primaryColour             String   @default("#1e40af") @map("primary_colour")
+  secondaryColour           String   @default("#0f172a") @map("secondary_colour")
+  defaultCurrency           String   @default("AED") @map("default_currency")
+  defaultLanguage           String   @default("en") @map("default_language")
+  timezone                  String   @default("Asia/Dubai")
+  workweekStartDay          Int      @default(1) @map("workweek_start_day")
+  workweekEndDay            Int      @default(5) @map("workweek_end_day")
+  defaultNoticeTemplate     String?  @map("default_notice_template")
+  defaultVoTemplate         String?  @map("default_vo_template")
+  defaultEmailSenderName    String?  @map("default_email_sender_name")
+  defaultEmailSenderAddress String?  @map("default_email_sender_address")
+  whatsappBusinessNumber    String?  @map("whatsapp_business_number")
+  defaultApprovalMatrixJson Json?    @map("default_approval_matrix_json")
+  defaultReminderRulesJson  Json?    @map("default_reminder_rules_json")
+  defaultEscalationRulesJson Json?   @map("default_escalation_rules_json")
+  /// RAG thresholds in days remaining. Defaults documented in ARCHITECTURE.md.
+  riskAmberThresholdDays    Int      @default(7) @map("risk_amber_threshold_days")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("company_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  People
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `id` is the Supabase `auth.users` UUID. Accounts are admin-created; there is
+/// no public signup. Leavers are deactivated, never deleted, so the audit trail
+/// keeps pointing at a real person.
+model User {
+  id                String     @id @db.Uuid
+  fullName          String     @map("full_name")
+  email             String     @unique
+  phone             String?
+  avatarUrl         String?    @map("avatar_url")
+  systemRole        SystemRole @default(standard_user) @map("system_role")
+  preferredLanguage String     @default("en") @map("preferred_language")
+  active            Boolean    @default(true)
+  lastLoginAt       DateTime?  @map("last_login_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  memberships          ProjectMember[]  @relation("MemberUser")
+  assignedMemberships  ProjectMember[]  @relation("AssignedByUser")
+  createdProjects      Project[]        @relation("ProjectCreatedBy")
+  reportedChanges      PotentialChange[] @relation("PCReportedBy")
+  ownedChanges         PotentialChange[] @relation("PCCurrentOwner")
+  assignedTasks        Task[]           @relation("TaskAssignedTo")
+  delegatedTasks       Task[]           @relation("TaskAssignedBy")
+  blockingBottlenecks  Bottleneck[]     @relation("BottleneckBlockedByUser")
+  uploadedDocuments    ProjectDocument[]
+  activityLogs         ActivityLog[]
+
+  @@index([systemRole])
+  @@index([active])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Projects
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Project {
+  id                     String        @id @default(uuid()) @db.Uuid
+  projectCode            String        @unique @map("project_code")
+  projectName            String        @map("project_name")
+  clientName             String        @map("client_name")
+  consultantName         String?       @map("consultant_name")
+  projectLocation        String?       @map("project_location")
+  contractNumber         String?       @map("contract_number")
+  contractStartDate      DateTime?     @map("contract_start_date") @db.Date
+  contractCompletionDate DateTime?     @map("contract_completion_date") @db.Date
+  originalContractValue  Decimal?      @map("original_contract_value") @db.Decimal(18, 2)
+  currency               String        @default("AED")
+  projectStatus          ProjectStatus @default(active) @map("project_status")
+
+  /// Monotonic counter behind the PC number. Incremented atomically inside the
+  /// create transaction — MAX(seq)+1 races under concurrent capture.
+  pcSequence    Int     @default(0) @map("pc_sequence")
+  /// Google Drive folder for this project. Ids are authoritative; folder names
+  /// are cosmetic, so renaming in Drive never breaks the app.
+  driveFolderId String? @map("drive_folder_id")
+
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  createdBy        User?               @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  members          ProjectMember[]
+  contractRules    ProjectContractRule?
+  contacts         Contact[]
+  documents        ProjectDocument[]
+  potentialChanges PotentialChange[]
+  tasks            Task[]
+  bottlenecks      Bottleneck[]
+  activityLogs     ActivityLog[]
+  documentChunks   DocumentChunk[]
+
+  @@index([projectStatus])
+  @@index([clientName])
+  @@map("projects")
+}
+
+/// Grants one person authority on one project. Absence of a row is the denial —
+/// there is no "deny" record to forget to write.
+model ProjectMember {
+  id                     String      @id @default(uuid()) @db.Uuid
+  projectId              String      @map("project_id") @db.Uuid
+  userId                 String      @map("user_id") @db.Uuid
+  projectRole            ProjectRole @map("project_role")
+  permissionOverrideJson Json?       @map("permission_override_json")
+  active                 Boolean     @default(true)
+  assignedAt             DateTime    @default(now()) @map("assigned_at")
+  assignedByUserId       String?     @map("assigned_by_user_id") @db.Uuid
+  createdAt              DateTime    @default(now()) @map("created_at")
+  updatedAt              DateTime    @updatedAt @map("updated_at")
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User    @relation("MemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?   @relation("AssignedByUser", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, userId, projectRole])
+  @@index([userId, active])
+  @@index([projectId, active])
+  @@map("project_members")
+}
+
+/// The contractual clock. Every notice deadline in the system is derived from
+/// `noticePeriodDays` here, never from a global default.
+model ProjectContractRule {
+  id                      String  @id @default(uuid()) @db.Uuid
+  projectId               String  @unique @map("project_id") @db.Uuid
+  contractType            String? @map("contract_type")
+  contractClauseReference String? @map("contract_clause_reference")
+
+  noticePeriodDays        Int     @default(28) @map("notice_period_days")
+  detailedClaimPeriodDays Int     @default(42) @map("detailed_claim_period_days")
+  noticeDeliveryMethod    String? @map("notice_delivery_method")
+  noticeRecipientName     String? @map("notice_recipient_name")
+  noticeRecipientEmail    String? @map("notice_recipient_email")
+  noticeRecipientCompany  String? @map("notice_recipient_company")
+
+  noticeTemplateName             String? @map("notice_template_name")
+  variationProposalTemplateName  String? @map("variation_proposal_template_name")
+  eotAssessmentRequired          Boolean @default(true) @map("eot_assessment_required")
+
+  approvalThresholdPm                Decimal? @map("approval_threshold_pm") @db.Decimal(18, 2)
+  approvalThresholdCm                Decimal? @map("approval_threshold_cm") @db.Decimal(18, 2)
+  approvalThresholdCommercialDirector Decimal? @map("approval_threshold_commercial_director") @db.Decimal(18, 2)
+  approvalThresholdManagingDirector  Decimal? @map("approval_threshold_managing_director") @db.Decimal(18, 2)
+  highRiskVoValue                    Decimal? @map("high_risk_vo_value") @db.Decimal(18, 2)
+
+  clientFollowUpDays     Int @default(3) @map("client_follow_up_days")
+  qsPricingDueDays       Int @default(7) @map("qs_pricing_due_days")
+  pmScopeReviewDueDays   Int @default(3) @map("pm_scope_review_due_days")
+  internalApprovalDueDays Int @default(5) @map("internal_approval_due_days")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_contract_rules")
+}
+
+/// The authority register. Answers "was this person allowed to ask for that?"
+/// Capability flags are set by a human. AI never sets them.
+model Contact {
+  id          String      @id @default(uuid()) @db.Uuid
+  projectId   String      @map("project_id") @db.Uuid
+  fullName    String      @map("full_name")
+  companyName String?     @map("company_name")
+  jobTitle    String?     @map("job_title")
+  email       String?
+  phone       String?
+  contactType ContactType @default(other) @map("contact_type")
+
+  authorityVerified          Boolean @default(false) @map("authority_verified")
+  canRequestChange           Boolean @default(false) @map("can_request_change")
+  canIssueTechnicalInstruction Boolean @default(false) @map("can_issue_technical_instruction")
+  canInstructWork            Boolean @default(false) @map("can_instruct_work")
+  canApproveCost             Boolean @default(false) @map("can_approve_cost")
+  canApproveTime             Boolean @default(false) @map("can_approve_time")
+  canSignFinalVo             Boolean @default(false) @map("can_sign_final_vo")
+
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedChanges PotentialChange[] @relation("PCRequestedByContact")
+  bottlenecks      Bottleneck[]      @relation("BottleneckBlockedByContact")
+
+  @@index([projectId, active])
+  @@index([email])
+  @@map("contacts")
+}
+
+/// Metadata for a file. The bytes live in Drive; this row is the index and the
+/// access-control boundary. Files are served through an authenticated proxy,
+/// never a Drive link.
+model ProjectDocument {
+  id               String         @id @default(uuid()) @db.Uuid
+  projectId        String         @map("project_id") @db.Uuid
+  potentialChangeId String?       @map("potential_change_id") @db.Uuid
+  documentType     DocumentType   @default(other) @map("document_type")
+  documentName     String         @map("document_name")
+  documentNumber   String?        @map("document_number")
+  revisionNumber   String?        @map("revision_number")
+  issueDate        DateTime?      @map("issue_date") @db.Date
+  sourceUrl        String?        @map("source_url")
+  storagePath      String?        @map("storage_path")
+  driveFileId      String?        @map("drive_file_id")
+  mimeType         String?        @map("mime_type")
+  sizeBytes        Int?           @map("size_bytes")
+  uploadedByUserId String?        @map("uploaded_by_user_id") @db.Uuid
+  approvedStatus   ApprovedStatus @default(not_applicable) @map("approved_status")
+  isCurrentRevision Boolean       @default(true) @map("is_current_revision")
+  sourceChannel    SourceType     @default(mobile_form) @map("source_channel")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: SetNull)
+  uploadedBy      User?            @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  chunks          DocumentChunk[]
+
+  @@index([projectId, documentType])
+  @@index([potentialChangeId])
+  @@index([driveFileId])
+  @@map("project_documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  The commercial record
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The heart of the system. Captured immediately, assessed for notice risk
+/// immediately, priced and proved in parallel.
+model PotentialChange {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  /// PC-{PROJECT_CODE}-{sequence:0000}
+  pcNumber  String @map("pc_number")
+
+  title       String
+  description String
+
+  sourceType                SourceType      @default(mobile_form) @map("source_type")
+  sourceReference           String?         @map("source_reference")
+  sourceMessageId           String?         @map("source_message_id")
+  sourceSenderName          String?         @map("source_sender_name")
+  sourceSenderPhoneOrEmail  String?         @map("source_sender_phone_or_email")
+  sourceSenderAuthorityStatus AuthorityStatus @default(unknown) @map("source_sender_authority_status")
+
+  reportedByUserId     String?  @map("reported_by_user_id") @db.Uuid
+  requestedByContactId String?  @map("requested_by_contact_id") @db.Uuid
+
+  eventDate   DateTime @map("event_date") @db.Date
+  captureDate DateTime @default(now()) @map("capture_date")
+
+  location String?
+  trade    String?
+  category String?
+
+  workStatus          WorkStatus @default(not_started) @map("work_status")
+  estimatedValue      Decimal?   @map("estimated_value") @db.Decimal(18, 2)
+  potentialTimeImpact Boolean    @default(false) @map("potential_time_impact")
+  timeImpactDays      Int?       @map("time_impact_days")
+
+  currentStatus     PotentialChangeStatus @default(new_potential_change) @map("current_status")
+  currentOwnerUserId String?              @map("current_owner_user_id") @db.Uuid
+  waitingFor        String?               @map("waiting_for")
+  nextAction        String?               @map("next_action")
+  nextActionDueDate DateTime?             @map("next_action_due_date") @db.Date
+  blockerReason     String?               @map("blocker_reason")
+  riskLevel         RiskLevel             @default(green) @map("risk_level")
+
+  noticeRequired       Boolean      @default(false) @map("notice_required")
+  noticeDueDate        DateTime?    @map("notice_due_date") @db.Date
+  noticeStatus         NoticeStatus @default(not_assessed) @map("notice_status")
+  noticeAssessedAt     DateTime?    @map("notice_assessed_at")
+  noticeAssessedByUserId String?    @map("notice_assessed_by_user_id") @db.Uuid
+  noticeAssessmentNotes String?     @map("notice_assessment_notes")
+
+  driveFolderId String? @map("drive_folder_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project           Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reportedBy        User?                    @relation("PCReportedBy", fields: [reportedByUserId], references: [id], onDelete: SetNull)
+  currentOwner      User?                    @relation("PCCurrentOwner", fields: [currentOwnerUserId], references: [id], onDelete: SetNull)
+  requestedByContact Contact?                @relation("PCRequestedByContact", fields: [requestedByContactId], references: [id], onDelete: SetNull)
+  tasks             Task[]
+  bottlenecks       Bottleneck[]
+  documents         ProjectDocument[]
+  embedding         PotentialChangeEmbedding?
+  notifications     NotificationLog[]
+
+  @@unique([projectId, pcNumber])
+  @@index([projectId, currentStatus])
+  @@index([projectId, riskLevel])
+  @@index([currentOwnerUserId])
+  @@index([noticeDueDate])
+  @@index([nextActionDueDate])
+  @@index([trade])
+  @@map("potential_changes")
+}
+
+model Task {
+  id                String  @id @default(uuid()) @db.Uuid
+  projectId         String  @map("project_id") @db.Uuid
+  potentialChangeId String? @map("potential_change_id") @db.Uuid
+
+  taskType    TaskType @map("task_type")
+  title       String
+  description String?
+
+  assignedToUserId String?   @map("assigned_to_user_id") @db.Uuid
+  assignedByUserId String?   @map("assigned_by_user_id") @db.Uuid
+  dueDate          DateTime? @map("due_date") @db.Date
+
+  status          TaskStatus      @default(open)
+  priority        Priority        @default(normal)
+  escalationLevel EscalationLevel @default(none) @map("escalation_level")
+  completedAt     DateTime?       @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  assignedTo      User?            @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedBy      User?            @relation("TaskAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([assignedToUserId, status])
+  @@index([projectId, status])
+  @@index([dueDate, status])
+  @@index([potentialChangeId])
+  @@map("tasks")
+}
+
+/// "What is blocked, who owns it, how long has it waited, what is at risk."
+/// Detected by the application. n8n only delivers the message about it.
+model Bottleneck {
+  id                String  @id @default(uuid()) @db.Uuid
+  projectId         String  @map("project_id") @db.Uuid
+  potentialChangeId String? @map("potential_change_id") @db.Uuid
+
+  bottleneckType           BottleneckType @map("bottleneck_type")
+  blockedByRole            String?        @map("blocked_by_role")
+  blockedByUserId          String?        @map("blocked_by_user_id") @db.Uuid
+  blockedByExternalContactId String?      @map("blocked_by_external_contact_id") @db.Uuid
+  blockerReason            String?        @map("blocker_reason")
+
+  riskLevel       RiskLevel       @default(amber) @map("risk_level")
+  firstDetectedAt DateTime        @default(now()) @map("first_detected_at")
+  lastReminderAt  DateTime?       @map("last_reminder_at")
+  overdueDays     Int             @default(0) @map("overdue_days")
+  escalationLevel EscalationLevel @default(none) @map("escalation_level")
+  valueAtRisk     Decimal?        @map("value_at_risk") @db.Decimal(18, 2)
+  resolvedAt      DateTime?       @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  blockedByUser   User?            @relation("BottleneckBlockedByUser", fields: [blockedByUserId], references: [id], onDelete: SetNull)
+  blockedByContact Contact?        @relation("BottleneckBlockedByContact", fields: [blockedByExternalContactId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, resolvedAt])
+  @@index([potentialChangeId])
+  @@index([riskLevel, resolvedAt])
+  @@map("bottlenecks")
+}
+
+/// Append only. Never updated, never deleted. Written in the same transaction
+/// as the change it describes, so an audit gap cannot happen.
+model ActivityLog {
+  id           String         @id @default(uuid()) @db.Uuid
+  projectId    String?        @map("project_id") @db.Uuid
+  userId       String?        @map("user_id") @db.Uuid
+  recordType   String         @map("record_type")
+  recordId     String         @map("record_id")
+  actionType   String         @map("action_type")
+  oldValueJson Json?          @map("old_value_json")
+  newValueJson Json?          @map("new_value_json")
+  source       ActivitySource @default(web_app)
+  metadataJson Json?          @map("metadata_json")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([recordType, recordId])
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Integration boundary
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Every inbound event from n8n lands here first. The unique (source, externalId)
+/// is what makes a retried webhook safe: the second delivery finds this row and
+/// returns the original result instead of creating a second Potential Change.
+model IntegrationEvent {
+  id         String                 @id @default(uuid()) @db.Uuid
+  source     IntegrationSource
+  externalId String                 @map("external_id")
+  status     IntegrationEventStatus @default(received)
+  payloadJson Json                  @map("payload_json")
+  resultJson Json?                  @map("result_json")
+  errorMessage String?              @map("error_message")
+  receivedAt DateTime               @default(now()) @map("received_at")
+  processedAt DateTime?             @map("processed_at")
+
+  @@unique([source, externalId])
+  @@index([status, receivedAt])
+  @@map("integration_events")
+}
+
+/// A notification becomes `sent` only when the courier reports back through
+/// /api/integrations/notifications/delivery-status. Until then it is pending,
+/// and on failure it is failed — never "notice sent".
+model NotificationLog {
+  id                String              @id @default(uuid()) @db.Uuid
+  potentialChangeId String?             @map("potential_change_id") @db.Uuid
+  channel           NotificationChannel
+  recipient         String
+  subject           String?
+  payloadSummary    String?             @map("payload_summary")
+  status            DeliveryStatus      @default(pending)
+  externalMessageId String?             @map("external_message_id")
+  failureReason     String?             @map("failure_reason")
+  requestedAt       DateTime            @default(now()) @map("requested_at")
+  sentAt            DateTime?           @map("sent_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: SetNull)
+
+  @@index([status, requestedAt])
+  @@index([potentialChangeId])
+  @@map("notification_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Vectors
+//
+//  Prisma has no native vector type, so the columns are added by SQL migration
+//  and declared Unsupported here. Every similarity query filters by project_id
+//  BEFORE the ANN search — an unscoped search would surface one project's
+//  correspondence inside another. See search.service.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DocumentChunk {
+  id         String @id @default(uuid()) @db.Uuid
+  projectId  String @map("project_id") @db.Uuid
+  documentId String @map("document_id") @db.Uuid
+  chunkIndex Int    @map("chunk_index")
+  content    String
+
+  embedding      Unsupported("vector(384)")?
+  embeddingModel String                      @map("embedding_model")
+  embeddingDims  Int                         @map("embedding_dims")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document ProjectDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([projectId])
+  @@map("document_chunks")
+}
+
+model PotentialChangeEmbedding {
+  id                String @id @default(uuid()) @db.Uuid
+  potentialChangeId String @unique @map("potential_change_id") @db.Uuid
+  projectId         String @map("project_id") @db.Uuid
+  content           String
+
+  embedding      Unsupported("vector(384)")?
+  embeddingModel String                      @map("embedding_model")
+  embeddingDims  Int                         @map("embedding_dims")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  potentialChange PotentialChange @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("potential_change_embeddings")
+}
