@@ -3,4 +3,4 @@
  * regardless of the machine running the suite.
  */
 process.env.TZ = 'Asia/Dubai';
-process.env.NODE_ENV ??= 'test';
+Object.assign(process.env, { NODE_ENV: process.env.NODE_ENV ?? 'test' });
