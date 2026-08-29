@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ZodError, type ZodSchema } from 'zod';
+import { ZodError, type ZodTypeAny, type z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError, ValidationError, isAppError } from '@/lib/errors';
 import { requireUser } from '@/lib/auth/session';
@@ -100,17 +100,29 @@ export function withRoute<TParams = Record<string, string>>(
   };
 }
 
-export async function parseJsonBody<T>(request: Request, schema: ZodSchema<T>): Promise<T> {
+/**
+ * Note the generic: `ZodSchema<T>` would force the input and output types to be
+ * the same, which throws away every `.default()` in the schema and leaves the
+ * caller holding `field | undefined`. `ZodTypeAny` + `z.infer` keeps the parsed
+ * OUTPUT type, which is what the services actually accept.
+ */
+export async function parseJsonBody<TSchema extends ZodTypeAny>(
+  request: Request,
+  schema: TSchema,
+): Promise<z.infer<TSchema>> {
   let payload: unknown;
   try {
     payload = await request.json();
   } catch {
     throw new ValidationError('Request body must be valid JSON');
   }
-  return schema.parse(payload);
+  return schema.parse(payload) as z.infer<TSchema>;
 }
 
-export function parseQuery<T>(request: Request, schema: ZodSchema<T>): T {
+export function parseQuery<TSchema extends ZodTypeAny>(
+  request: Request,
+  schema: TSchema,
+): z.infer<TSchema> {
   const url = new URL(request.url);
   const raw: Record<string, string | string[]> = {};
 
@@ -119,7 +131,7 @@ export function parseQuery<T>(request: Request, schema: ZodSchema<T>): T {
     raw[key] = values.length > 1 ? values : (values[0] ?? '');
   }
 
-  return schema.parse(raw);
+  return schema.parse(raw) as z.infer<TSchema>;
 }
 
 export function jsonResponse<T>(data: T, status = 200): NextResponse {

@@ -9,14 +9,16 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"tests/integration/**\"",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "worker": "tsx src/workers/index.ts"
+    "worker": "tsx src/workers/index.ts",
+    "test:db": "vitest run tests/integration",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
