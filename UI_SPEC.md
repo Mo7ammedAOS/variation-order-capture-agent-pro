@@ -116,3 +116,53 @@ Rows, list items and sections carry `break-inside: avoid`, headings
 `break-after: avoid-page`, and `<thead>` repeats on every page, so a register
 running to several pages does not split a change across a fold or orphan a
 heading at the foot of a page.
+
+
+## Interaction
+
+**Command palette — Cmd+K / Ctrl+K.** Search a PC number, a project, or jump to
+a page. Results come from `/api/command`, which goes through `listProjects` and
+`listPotentialChanges` and is therefore scoped to the caller: a Site Engineer
+typing a PC number from a project they are not on gets nothing, exactly as if it
+did not exist. A palette that held every project in memory would be a
+cross-project leak wearing the costume of a feature.
+
+It waits for two characters (one matches most of the register and returns noise),
+debounces at 180ms, and aborts the in-flight request when you keep typing, so a
+slow early response cannot land after a fast later one. Nothing is cached between
+openings — the register changes all day, and a stale hit that opens a change
+somebody already closed is worse than a slightly slower search.
+
+The sidebar carries a search-shaped button printing `⌘K` beside itself, because
+a shortcut nobody is told about is a shortcut for the person who built it. It
+dispatches the same keystroke rather than lifting state, so the click path and
+the keyboard path cannot drift apart.
+
+**Register peek.** Clicking a row slides a read-only drawer in from the side;
+clicking the PC number still navigates, because a link that does not navigate is
+a small betrayal of the one thing links promise. There is also a focusable
+preview button per row, so the peek is not mouse-only. Escape closes and focus
+returns to the row you came from.
+
+It fetches on open rather than being handed the whole register up front:
+serialising every description and value into the page to save 200ms would be
+paid on every load for a drawer most people open twice. It is deliberately
+read-only, with one link to the real page — editing there would duplicate the
+capability checks, the audit trail and the transition rules, and give them a
+second place to drift.
+
+**Motion** is feedback, not decoration: a 150ms rise on the palette, a 200ms
+slide on the drawer, both behind `motion-safe:` so neither fires for anyone who
+asked their OS for reduced motion. Nothing animates on a data change.
+
+## Deliberately not built
+
+From the interaction brief, with reasons rather than silence:
+
+| Asked for | Why not, yet |
+|---|---|
+| Virtualised tables | The register is 20 rows and a busy project might reach a few hundred. Virtualisation at that scale costs Cmd+F, printing and text selection to solve a problem nobody has. Revisit past ~1,000 rows, which is a real threshold rather than a feeling |
+| Drag-and-drop dashboards | Real cost, and it is nine cards. Per-user layout state, persistence and a migration path, so one director can move a card. Worth revisiting when there are several directors who disagree about the order |
+| Voice-to-action capture | The AI provider is a mock — there is no transcription behind it. A voice button on a mock is theatre, and worse, it would look like it worked. It belongs with the real provider in Phase 2, where `MockAiProvider` already returns the right envelope for it |
+| AI copilot panel | Same reason. A panel that surfaces "insights" from a fixture is a panel that lies confidently, which is the failure mode this product is least able to afford |
+| Inline editing for high-volume entry | There is no data-entry persona here yet. Invoices, payments and variation orders are explicitly out of Phase 1, so the accountant this pattern serves has nothing to type into |

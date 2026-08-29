@@ -60,6 +60,12 @@ describe('humanise', () => {
     expect(humanise('cm_review')).toBe('CM review');
   });
 
+  it('spells WhatsApp the way WhatsApp spells it', () => {
+    // It appears in the register and on the printed report.
+    expect(humanise('whatsapp')).toBe('WhatsApp');
+    expect(humanise('meeting_online')).toBe('Meeting online');
+  });
+
   it('still sentence-cases an ordinary status', () => {
     expect(humanise('notice_assessment')).toBe('Notice assessment');
     expect(humanise('included_scope')).toBe('Included scope');

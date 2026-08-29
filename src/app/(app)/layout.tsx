@@ -6,6 +6,8 @@ import { SYSTEM_ROLE_LABELS } from '@/lib/rbac';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/(auth)/login/actions';
 import { MobileNav, ReportChangeFab, SidebarNav } from './nav';
+import { CommandPalette } from './command-palette';
+import { CommandTrigger } from './command-trigger';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         <div className="flex-1 px-3">
+          <CommandTrigger />
           <SidebarNav />
         </div>
 
@@ -69,10 +72,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Bottom padding clears the mobile nav bar and the capture button. */}
       {/* Printing drops the padding and the bottom clearance: the nav is hidden on
           paper, so the space it reserved is a blank strip at the foot of a page. */}
-      <main className="flex-1 px-4 py-6 pb-36 md:px-8 md:py-8 md:pb-12 print:p-0">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-6 pb-36 md:px-8 md:py-8 md:pb-12 print:p-0">
+        {/*
+          `min-w-0` is load-bearing. A flex item defaults to min-width:auto, so
+          without it this grows to the width of its widest child — the fifteen
+          column register — and the whole PAGE scrolls sideways instead of the
+          table scrolling inside its own container. The sidebar then slides off
+          screen, which is the visible symptom of a rule about a table.
+        */}
+        {children}
+      </main>
 
       <MobileNav />
       <ReportChangeFab />
+      <CommandPalette />
     </div>
   );
 }

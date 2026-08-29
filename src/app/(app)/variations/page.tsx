@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FileWarning } from 'lucide-react';
+import { FileWarning, PanelRightOpen } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { listPotentialChanges } from '@/services/potential-change.service';
 import { listProjects } from '@/services/project.service';
@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/domain/empty-state';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RegisterFilters } from './filters';
+import { PeekDrawer } from './peek-drawer';
 
 export const metadata: Metadata = { title: 'Potential Changes' };
 export const dynamic = 'force-dynamic';
@@ -80,15 +81,25 @@ export default async function VariationsPage({
                   <TableHead>Risk</TableHead>
                   <TableHead className="text-end">Estimated</TableHead>
                   <TableHead className="text-end">Waiting</TableHead>
+                  <TableHead className="sr-only">Preview</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {changes.map((change) => (
-                  <TableRow key={change.id}>
+                  // Clicking anywhere on the row peeks; clicking the PC number
+                  // still navigates, because a link that does not navigate is a
+                  // small betrayal of the one thing links promise.
+                  <TableRow key={change.id} data-peek={change.id} className="cursor-pointer">
                     <TableCell>
+                      {/*
+                        A PC number is a reference: it gets read aloud in
+                        meetings and typed into emails. Wrapped across four
+                        lines it stops being scannable, which is the only
+                        reason the column is first.
+                      */}
                       <Link
                         href={`/variations/${change.id}`}
-                        className="tabular font-medium text-primary hover:underline"
+                        className="tabular whitespace-nowrap font-medium text-primary hover:underline"
                       >
                         {change.pcNumber}
                       </Link>
@@ -97,8 +108,10 @@ export default async function VariationsPage({
                       {change.project.projectCode}
                     </TableCell>
                     <TableCell className="max-w-72 truncate">{change.title}</TableCell>
-                    <TableCell className="text-muted-foreground">{humanise(change.sourceType)}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {humanise(change.sourceType)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
                       {change.requestedByContact?.fullName ?? change.sourceSenderName ?? '—'}
                     </TableCell>
                     <TableCell>
@@ -130,6 +143,17 @@ export default async function VariationsPage({
                     </TableCell>
                     <TableCell className="tabular text-end text-muted-foreground">
                       {daysSince(change.createdAt) ?? 0}d
+                    </TableCell>
+                    <TableCell className="text-end">
+                      {/* A focusable way in, so the peek is not mouse-only. */}
+                      <button
+                        type="button"
+                        data-peek={change.id}
+                        aria-label={`Preview ${change.pcNumber}`}
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        <PanelRightOpen aria-hidden className="size-4" />
+                      </button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -179,6 +203,8 @@ export default async function VariationsPage({
               </li>
             ))}
           </ul>
+
+          <PeekDrawer />
         </>
       )}
     </div>

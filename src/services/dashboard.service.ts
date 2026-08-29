@@ -172,12 +172,19 @@ function tally(values: string[]): { label: string; count: number }[] {
  */
 const ACRONYMS = new Set(['qs', 'pm', 'cm', 'md', 'mep', 'eot', 'vo', 'rfi', 'si', 'boq', 'hse']);
 
+/** Proper nouns that own their own capitalisation. */
+const PROPER_NOUNS: Record<string, string> = {
+  whatsapp: 'WhatsApp',
+};
+
 export function humanise(value: string): string {
   const words = value.replace(/_/g, ' ').split(' ');
 
   return words
     .map((word, index) => {
-      if (ACRONYMS.has(word.toLowerCase())) return word.toUpperCase();
+      const lower = word.toLowerCase();
+      if (ACRONYMS.has(lower)) return word.toUpperCase();
+      if (PROPER_NOUNS[lower]) return PROPER_NOUNS[lower];
       if (index === 0) return word.charAt(0).toUpperCase() + word.slice(1);
       return word;
     })
