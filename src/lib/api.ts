@@ -70,7 +70,7 @@ export function withAuth<TParams = Record<string, string>>(
   handler: (
     request: Request,
     context: { user: AuthenticatedUser; params: TParams },
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
 ) {
   return async (request: Request, routeContext: RouteContext<TParams>) => {
     try {
@@ -88,7 +88,7 @@ export function withRoute<TParams = Record<string, string>>(
   handler: (
     request: Request,
     context: { params: TParams },
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
 ) {
   return async (request: Request, routeContext: RouteContext<TParams>) => {
     try {
