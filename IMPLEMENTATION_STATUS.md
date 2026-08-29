@@ -8,7 +8,7 @@ Last updated 2026-08-30.
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 70 tests, 13 of them against the real database
+npm test            PASS — 81 tests, 18 of them against the real database
 npm run build       PASS
 npm run db:migrate  PASS — 15 tables, 22 enums, 27 foreign keys, pgvector, RLS
 npm run db:seed     PASS — 12 users, 5 projects, 20 changes, 25 tasks,
@@ -68,6 +68,31 @@ Plus these this design added: vector search cannot cross a project boundary; the
 document proxy refuses a file on an unassigned project; PC numbers do not
 collide under concurrency; a signed-out `/api/*` call gets 401 rather than a
 redirect; and the contract-rules suite below.
+
+## Lifecycle — `tests/unit/status-transitions.test.ts`, `tests/integration/status-change.test.ts`
+
+`changeStatus` existed with a capability but no route, no UI, and **no
+transition validation** — it accepted any status. A change sitting in
+`notice_assessment` could therefore be moved straight to `included_scope`, past
+the entitlement question, and nothing would look wrong: the change would appear
+to progress normally and the notice would simply never be served.
+
+What is now enforced, and where each rule came from:
+
+| Rule | Source |
+|---|---|
+| A change leaves `notice_assessment` only via the assessment | `notice.service.ts` already encodes the three outcomes |
+| A newly captured change goes to the assessment | `capture.service.ts` and `createPotentialChange` both do this |
+| `included_scope` and `cancelled` are ends | Reopening is a different action with different authority |
+| No move to the status it is already in | — |
+
+**Open question for Osman: the ORDER of the commercial review stages.** Whether
+pricing precedes scope review, whether CM review can be skipped below a
+threshold, what internal approval requires — none of that is written down
+anywhere, so it has not been invented. The review stages are currently mutually
+reachable and every move is audited with the mover's name and note. When the
+chain is specified it goes into `allowedNextStatuses`, and the UI narrows on its
+own, because the form asks that function what to offer.
 
 ## Contract rules — `tests/integration/contract-rules.test.ts`
 

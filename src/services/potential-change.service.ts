@@ -2,7 +2,7 @@ import 'server-only';
 import type { Prisma, PotentialChangeStatus, RiskLevel } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { NotFoundError } from '@/lib/errors';
+import { NotFoundError, ValidationError } from '@/lib/errors';
 import { calculateNoticeDueDate, todayUtc } from '@/lib/dates';
 import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
@@ -23,6 +23,11 @@ import { assertProjectAccess, scopeToUser } from '@/services/project-access.serv
  * Capture the event immediately. Assess notice risk immediately. Price and
  * prove the change in parallel.
  */
+
+/** `qs_pricing` reads as "QS pricing" in a message, not as a column name. */
+function humaniseStatus(status: PotentialChangeStatus): string {
+  return status.replace(/_/g, ' ');
+}
 
 export const potentialChangeCreateSchema = z.object({
   projectId: z.string().uuid(),
@@ -310,6 +315,69 @@ export async function updatePotentialChange(
   });
 }
 
+/**
+ * Which statuses may follow which.
+ *
+ * Only part of this is settled, and the split matters — the settled part is
+ * read off the code that already exists, the rest is a placeholder that must
+ * not be mistaken for a decision.
+ *
+ * SETTLED, because the product already behaves this way:
+ *
+ *   - Capture lands a change in `notice_assessment` (capture.service.ts and
+ *     createPotentialChange both do this), so `new_potential_change` only ever
+ *     moves forward into the assessment.
+ *   - A change LEAVES `notice_assessment` only through `assessNotice`, which
+ *     sends it to `notice_required`, `qs_pricing` or `needs_evidence` depending
+ *     on the outcome. So `changeStatus` refuses to move it at all. Letting a
+ *     status dropdown walk a change past the entitlement question would defeat
+ *     the one thing this product exists to prevent — and it would do so
+ *     invisibly, since the change would look like it was progressing normally.
+ *   - `included_scope` and `cancelled` are ends. Nothing follows them here;
+ *     reopening is a different action with different authority, not a status
+ *     change.
+ *
+ * NOT SETTLED: the ORDER of the commercial review stages — whether pricing
+ * precedes scope review, whether CM review can be skipped below a threshold,
+ * what internal approval requires. That is this company's commercial process
+ * and nobody has written it down yet, so the stages are mutually reachable and
+ * every move is audited with the mover's name. When Osman specifies the chain,
+ * it is encoded HERE and the UI narrows on its own, because the form asks this
+ * function what to offer.
+ */
+const REVIEW_STAGES: readonly PotentialChangeStatus[] = [
+  'needs_evidence',
+  'notice_required',
+  'pm_scope_review',
+  'qs_pricing',
+  'cm_review',
+  'internal_approval',
+];
+
+const TERMINAL_STATUSES: readonly PotentialChangeStatus[] = ['included_scope', 'cancelled'];
+
+export function allowedNextStatuses(current: PotentialChangeStatus): PotentialChangeStatus[] {
+  if (TERMINAL_STATUSES.includes(current)) return [];
+
+  // The entitlement question belongs to the assessment, never to a dropdown.
+  if (current === 'notice_assessment') return [];
+
+  if (current === 'new_potential_change') return ['notice_assessment', 'cancelled'];
+
+  return [...REVIEW_STAGES.filter((status) => status !== current), ...TERMINAL_STATUSES];
+}
+
+export const statusChangeSchema = z.object({
+  status: z.enum([
+    'new_potential_change', 'notice_assessment', 'notice_required', 'needs_evidence',
+    'pm_scope_review', 'qs_pricing', 'cm_review', 'internal_approval',
+    'included_scope', 'cancelled',
+  ]),
+  note: z.string().trim().max(2000).optional(),
+});
+
+export type StatusChangeInput = z.infer<typeof statusChangeSchema>;
+
 export async function changeStatus(
   user: AuthenticatedUser,
   id: string,
@@ -319,6 +387,21 @@ export async function changeStatus(
   const existing = await prisma.potentialChange.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('Potential Change not found');
   await assertProjectAccess(user, existing.projectId, 'potentialChange.changeStatus');
+
+  if (status === existing.currentStatus) {
+    throw new ValidationError(`This change is already at ${humaniseStatus(status)}`);
+  }
+
+  const allowed = allowedNextStatuses(existing.currentStatus);
+  if (!allowed.includes(status)) {
+    throw new ValidationError(
+      existing.currentStatus === 'notice_assessment'
+        ? 'Record the notice assessment first — its outcome decides where this change goes next'
+        : TERMINAL_STATUSES.includes(existing.currentStatus)
+          ? `This change is ${humaniseStatus(existing.currentStatus)} and cannot be moved on`
+          : `A change at ${humaniseStatus(existing.currentStatus)} cannot move to ${humaniseStatus(status)}`,
+    );
+  }
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.potentialChange.update({

@@ -127,6 +127,7 @@ Signed, so it is not a free liveness probe for anyone scanning. Returns
 | GET/POST | `/api/potential-changes` | Filters: `projectId, status, riskLevel, ownerUserId, trade, q, noticeDueWithinDays` |
 | GET/PATCH | `/api/potential-changes/[id]` | Editing `eventDate` recalculates the notice deadline |
 | POST | `/api/potential-changes/[id]/notice-assessment` | `{ outcome, notes }`. Needs `potentialChange.assessNotice` |
+| PATCH | `/api/potential-changes/[id]/status` | `{ status, note? }`. Needs `potentialChange.changeStatus`. Illegal transitions return **400** with the reason — notably, a change in `notice_assessment` cannot be moved at all, because its outcome decides where it goes |
 | GET | `/api/potential-changes/[id]/similar` | Suggestions, scoped to that project |
 | GET/POST | `/api/tasks`, PATCH `/api/tasks/[id]` | |
 | GET | `/api/bottlenecks` | |

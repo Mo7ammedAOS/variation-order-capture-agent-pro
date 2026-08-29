@@ -5,7 +5,7 @@ import {
   ArrowLeft, ClipboardList, Copy, FileText, History, MapPin, Paperclip, User,
 } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
-import { getPotentialChange } from '@/services/potential-change.service';
+import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
 import { prisma } from '@/lib/prisma';
 import { formatDate, formatDateTime, daysSince } from '@/lib/dates';
@@ -19,6 +19,7 @@ import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
+import { StatusForm } from './status-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +68,15 @@ export default async function PotentialChangeDetailPage({
   const canAssess =
     hasCapability(user.systemRole, projectRoles, 'potentialChange.assessNotice') &&
     change.noticeStatus === 'not_assessed';
+
+  // What the service will actually permit, asked rather than assumed, so the
+  // form can never offer a move that would be rejected on arrival.
+  const canChangeStatus = hasCapability(
+    user.systemRole,
+    projectRoles,
+    'potentialChange.changeStatus',
+  );
+  const nextStatuses = allowedNextStatuses(change.currentStatus);
 
   const amberThreshold = 7;
 
@@ -201,6 +211,14 @@ export default async function PotentialChangeDetailPage({
           </Card>
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+
+          {canChangeStatus ? (
+            <StatusForm
+              potentialChangeId={change.id}
+              currentStatus={change.currentStatus}
+              options={nextStatuses}
+            />
+          ) : null}
 
           <Card>
             <CardHeader className="pb-3">
