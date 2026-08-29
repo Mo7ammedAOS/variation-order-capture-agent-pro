@@ -21,11 +21,11 @@ echo "==> Applying migrations"
 docker compose --env-file "$ENV_FILE" run --rm --no-deps app \
   npx prisma migrate deploy
 
-echo "==> Applying pgvector + RLS"
-echo "    (idempotent; safe to re-run)"
-docker compose --env-file "$ENV_FILE" run --rm --no-deps app \
-  sh -c 'npx prisma db execute --file prisma/sql/001_vector.sql --schema prisma/schema.prisma \
-      && npx prisma db execute --file prisma/sql/002_rls.sql   --schema prisma/schema.prisma'
+# pgvector indexes and RLS policies are MIGRATIONS now, applied by the step
+# above. They used to be run here from prisma/sql/*.sql, which meant a database
+# rebuilt from `migrate deploy` alone came up with row level security disabled
+# and no policies — silently. Those files no longer exist, so this step would
+# have failed the release outright.
 
 echo "==> Starting"
 docker compose --env-file "$ENV_FILE" up -d --remove-orphans

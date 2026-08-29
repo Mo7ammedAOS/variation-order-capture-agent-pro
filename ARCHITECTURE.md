@@ -121,5 +121,6 @@ failure `failed` with a reason. A notice is not served because we asked.
 ## Reusability per client
 
 Nothing is hardcoded to ABC Fit-Out. A new deployment is a new database, a new
-`.env`, a new compose stack and a new Caddy block. `CLIENT_SLUG` names it in
+`.env` and a new compose stack — Traefik discovers the route from container
+labels, so there is no proxy config to edit. `CLIENT_SLUG` names it in
 logs, in the n8n workflow file and in the health check.

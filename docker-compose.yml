@@ -1,7 +1,14 @@
 # VO Capture & Control — one stack per client deployment.
 #
-# Adding a client is a copy of this file, a new .env, and a new Caddy block.
-# No code changes, no shared containers, no shared volumes.
+# Adding a client is a copy of this file and a new .env. No code changes, no
+# shared containers, no shared volumes.
+#
+# The reverse proxy on this VPS is TRAEFIK, not Caddy. It was written for Caddy
+# and the box turned out to run Traefik in host network mode with Docker label
+# discovery, so routing is declared as labels here rather than in a proxy
+# config file. Traefik reaches the container on its bridge IP directly, which
+# is why nothing is published to a host port: publishing would put the app on
+# the public interface with no TLS and none of the headers below.
 #
 #   docker compose --env-file .env.production up -d --build
 
@@ -17,10 +24,23 @@ services:
     env_file: [.env.production]
     environment:
       PORT: 3000
-    # Bound to loopback: Caddy is the only thing that may reach it. Publishing
-    # on 0.0.0.0 would expose the app directly, bypassing TLS and the headers.
-    ports:
-      - '127.0.0.1:${APP_PORT:-3100}:3000'
+    labels:
+      # Discovered by Traefik's docker provider. `exposedbydefault=false` on
+      # this box, so a container without traefik.enable is invisible to it.
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-vo}.rule=Host(`${APP_HOST:-vo.osmanflow.com}`)'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-vo}.entrypoints=websecure'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-vo}.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-vo}.middlewares=${TRAEFIK_ROUTER:-vo}-headers'
+      - 'traefik.http.services.${TRAEFIK_ROUTER:-vo}.loadbalancer.server.port=3000'
+      # Site engineers reach this from phones on mobile networks, so HSTS earns
+      # its place. No preload: that is very hard to undo.
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.stsSeconds=31536000'
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.stsIncludeSubdomains=true'
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.contentTypeNosniff=true'
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.frameDeny=true'
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.browserXssFilter=true'
+      - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.referrerPolicy=strict-origin-when-cross-origin'
     depends_on:
       redis:
         condition: service_healthy
@@ -37,6 +57,9 @@ services:
     image: vo-capture-control:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: [.env.production]
+    # No traefik.enable: the worker serves no HTTP and must never be routable.
+    labels:
+      - 'traefik.enable=false'
     command: ['node', '-e', "require('./server.js')"]
     depends_on:
       app:
@@ -48,6 +71,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    labels:
+      - 'traefik.enable=false'
     command: >
       redis-server
       --appendonly yes

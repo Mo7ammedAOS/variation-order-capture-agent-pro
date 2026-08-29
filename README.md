@@ -29,7 +29,7 @@ and test-by-test position.
 | [API_SPEC.md](API_SPEC.md) | Both API families, payloads, the 4xx/5xx contract |
 | [UI_SPEC.md](UI_SPEC.md) | Who holds the device, and what follows from that |
 | [SECURITY.md](SECURITY.md) | Auth, authorisation, the integration boundary, limitations |
-| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Supabase, Drive, VPS, Caddy, verification |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Supabase, Drive, the VPS, Traefik routing, verification |
 | [N8N_WORKFLOW_MAP.md](N8N_WORKFLOW_MAP.md) | The eight lanes and the one-file-per-client rule |
 
 ## Quick start

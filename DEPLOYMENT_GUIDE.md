@@ -1,17 +1,30 @@
 # Deployment Guide
 
-Target: the existing VPS, as a second container behind the Caddy that already
-fronts n8n.
+Target: the existing Hostinger VPS, as another stack behind the reverse proxy
+that already fronts n8n.
+
+**That proxy is Traefik, not Caddy.** This guide said Caddy until 2026-08-30,
+when the box was finally inspected. Traefik runs in **host network mode** with
+the Docker provider and `exposedbydefault=false`, so routing is declared as
+labels on the container — in `docker-compose.yml` — and there is no proxy config
+file to edit. Traefik reaches containers on their bridge IP, which is why the
+app publishes no host port.
 
 ```text
-Caddy (running, auto-TLS)
-├── n8n.osmanflow.com  → n8n            (existing, untouched)
-└── vo.osmanflow.com   → vo-app :3100   ← new
+Hostinger VPS  srv1859636  ·  187.127.210.248  ·  2 vCPU, 7.8 GB
+Traefik (host network, entrypoints web:80 → websecure:443, letsencrypt)
+├── n8n.osmanflow.com  → n8n container            (existing, untouched)
+├── evolution-api      → WhatsApp, on loopback    (existing, untouched)
+└── vo.osmanflow.com   → vo app container :3000   ← new
 
-Postgres + Auth → Supabase (hosted)
-Files           → Google Drive
+Postgres + Auth → Supabase (hosted, ap-southeast-1)
+Files           → Google Drive, or local disk while that is undecided
 Embeddings      → local MiniLM, in-process, free
 ```
+
+The router, middleware and service names all derive from `TRAEFIK_ROUTER`
+(default `vo`). A second client deployment on the same box sets a different
+value along with `APP_HOST`, and the two cannot collide.
 
 Chosen over Vercel because BullMQ workers and the local embedding model both
 need a long-lived process, and the deployment model wants one self-contained
@@ -143,61 +156,67 @@ whose Drive their evidence lives in.
 
 ## 3. DNS
 
-**Domain settled 2026-08-30: `vo.osmanflow.com`.** It is already written into
-`deploy/Caddyfile.snippet`.
+**Domain settled 2026-08-30: `vo.osmanflow.com`**, and the A record was added
+the same day. It resolves to `187.127.210.248` on every public resolver.
 
-One **A record** is needed, and as of 2026-08-30 it does not exist —
-`dig +short vo.osmanflow.com` returns nothing.
+**DNS for `osmanflow.com` is at Squarespace, not Hostinger.** The nameservers are
+`nsb1`–`nsb4.squarespacedns.com`, so records are added in Squarespace's DNS
+panel. Anything entered into Hostinger's DNS zone editor saves happily and has
+no effect, because nobody asks Hostinger for this domain's records.
 
 | Type | Name | Value |
 |---|---|---|
-| A | `vo` | the VPS IP |
+| A | `vo` | 187.127.210.248 |
 
-The VPS IP is whatever `n8n.osmanflow.com` already resolves to, since the app
-goes behind the same Caddy on the same box. Check it rather than trusting a
-number written in a document:
+Confirm before starting the container, not after:
 
 ```bash
-dig +short n8n.osmanflow.com     # the VPS
-dig +short vo.osmanflow.com      # must return the same, before deploying
+dig +short vo.osmanflow.com      # must return the VPS IP
 ```
 
-Do this **before** reloading Caddy. Caddy asks Let's Encrypt for a certificate
-the moment the site block loads, and a challenge against a hostname that does
-not resolve counts toward Let's Encrypt's failed-validation rate limit. Enough
-failures and the domain is locked out for an hour, which turns a thirty second
-DNS fix into a wait.
+Traefik asks Let's Encrypt for a certificate the moment a labelled container
+appears, and a challenge against a hostname that does not resolve counts toward
+Let's Encrypt's failed-validation rate limit. Enough failures and the domain is
+locked out for an hour.
 
-The apex `osmanflow.com` currently points at Squarespace addresses, not the VPS.
-Adding the `vo` subdomain does not disturb that.
+The apex `osmanflow.com` points at Squarespace addresses, not the VPS. Adding
+the `vo` subdomain does not disturb that.
 
 ## 4. Deploy
 
 ```bash
-git clone https://github.com/Mo7ammedAOS/variation-order-capture-agent-pro.git
-cd variation-order-capture-agent-pro
+mkdir -p /docker/vo && cd /docker/vo    # sits beside /docker/n8n-3jqr, /docker/traefik
+git clone https://github.com/Mo7ammedAOS/variation-order-capture-agent-pro.git .
 cp .env.example .env.production   # then fill it in — never commit it
 chmod 600 .env.production
 
 ./deploy/release.sh
 ```
 
-`release.sh` builds, runs `prisma migrate deploy`, applies the pgvector and RLS
-SQL, starts the stack, and waits for health. Migrations run **before** new code
-serves traffic, or a request can hit a column that does not exist yet.
+`release.sh` builds, runs `prisma migrate deploy` — which now includes the
+pgvector indexes and the RLS policies — starts the stack, and waits for health.
+Migrations run **before** new code serves traffic, or a request can hit a column
+that does not exist yet.
 
-## 5. Caddy
+## 5. Routing
 
-Append `deploy/Caddyfile.snippet` to `/etc/caddy/Caddyfile`, then:
+There is nothing to edit. Traefik discovers the container from the labels in
+`docker-compose.yml` and requests the certificate itself; the existing n8n route
+is never touched, so **n8n stays up throughout**. That is the main reason this
+is safer than the Caddy plan it replaced: no shared config file to reload, so no
+way for a mistake here to take n8n down with it.
+
+Watch it happen:
 
 ```bash
-caddy validate --config /etc/caddy/Caddyfile
-systemctl reload caddy
+docker logs -f traefik-traefik-1        # certificate issuance
+curl -sI https://vo.osmanflow.com/login  # expect 200 and a valid chain
 ```
 
-TLS is automatic. The snippet sets HSTS and a 25 MB body limit matching the
-upload cap in `document.service.ts` — keep the two in step, or Caddy rejects a
-file the app would have accepted.
+Upload size is enforced in `document.service.ts` at 25 MB. No proxy-level cap is
+set: Traefik's buffering middleware would hold the whole body to enforce one,
+and buffering 25 MB photographs to satisfy a limit the app already applies costs
+memory for nothing.
 
 ## 6. Seed and first sign-in
 
@@ -236,13 +255,18 @@ Not on the office wifi — that skips DNS, TLS and the mobile layout at once.
 No code changes.
 
 ```bash
-mkdir /srv/vo-xyz && cd /srv/vo-xyz
+mkdir /docker/vo-xyz && cd /docker/vo-xyz
 git clone <repo> .
 cp .env.example .env.production      # new Supabase project, new Drive folder,
-                                     # CLIENT_SLUG=xyz, APP_PORT=3101
+                                     # CLIENT_SLUG=xyz
+                                     # APP_HOST=vo.xyzinteriors.ae
+                                     # TRAEFIK_ROUTER=vo-xyz   ← must be unique
 ./deploy/release.sh
-# add a vo.xyzinteriors.ae block to the Caddyfile, reload
 ```
+
+No proxy edit. Traefik picks up the new labels on its own. `TRAEFIK_ROUTER` must
+differ per deployment: two stacks sharing a router name would have one silently
+overwrite the other's route.
 
 Separate database, storage, secrets, container and volume. Nothing is shared.
 
