@@ -17,10 +17,15 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  directUrl  = env("DIRECT_URL")
-  extensions = [vector]
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+
+  // `vector` is ours. The rest ship with every Supabase project and live in the
+  // `extensions` schema. They are declared here so `migrate dev` does not report
+  // them as drift and offer to reset the database on every run — which is how
+  // someone eventually says yes to that prompt on a database that has data in it.
+  extensions = [vector, pgcrypto(schema: "extensions"), uuid_ossp(map: "uuid-ossp", schema: "extensions"), pg_stat_statements(schema: "extensions")]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

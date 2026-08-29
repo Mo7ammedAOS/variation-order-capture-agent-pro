@@ -6,6 +6,6 @@ export default defineConfig({
   schema: path.join('prisma', 'schema.prisma'),
   migrations: {
     path: path.join('prisma', 'migrations'),
-    seed: 'tsx prisma/seed.ts',
+    seed: 'tsx --conditions=react-server prisma/seed.ts',
   },
 });

@@ -55,6 +55,10 @@ caddy_data/
 # --- backups / dumps ---
 *.tar.gz
 *.sql
+# ...but migrations and the hand-written SQL ARE the deployment. Without these
+# committed, `prisma migrate deploy` on the VPS has nothing to apply.
+!prisma/migrations/**/*.sql
+!prisma/sql/*.sql
 *.sql.gz
 *.dump
 

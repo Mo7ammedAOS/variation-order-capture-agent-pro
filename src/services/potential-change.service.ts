@@ -139,107 +139,120 @@ export async function createPotentialChange(
 ) {
   await assertProjectAccess(user, input.projectId, 'potentialChange.create');
 
-  const created = await prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: input.projectId },
-      include: { contractRules: true },
-    });
-    if (!project) throw new NotFoundError('Project not found');
+  const created = await prisma.$transaction(
+    async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: input.projectId },
+        include: { contractRules: true },
+      });
+      if (!project) throw new NotFoundError('Project not found');
 
-    // Atomic counter. `MAX(sequence) + 1` races: two site engineers filing at
-    // the same moment would both read the same maximum and collide on the
-    // unique index. An UPDATE ... RETURNING takes a row lock and cannot.
-    const [bumped] = await tx.$queryRaw<{ pc_sequence: number }[]>`
-      UPDATE projects SET pc_sequence = pc_sequence + 1
-      WHERE id = ${input.projectId}::uuid
-      RETURNING pc_sequence
-    `;
-    if (!bumped) throw new NotFoundError('Project not found');
+      // Atomic counter. `MAX(sequence) + 1` races: two site engineers filing at
+      // the same moment would both read the same maximum and collide on the
+      // unique index. An UPDATE ... RETURNING takes a row lock and cannot.
+      const [bumped] = await tx.$queryRaw<{ pc_sequence: number }[]>`
+        UPDATE projects SET pc_sequence = pc_sequence + 1
+        WHERE id = ${input.projectId}::uuid
+        RETURNING pc_sequence
+      `;
+      if (!bumped) throw new NotFoundError('Project not found');
 
-    const pcNumber = formatPcNumber(project.projectCode, bumped.pc_sequence);
+      const pcNumber = formatPcNumber(project.projectCode, bumped.pc_sequence);
 
-    const noticePeriodDays = project.contractRules?.noticePeriodDays ?? 28;
-    const noticeDueDate = calculateNoticeDueDate(input.eventDate, noticePeriodDays);
-    const { riskLevel } = calculateNoticeCountdown(noticeDueDate);
+      const noticePeriodDays = project.contractRules?.noticePeriodDays ?? 28;
+      const noticeDueDate = calculateNoticeDueDate(input.eventDate, noticePeriodDays);
+      const { riskLevel } = calculateNoticeCountdown(noticeDueDate);
 
-    const { pm, cm } = await findResponsibleMembers(tx, input.projectId);
-    const reviewDueDays = project.contractRules?.pmScopeReviewDueDays ?? 3;
-    const nextActionDue = new Date(todayUtc());
-    nextActionDue.setUTCDate(nextActionDue.getUTCDate() + reviewDueDays);
+      const { pm, cm } = await findResponsibleMembers(tx, input.projectId);
+      const reviewDueDays = project.contractRules?.pmScopeReviewDueDays ?? 3;
+      const nextActionDue = new Date(todayUtc());
+      nextActionDue.setUTCDate(nextActionDue.getUTCDate() + reviewDueDays);
 
-    const change = await tx.potentialChange.create({
-      data: {
+      const change = await tx.potentialChange.create({
+        data: {
+          projectId: input.projectId,
+          pcNumber,
+          title: input.title,
+          description: input.description,
+          eventDate: input.eventDate,
+          location: input.location ?? null,
+          trade: input.trade ?? null,
+          category: input.category ?? null,
+          workStatus: input.workStatus,
+          estimatedValue: input.estimatedValue ?? null,
+          potentialTimeImpact: input.potentialTimeImpact,
+          timeImpactDays: input.timeImpactDays ?? null,
+          sourceType: input.sourceType,
+          sourceReference: input.sourceReference ?? null,
+          sourceMessageId: input.sourceMessageId ?? null,
+          sourceSenderName: input.sourceSenderName ?? null,
+          sourceSenderPhoneOrEmail: input.sourceSenderPhoneOrEmail ?? null,
+          requestedByContactId: input.requestedByContactId ?? null,
+          reportedByUserId: user.id,
+
+          currentStatus: 'notice_assessment',
+          // The Commercial Manager owns the entitlement question. If the project
+          // has no CM assigned it falls to the PM, and if it has neither it stays
+          // unowned and shows as a bottleneck rather than quietly going nowhere.
+          currentOwnerUserId: cm ?? pm ?? null,
+          waitingFor: 'Notice assessment',
+          nextAction: 'Assess whether a contractual notice is required',
+          nextActionDueDate: nextActionDue,
+
+          noticeDueDate,
+          noticeStatus: 'not_assessed',
+          riskLevel,
+        },
+      });
+
+      await tx.task.create({
+        data: {
+          projectId: input.projectId,
+          potentialChangeId: change.id,
+          taskType: 'notice_assessment',
+          title: `Notice assessment — ${pcNumber}`,
+          description:
+            `Decide whether a contractual notice is required for "${input.title}". ` +
+            `Notice period is ${noticePeriodDays} days from the event date.`,
+          assignedToUserId: cm ?? pm ?? null,
+          assignedByUserId: user.id,
+          dueDate: nextActionDue,
+          priority: input.urgency,
+        },
+      });
+
+      await recordAudit({
+        db: tx,
         projectId: input.projectId,
-        pcNumber,
-        title: input.title,
-        description: input.description,
-        eventDate: input.eventDate,
-        location: input.location ?? null,
-        trade: input.trade ?? null,
-        category: input.category ?? null,
-        workStatus: input.workStatus,
-        estimatedValue: input.estimatedValue ?? null,
-        potentialTimeImpact: input.potentialTimeImpact,
-        timeImpactDays: input.timeImpactDays ?? null,
-        sourceType: input.sourceType,
-        sourceReference: input.sourceReference ?? null,
-        sourceMessageId: input.sourceMessageId ?? null,
-        sourceSenderName: input.sourceSenderName ?? null,
-        sourceSenderPhoneOrEmail: input.sourceSenderPhoneOrEmail ?? null,
-        requestedByContactId: input.requestedByContactId ?? null,
-        reportedByUserId: user.id,
+        userId: user.id,
+        recordType: 'potential_change',
+        recordId: change.id,
+        actionType: 'created',
+        newValue: {
+          pcNumber,
+          title: input.title,
+          eventDate: input.eventDate,
+          noticeDueDate,
+          estimatedValue: input.estimatedValue ?? null,
+        },
+        source: input.sourceType === 'mobile_form' ? 'mobile_form' : 'web_app',
+        metadata: { noticePeriodDays },
+      });
 
-        currentStatus: 'notice_assessment',
-        // The Commercial Manager owns the entitlement question. If the project
-        // has no CM assigned it falls to the PM, and if it has neither it stays
-        // unowned and shows as a bottleneck rather than quietly going nowhere.
-        currentOwnerUserId: cm ?? pm ?? null,
-        waitingFor: 'Notice assessment',
-        nextAction: 'Assess whether a contractual notice is required',
-        nextActionDueDate: nextActionDue,
-
-        noticeDueDate,
-        noticeStatus: 'not_assessed',
-        riskLevel,
-      },
-    });
-
-    await tx.task.create({
-      data: {
-        projectId: input.projectId,
-        potentialChangeId: change.id,
-        taskType: 'notice_assessment',
-        title: `Notice assessment — ${pcNumber}`,
-        description:
-          `Decide whether a contractual notice is required for "${input.title}". ` +
-          `Notice period is ${noticePeriodDays} days from the event date.`,
-        assignedToUserId: cm ?? pm ?? null,
-        assignedByUserId: user.id,
-        dueDate: nextActionDue,
-        priority: input.urgency,
-      },
-    });
-
-    await recordAudit({
-      db: tx,
-      projectId: input.projectId,
-      userId: user.id,
-      recordType: 'potential_change',
-      recordId: change.id,
-      actionType: 'created',
-      newValue: {
-        pcNumber,
-        title: input.title,
-        eventDate: input.eventDate,
-        noticeDueDate,
-        estimatedValue: input.estimatedValue ?? null,
-      },
-      source: input.sourceType === 'mobile_form' ? 'mobile_form' : 'web_app',
-      metadata: { noticePeriodDays },
-    });
-
-    return change;
-  });
+      return change;
+    },
+    {
+      // The counter bump below takes a row lock on the project, so concurrent
+      // captures on the SAME project serialise here — deliberately, since that
+      // is what makes PC numbers collision-free. Prisma's 5s default assumes a
+      // local database; this one is a region away, so a handful of simultaneous
+      // captures can exceed it while waiting their turn. Correctness beats
+      // throughput on a commercial record, so the window is widened rather than
+      // the lock loosened.
+      maxWait: 15_000,
+      timeout: 30_000,
+    },
+  );
 
   return created;
 }

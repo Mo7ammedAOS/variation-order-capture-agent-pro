@@ -25,17 +25,31 @@ Create a project (region close to the UAE), then from **Settings → Database**
 and **Settings → API**:
 
 ```bash
-DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=10&pool_timeout=20"
 DIRECT_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres"
 NEXT_PUBLIC_SUPABASE_URL="https://<ref>.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJ…"
 SUPABASE_SERVICE_ROLE_KEY="eyJ…"
 ```
 
-- `DATABASE_URL` is the **pooler** (6543) with `pgbouncer=true`. Without it,
-  Prisma exhausts connections under load.
-- `DIRECT_URL` is **5432**. Migrations need a real session; they fail through
-  the pooler.
+- `DATABASE_URL` is the **transaction pooler** (port **6543**). `pgbouncer=true`
+  is required, or Prisma attempts prepared statements that transaction-mode
+  pooling cannot support.
+- `connection_limit`: Prisma's docs suggest `1` for **serverless**, where many
+  short-lived instances would each open a pool and exhaust the pooler. This app
+  is a **long-lived container**, where a pool of 1 serialises every concurrent
+  request — eight simultaneous captures would have seven time out. `10` suits one
+  container; raise it in step with replicas, well under the pooler limit.
+- `DIRECT_URL` is port **5432**. Migrations need a real session and fail through
+  the transaction pooler.
+- **If `DIRECT_URL` fails with `P1001`**, the direct host `db.<ref>.supabase.co`
+  is **IPv6-only** and your network is not. Use the **session pooler** instead:
+  same pooler host, port 5432, user `postgres.<ref>`. IPv4-reachable, real
+  session, migrations work. Do **not** substitute the transaction pooler.
+- **Percent-encode the password.** If it contains `@`, `#`, `/`, `?` or `:`,
+  paste it through URL-encoding first — `@`→`%40`, `#`→`%23`. An unencoded `@`
+  splits the URI at the wrong place; an unencoded `#` starts a fragment and
+  everything after it is silently discarded.
 - The service role key **bypasses RLS**. Server only. Never `NEXT_PUBLIC_`.
 
 Turn **off** public signups: Authentication → Providers → Email → disable
