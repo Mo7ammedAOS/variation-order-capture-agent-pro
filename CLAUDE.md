@@ -1754,8 +1754,15 @@ Build new workflows **deactivated**. Always.
 
 Every n8n workflow this product depends on is exported to `/n8n-workflows/` and
 committed. The n8n instance is not the source of truth for workflow definitions —
-this repository is. See `/n8n-workflows/README.md` for the export procedure and the
-secret-scrubbing rules that apply before any export is committed.
+this repository is.
+
+**Packaging: ONE all-in-one JSON per client** — `master.json` as the template,
+then a copy per deployment. All eight lanes live inside a single workflow,
+separated by sticky notes, with node names prefixed by the lane letter (`A:`,
+`C:`, `F:`) so a failure message names the lane. This supersedes any earlier
+one-file-per-lane naming. See `N8N_WORKFLOW_MAP.md` for the lanes and the
+per-client duplication checklist, and `/n8n-workflows/README.md` for the export
+procedure and the secret-scrubbing rules.
 
 ## Deployment and Safety Policy
 

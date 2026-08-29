@@ -1,34 +1,36 @@
 # n8n Workflow Exports
 
-Committed JSON exports of every n8n workflow this product depends on.
+Committed exports of the n8n workflow this product depends on.
 
 **This directory is the source of truth for workflow definitions, not the n8n
 instance.** The instance is where they run; this is where they are versioned.
 
 ## Nothing is here yet
 
-No workflows have been built. The files named in CLAUDE.md are the *planned* set:
+Phase 1 built the *contract* — the five inbound routes — and no workflow. See
+`N8N_WORKFLOW_MAP.md`.
+
+Placeholder JSON is deliberately **not** created. An empty or fabricated export
+looks importable and is not, which is worse than an absent one.
+
+## Packaging: one file per client
 
 ```text
-whatsapp-capture.json
-email-capture.json
-document-upload.json
-whatsapp-notification.json
-email-notification.json
-client-followup.json
-weekly-report-delivery.json
-integration-error-alert.json
+n8n-workflows/
+├── master.json        ← the template. CLIENT_SLUG=MASTER
+└── abc-fitout.json    ← a deployment. Copy of master, credentials rebound
 ```
 
-Placeholder files are deliberately **not** created. An empty or fabricated JSON
-export is worse than an absent one — it looks importable and is not.
+One file, one import, one workflow, all eight lanes (A–H) inside it, separated
+by sticky notes. Node names carry the lane letter: `A: Webhook`,
+`C: Download Media`, `F: Send Email`.
 
 ## Export procedure
 
-1. Build and verify the workflow on the instance (see the Build Checklist in CLAUDE.md).
-2. Export it — `n8n_get_workflow` with `mode: "full"`, or Download from the n8n UI.
-3. **Scrub it.** See below. This is not optional.
-4. Save as `<lane>-<name>.json` in this directory.
+1. Build and verify on the instance (Build Checklist in CLAUDE.md).
+2. Export — `n8n_get_workflow` with `mode: "full"`, or Download in the UI.
+3. **Scrub it.** Not optional. See below.
+4. Save as `<client-slug>.json`.
 5. Commit alongside the `/workflows/*.md` SOP change that motivated it.
 
 ## Scrubbing rules
@@ -41,16 +43,15 @@ webhookId                                  → regenerated per instance
 Any hardcoded URL containing a client domain
 Any hardcoded email address, phone number, or WhatsApp ID
 Any token, key, or bearer string in a parameter
-pinData                                    → may contain real client message content
+pinData                                    → may contain real client messages
 Any node notes containing client names or commercial values
 ```
 
-A committed export must be importable into a fresh client instance and reveal
-nothing about any other client.
+A committed export must import into a fresh client instance and reveal nothing
+about any other client.
 
 ## Per-client deployment
 
-These exports are the **master template**. Deploying for a client means importing
-them into that client's own n8n workspace and binding that client's own credentials.
-Client instances are never edited from this repository's tooling by default —
-see the multi-instance warning in CLAUDE.md.
+`master.json` is the template. Deploying for a client means copying it, working
+the duplication checklist in `N8N_WORKFLOW_MAP.md`, and importing it
+**deactivated** into that client's own n8n workspace.

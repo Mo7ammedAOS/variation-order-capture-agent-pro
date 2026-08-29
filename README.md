@@ -12,69 +12,37 @@ Change Orders, Notices of Claim, and project changes.
 
 ## Status
 
-**Scaffolded, not built.** Folder structure, documentation skeleton, and n8n
-tooling are in place. No application code, no database schema, no workflows.
+**Phase 1 code complete.** Lint, typecheck, 51 unit tests and the production
+build all pass. Nothing has run against a database yet — that needs the Supabase
+and Google Drive credentials in DEPLOYMENT_GUIDE.md.
 
-```text
-✅  Folder structure (full WAT tree)
-✅  28 workflow SOP stubs        W — all sections unspecified
-✅  12 agent specs + prompts dir A — all sections unspecified
-✅  14 service stubs             T
-✅   8 worker stubs              T
-✅  n8n integration API routes scaffolded
-✅  n8n MCP servers wired, instance verified reachable
-✅  n8n skills pack installed (18 skills)
-✅  .gitignore, .env.example, prisma/schema.prisma (datasource only)
-✅  ADR 0001 — background job engine (PROPOSED)
-⬜  Next.js install and any application code
-⬜  Any Prisma model
-⬜  Any n8n workflow
-⬜  Any prompt
-```
+See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the goal-by-goal
+and test-by-test position.
 
-## Architecture in one line
+## Documentation
 
-```text
-The custom application owns the truth.
-n8n moves information between external systems.
-AI understands, extracts, summarises, and drafts.
-Humans approve commercial and contractual actions.
-```
+| File | Read it for |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | The contract. Ownership boundaries, deployment model, n8n rules |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Why the app owns truth and n8n does not |
+| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Tables, and why three exist that the spec never listed |
+| [API_SPEC.md](API_SPEC.md) | Both API families, payloads, the 4xx/5xx contract |
+| [UI_SPEC.md](UI_SPEC.md) | Who holds the device, and what follows from that |
+| [SECURITY.md](SECURITY.md) | Auth, authorisation, the integration boundary, limitations |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Supabase, Drive, VPS, Caddy, verification |
+| [N8N_WORKFLOW_MAP.md](N8N_WORKFLOW_MAP.md) | The eight lanes and the one-file-per-client rule |
 
-## Layout
-
-The repository is laid out as **WAT** — Workflows, Agents, Tools.
-
-```text
-CLAUDE.md            The contract. Read first.
-
-W  workflows/        28 business SOPs. Source of truth for behaviour.
-A  agents/           12 agent specs + prompts/. The AI reasoning layer.
-T  src/              The custom application. Deterministic. Owns commercial truth.
-   ├── app/api/integrations/   the ONLY surface n8n may write through
-   ├── services/               14 — own the registers, enforce permissions
-   ├── workers/                 8 — own commercial timing, not n8n's job
-   └── integrations/claude/     the AI-provider abstraction
-
-n8n-workflows/       Committed n8n exports. Integration only.
-prisma/              Database schema and migrations.
-docs/decisions/      Architecture decision records.
-.claude/skills/      n8n skills pack (18 skills).
-.mcp.json            MCP servers. Placeholders only, never secrets.
-.env.example         Every variable the app needs.
-```
-
-**Every stub says "Not yet specified". That is a stop sign, not a gap to fill in.**
-Ask before writing commercial logic that no SOP or agent spec describes.
-
-## Getting started
+## Quick start
 
 ```bash
-cp .env.example .env    # then fill it in. Never commit .env.
+npm install
+cp .env.example .env          # fill in Supabase; STORAGE_PROVIDER=local to skip Drive
+npm run db:migrate
+npx prisma db execute --file prisma/sql/001_vector.sql --schema prisma/schema.prisma
+npx prisma db execute --file prisma/sql/002_rls.sql   --schema prisma/schema.prisma
+npm run db:seed
+npm run dev
 ```
-
-The application itself is not scaffolded yet. See CLAUDE.md for the stack and the
-implementation order.
 
 ## Deployment model
 

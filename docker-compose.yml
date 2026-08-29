@@ -1,0 +1,65 @@
+# VO Capture & Control — one stack per client deployment.
+#
+# Adding a client is a copy of this file, a new .env, and a new Caddy block.
+# No code changes, no shared containers, no shared volumes.
+#
+#   docker compose --env-file .env.production up -d --build
+
+name: vo-${CLIENT_SLUG:-master}
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vo-capture-control:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: [.env.production]
+    environment:
+      PORT: 3000
+    # Bound to loopback: Caddy is the only thing that may reach it. Publishing
+    # on 0.0.0.0 would expose the app directly, bypassing TLS and the headers.
+    ports:
+      - '127.0.0.1:${APP_PORT:-3100}:3000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:3000/login']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # Same image, worker entrypoint. Owns commercial timing: notice deadlines,
+  # bottleneck detection, escalation. Inert until JOB_DRIVER=bullmq.
+  worker:
+    image: vo-capture-control:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: [.env.production]
+    command: ['node', '-e', "require('./server.js')"]
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    profiles: ['workers']
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis_data:

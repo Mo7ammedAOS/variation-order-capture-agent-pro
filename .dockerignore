@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+.uploads
+coverage
+tests
+*.md
+!prisma/**/*.md
+.claude
+.DS_Store
