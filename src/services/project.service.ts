@@ -149,3 +149,132 @@ export async function getContractRules(user: AuthenticatedUser, projectId: strin
   if (!rules) throw new NotFoundError('Contract rules not configured for this project');
   return rules;
 }
+
+/** Blank means "not set", not zero. An empty form field must not become 0 days. */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullish()
+    .transform((value) => (value ? value : null));
+
+const days = (min: number, max: number) =>
+  z.preprocess(
+    (value) => (value === '' || value === null ? undefined : value),
+    z.coerce.number().int().min(min).max(max),
+  );
+
+/**
+ * Thresholds are money, so they are Decimal in the database and must not round
+ * trip through anything lossy. Blank clears the threshold rather than setting
+ * it to zero — a threshold of zero would mean "everything needs this approval",
+ * which is the opposite of "no threshold configured".
+ */
+const optionalMoney = z
+  .union([z.string(), z.number()])
+  .nullish()
+  .transform((value) => (value === '' || value === null || value === undefined ? null : Number(value)))
+  .refine(
+    (value) => value === null || (Number.isFinite(value) && value >= 0),
+    'Enter a positive amount, or leave it blank for no threshold',
+  );
+
+export const contractRuleUpdateSchema = z
+  .object({
+    contractType: optionalText(120),
+    contractClauseReference: optionalText(120),
+
+    noticePeriodDays: days(1, 365),
+    detailedClaimPeriodDays: days(1, 365),
+    noticeDeliveryMethod: optionalText(120),
+    noticeRecipientName: optionalText(200),
+    noticeRecipientEmail: z
+      .union([z.literal(''), z.string().trim().email('Enter a valid email address')])
+      .nullish()
+      .transform((value) => (value ? value : null)),
+    noticeRecipientCompany: optionalText(200),
+
+    noticeTemplateName: optionalText(200),
+    variationProposalTemplateName: optionalText(200),
+    eotAssessmentRequired: z.coerce.boolean(),
+
+    approvalThresholdPm: optionalMoney,
+    approvalThresholdCm: optionalMoney,
+    approvalThresholdCommercialDirector: optionalMoney,
+    approvalThresholdManagingDirector: optionalMoney,
+    highRiskVoValue: optionalMoney,
+
+    clientFollowUpDays: days(1, 90),
+    qsPricingDueDays: days(1, 90),
+    pmScopeReviewDueDays: days(1, 90),
+    internalApprovalDueDays: days(1, 90),
+  })
+  .partial();
+
+/**
+ * The INPUT type, deliberately. The service parses what it is handed rather
+ * than trusting a caller to have done it — a server action, a route handler
+ * and a test are three different doors, and only two of them were parsing.
+ */
+export type ContractRuleUpdateInput = z.input<typeof contractRuleUpdateSchema>;
+
+/**
+ * Editing the contract rules.
+ *
+ * These are the most consequential settings in the product: `noticePeriodDays`
+ * is what turns an event date into a contractual deadline, and getting it wrong
+ * loses entitlement rather than merely displaying something odd. So the write is
+ * gated on `project.manageContractRules` — not merely on project access — and
+ * every field change is written to the audit trail inside the same transaction,
+ * with its before and after value.
+ *
+ * A change here is NOT retroactive, and that is deliberate. Deadlines are
+ * computed at capture and stored on the potential change, so existing changes
+ * keep the deadline that was derived under the rules in force at the time.
+ * Silently rewriting historical deadlines because someone corrected a typo
+ * would rewrite what the company believed its obligations were, which is
+ * exactly the record a dispute turns on. New changes pick up the new rules.
+ */
+export async function updateContractRules(
+  user: AuthenticatedUser,
+  projectId: string,
+  input: ContractRuleUpdateInput,
+) {
+  await assertProjectAccess(user, projectId, 'project.manageContractRules');
+
+  // Parsed here, not only at the edge. Blank means "clear it", which the schema
+  // turns into null; an unparsed empty string reaches Postgres as a malformed
+  // decimal and fails the whole transaction.
+  const data = contractRuleUpdateSchema.parse(input);
+
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.projectContractRule.findUnique({ where: { projectId } });
+    if (!before) throw new NotFoundError('Contract rules not configured for this project');
+
+    const updated = await tx.projectContractRule.update({
+      where: { projectId },
+      data,
+    });
+
+    const diff = diffChanges(
+      before as unknown as Record<string, unknown>,
+      data as Record<string, unknown>,
+    );
+
+    if (diff) {
+      await recordAudit({
+        db: tx,
+        projectId,
+        userId: user.id,
+        recordType: 'project_contract_rule',
+        recordId: updated.id,
+        actionType: 'updated',
+        oldValue: diff.oldValue,
+        newValue: diff.newValue,
+      });
+    }
+
+    return updated;
+  });
+}

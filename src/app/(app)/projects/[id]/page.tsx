@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma';
 import { isAppError } from '@/lib/errors';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
-import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
+import { PROJECT_ROLE_LABELS, hasCapability } from '@/lib/rbac';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -22,6 +22,8 @@ import { Money } from '@/components/domain/money';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { StatCard } from '@/components/domain/stat-card';
+import { getProjectRoles } from '@/services/project-access.service';
+import { ContractRulesForm } from './contract-rules-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,7 +111,9 @@ export default async function ProjectDetailPage({
 
       {tab === 'overview' ? <OverviewTab user={user} projectId={id} /> : null}
       {tab === 'potential-changes' ? <ChangesTab user={user} projectId={id} /> : null}
-      {tab === 'contract-rules' ? <ContractRulesTab rules={project.contractRules} /> : null}
+      {tab === 'contract-rules' ? (
+        <ContractRulesTab user={user} projectId={id} rules={project.contractRules} />
+      ) : null}
       {tab === 'contacts' ? <ContactsTab user={user} projectId={id} /> : null}
       {tab === 'team' ? <TeamTab user={user} projectId={id} /> : null}
       {tab === 'documents' ? <DocumentsTab user={user} projectId={id} /> : null}
@@ -227,12 +231,57 @@ async function ChangesTab({ user, projectId }: { user: User; projectId: string }
   );
 }
 
-function ContractRulesTab({
+/** Money comes back as Prisma Decimal; the form wants a plain editable string. */
+function decimalToInput(value: { toString(): string } | null): string {
+  return value === null ? '' : value.toString();
+}
+
+async function ContractRulesTab({
+  user,
+  projectId,
   rules,
 }: {
+  user: Awaited<ReturnType<typeof requireUser>>;
+  projectId: string;
   rules: Awaited<ReturnType<typeof getProject>>['contractRules'];
 }) {
   if (!rules) return <Empty message="Contract rules have not been configured." />;
+
+  // Whether to show the editor is decided here, but it is not what enforces the
+  // rule — updateContractRules re-checks the same capability server-side, so
+  // hiding the form is a courtesy and the service is the gate.
+  const projectRoles = await getProjectRoles(user, projectId);
+  const canEdit = hasCapability(user.systemRole, projectRoles, 'project.manageContractRules');
+
+  if (canEdit) {
+    return (
+      <ContractRulesForm
+        projectId={projectId}
+        values={{
+          contractType: rules.contractType ?? '',
+          contractClauseReference: rules.contractClauseReference ?? '',
+          noticePeriodDays: rules.noticePeriodDays,
+          detailedClaimPeriodDays: rules.detailedClaimPeriodDays,
+          noticeDeliveryMethod: rules.noticeDeliveryMethod ?? '',
+          noticeRecipientName: rules.noticeRecipientName ?? '',
+          noticeRecipientEmail: rules.noticeRecipientEmail ?? '',
+          noticeRecipientCompany: rules.noticeRecipientCompany ?? '',
+          noticeTemplateName: rules.noticeTemplateName ?? '',
+          variationProposalTemplateName: rules.variationProposalTemplateName ?? '',
+          eotAssessmentRequired: rules.eotAssessmentRequired,
+          approvalThresholdPm: decimalToInput(rules.approvalThresholdPm),
+          approvalThresholdCm: decimalToInput(rules.approvalThresholdCm),
+          approvalThresholdCommercialDirector: decimalToInput(rules.approvalThresholdCommercialDirector),
+          approvalThresholdManagingDirector: decimalToInput(rules.approvalThresholdManagingDirector),
+          highRiskVoValue: decimalToInput(rules.highRiskVoValue),
+          clientFollowUpDays: rules.clientFollowUpDays,
+          qsPricingDueDays: rules.qsPricingDueDays,
+          pmScopeReviewDueDays: rules.pmScopeReviewDueDays,
+          internalApprovalDueDays: rules.internalApprovalDueDays,
+        }}
+      />
+    );
+  }
 
   return (
     <div className="grid gap-4 md:grid-cols-2">

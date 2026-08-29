@@ -123,6 +123,7 @@ Signed, so it is not a free liveness probe for anyone scanning. Returns
 | GET/PATCH | `/api/projects/[id]` | |
 | GET/POST | `/api/projects/[id]/members` | Project id from the **URL**, never the body |
 | GET/POST | `/api/projects/[id]/contacts` | |
+| GET/PATCH | `/api/projects/[id]/contract-rules` | PATCH needs `project.manageContractRules`, not merely project access. Every field change is audited with its before and after value. Not retroactive: deadlines already calculated on existing changes do not move |
 | GET/POST | `/api/potential-changes` | Filters: `projectId, status, riskLevel, ownerUserId, trade, q, noticeDueWithinDays` |
 | GET/PATCH | `/api/potential-changes/[id]` | Editing `eventDate` recalculates the notice deadline |
 | POST | `/api/potential-changes/[id]/notice-assessment` | `{ outcome, notes }`. Needs `potentialChange.assessNotice` |

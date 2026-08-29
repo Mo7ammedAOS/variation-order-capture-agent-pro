@@ -1,23 +1,24 @@
 # Implementation Status
 
-**Phase 1 — code complete, not yet run against a database.**
-Last updated 2026-08-29.
+**Phase 1 — running against the live Supabase database.**
+Last updated 2026-08-30.
 
 ## Gates
 
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 51 unit tests
-npm run build       PASS — 18 routes
-npm run test:db     NOT RUN — needs a real DATABASE_URL
-npm run db:migrate  NOT RUN — needs Supabase credentials
-npm run db:seed     NOT RUN — needs Supabase credentials
-deploy/release.sh   NOT RUN — needs the VPS and DNS
+npm test            PASS — 70 tests, 13 of them against the real database
+npm run build       PASS
+npm run db:migrate  PASS — 15 tables, 22 enums, 27 foreign keys, pgvector, RLS
+npm run db:seed     PASS — 12 users, 5 projects, 20 changes, 25 tasks,
+                    11 bottlenecks from the real sweep, 20 local embeddings
+deploy/release.sh   NOT RUN — needs the VPS domain and a DNS A record
 ```
 
-**Nothing has touched a database yet.** The blocker is the five Supabase values
-and the Drive credentials — see DEPLOYMENT_GUIDE.md.
+The database is live. Outstanding: the deployment domain, and the Google Drive
+decision (Workspace + Shared Drive, or a personal Gmail with an OAuth refresh
+token). `STORAGE_PROVIDER=local` works fully in the meantime.
 
 ## Phase 1 goals
 
@@ -27,7 +28,7 @@ and the Drive credentials — see DEPLOYMENT_GUIDE.md.
 | 2 | Company dashboard | Built — 9 cards, 4 charts |
 | 3 | Create projects | Built |
 | 4 | Assign users to projects | Built |
-| 5 | Configure contract rules | Built (seeded + read; edit form is Phase 2) |
+| 5 | Configure contract rules | Built — editable, capability-gated, audited |
 | 6 | Contacts and authority | Built |
 | 7 | Upload / register documents | Built — Drive + local adapters |
 | 8 | Create a Potential Change (mobile) | Built |
@@ -44,28 +45,44 @@ and the Drive credentials — see DEPLOYMENT_GUIDE.md.
 |---|---|---|---|
 | 1 | Authentication | `login/actions.ts` | Manual |
 | 2 | Role-based access | `tests/unit/rbac.test.ts` | **Passing** |
-| 3 | Project-level access | `tests/integration/project-access.test.ts` | Written, needs DB |
-| 4 | A cannot access B | same | Written, needs DB |
-| 5 | MD sees all | same | Written, needs DB |
-| 6 | PM sees assigned only | `rbac` + integration | **Passing** / needs DB |
-| 7 | QS sees assigned only | same | **Passing** / needs DB |
-| 8 | SE creates only on assigned | integration | Written, needs DB |
+| 3 | Project-level access | `tests/integration/project-access.test.ts` | **Passing** |
+| 4 | A cannot access B | same | **Passing** |
+| 5 | MD sees all | same | **Passing** |
+| 6 | PM sees assigned only | `rbac` + integration | **Passing** |
+| 7 | QS sees assigned only | same | **Passing** |
+| 8 | SE creates only on assigned | integration | **Passing** |
 | 9 | PC number valid | `tests/unit/pc-number.test.ts` | **Passing** |
 | 10 | Notice due date correct | `tests/unit/dates.test.ts` | **Passing** |
 | 11 | Countdown displays | `tests/unit/risk.test.ts` | **Passing** |
 | 12 | Risk colour correct | same | **Passing** |
-| 13 | Task assignment | integration | Partial |
-| 14 | Bottleneck creation | `runDetectionSweep` via seed | Needs DB |
-| 15 | Audit created | integration | Partial |
+| 13 | Task assignment | integration | **Passing** |
+| 14 | Bottleneck creation | `runDetectionSweep` via seed | **Passing** — 11 detected |
+| 15 | Audit created | `tests/integration/contract-rules.test.ts` | **Passing** |
 | 16 | Mobile form validation | Zod schema | **Passing** |
 | 17 | Mock WhatsApp validates | `integration-contract.test.ts` | **Passing** |
 | 18 | Mock email validates | same | **Passing** |
-| 19 | Duplicate event safe | `processOnce` + schema tests | Unit passing; end-to-end needs DB |
+| 19 | Duplicate event safe | `processOnce` + schema tests | **Passing** |
 | 20 | Lint / typecheck / build | scripts | **Passing** |
 
-Plus three this design added: vector search cannot cross a project boundary; the
+Plus these this design added: vector search cannot cross a project boundary; the
 document proxy refuses a file on an unassigned project; PC numbers do not
-collide under concurrency.
+collide under concurrency; a signed-out `/api/*` call gets 401 rather than a
+redirect; and the contract-rules suite below.
+
+## Contract rules — `tests/integration/contract-rules.test.ts`
+
+The rules decide every deadline in the product, so editing them is tested as a
+commercial control rather than as a form:
+
+| Test | Why it exists |
+|---|---|
+| A site engineer is refused | They have project access but not `project.manageContractRules`. Access and authority are different questions |
+| A commercial director may edit | The capability actually grants it |
+| Before and after land in the audit trail | "Who changed 28 to 42, and when" is what a dispute turns on |
+| **An edit does not move deadlines already calculated** | Existing changes keep the deadline derived under the rules in force at capture. Rewriting them would rewrite what the company believed it owed |
+| The next capture uses the new period | 1 Sep + 42 days = 13 Oct, not 29 Sep |
+| Blank clears a threshold, and is not zero | Zero would mean *everything* needs that approval — the opposite of "no threshold" |
+| An out-of-range notice period is refused | 0 and 400 rejected before they reach the database |
 
 ## Bugs found and fixed during the build
 
