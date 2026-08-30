@@ -18,8 +18,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .catch(() => null);
 
   return (
-    <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar md:flex md:flex-col print:hidden">
+    <div
+      className="flex min-h-dvh flex-col md:flex-row"
+      style={{ background: 'var(--mosaic-ground)' }}
+    >
+      <aside className="hidden w-64 shrink-0 md:flex md:flex-col print:hidden">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <HardHat aria-hidden className="size-5" />
@@ -37,7 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SidebarNav />
         </div>
 
-        <div className="border-t border-sidebar-border p-3">
+        <div className="p-3">
           <div className="mb-2 px-2">
             <p className="truncate text-sm font-medium">{user.fullName}</p>
             <p className="truncate text-xs text-muted-foreground">
@@ -53,7 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <header className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3 md:hidden print:hidden">
+      <header className="flex items-center justify-between px-4 py-3 md:hidden print:hidden">
         <Link href="/dashboard" className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <HardHat aria-hidden className="size-4" />

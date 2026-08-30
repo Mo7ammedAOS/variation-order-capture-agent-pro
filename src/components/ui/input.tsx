@@ -7,9 +7,10 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
       type={type}
       ref={ref}
       className={cn(
-        'flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-base',
-        'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2',
-        'focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-11 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-base',
+        'transition-shadow placeholder:text-muted-foreground',
+        'focus-visible:outline-none focus-visible:border-primary/40 focus-visible:ring-4',
+        'focus-visible:ring-primary/12 disabled:cursor-not-allowed disabled:opacity-50',
         'file:border-0 file:bg-transparent file:text-sm file:font-medium',
         className,
       )}
@@ -24,9 +25,10 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttribu
     <textarea
       ref={ref}
       className={cn(
-        'flex min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-base',
-        'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2',
-        'focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+        'flex min-h-28 w-full rounded-xl border border-input bg-card px-3.5 py-2.5 text-base',
+        'transition-shadow placeholder:text-muted-foreground',
+        'focus-visible:outline-none focus-visible:border-primary/40 focus-visible:ring-4',
+        'focus-visible:ring-primary/12 disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}
@@ -40,9 +42,10 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
     <select
       ref={ref}
       className={cn(
-        'flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-base',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-11 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-base',
+        'transition-shadow placeholder:text-muted-foreground',
+        'focus-visible:outline-none focus-visible:border-primary/40 focus-visible:ring-4',
+        'focus-visible:ring-primary/12 disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}
@@ -55,7 +58,7 @@ const Label = React.forwardRef<HTMLLabelElement, React.LabelHTMLAttributes<HTMLL
   ({ className, ...props }, ref) => (
     <label
       ref={ref}
-      className={cn('text-sm font-medium leading-none text-foreground', className)}
+      className={cn('text-sm font-semibold leading-none tracking-[-0.01em] text-foreground', className)}
       {...props}
     />
   ),

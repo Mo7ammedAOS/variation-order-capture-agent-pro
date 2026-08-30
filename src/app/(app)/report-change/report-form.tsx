@@ -54,7 +54,7 @@ function SourceFields() {
   const source = SOURCES.find((option) => option.value === sourceType) ?? SOURCES[SOURCES.length - 1]!;
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border p-3">
+    <div className="flex flex-col gap-4 rounded-xl bg-secondary/50 p-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="sourceType">How did this come to you?</Label>
         <Select
@@ -228,11 +228,11 @@ export function ReportChangeForm({
         </CardContent>
       </Card>
 
-      <details className="rounded-xl border border-border bg-card">
+      <details className="panel bg-card">
         <summary className="cursor-pointer px-5 py-4 text-sm font-medium">
           Add more detail (optional)
         </summary>
-        <div className="flex flex-col gap-4 border-t border-border p-5">
+        <div className="flex flex-col gap-4 border-t border-border/60 p-5 sm:p-6">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="trade">Trade</Label>
             <Input id="trade" name="trade" placeholder="Finishes, MEP, Joinery" />
