@@ -67,6 +67,7 @@ export async function reportChange(_prev: ReportState, formData: FormData): Prom
   }
 
   const files = formData.getAll('evidence').filter((f): f is File => f instanceof File && f.size > 0);
+  let failedUploads = 0;
 
   for (const file of files) {
     try {
@@ -78,8 +79,11 @@ export async function reportChange(_prev: ReportState, formData: FormData): Prom
         content: Buffer.from(await file.arrayBuffer()),
       });
     } catch (error) {
-      // Logged, not surfaced as a failure. The commercial record is already
-      // safe; a missing photo is a follow-up, not a lost change.
+      // The commercial record is already safe, so this never fails the capture.
+      // But it is NOT silent: someone who watched a photo upload and got no
+      // warning will believe the evidence exists, and find out it does not on
+      // the day it matters most.
+      failedUploads += 1;
       console.error('[report-change] evidence upload failed', error);
     }
   }
@@ -92,5 +96,9 @@ export async function reportChange(_prev: ReportState, formData: FormData): Prom
 
   revalidatePath('/variations');
   revalidatePath('/dashboard');
-  redirect(`/variations/${change.id}`);
+  redirect(
+    failedUploads > 0
+      ? `/variations/${change.id}?evidenceFailed=${failedUploads}`
+      : `/variations/${change.id}`,
+  );
 }

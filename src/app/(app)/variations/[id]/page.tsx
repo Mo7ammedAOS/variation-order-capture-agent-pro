@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  ArrowLeft, ClipboardList, Copy, FileText, History, MapPin, Paperclip, User,
+  AlertTriangle, ClipboardList, Copy, FileText, History, MapPin, Paperclip, User,
 } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
@@ -14,6 +14,7 @@ import { hasCapability } from '@/services/permissions.service';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BackButton } from '@/components/ui/page-actions';
 import { Badge } from '@/components/ui/badge';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
@@ -37,11 +38,16 @@ export async function generateMetadata({
 
 export default async function PotentialChangeDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ evidenceFailed?: string }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
+  // Set by the capture action when a photo failed to reach storage. Someone who
+  // watched an upload and got no warning would believe the evidence exists.
+  const { evidenceFailed } = await searchParams;
 
   let change;
   try {
@@ -85,13 +91,21 @@ export default async function PotentialChangeDetailPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <Link
-        href="/variations"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft aria-hidden className="size-4" />
-        Back to register
-      </Link>
+      <BackButton href="/variations" label="Back to register" />
+
+      {evidenceFailed ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+        >
+          <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>
+            The change was filed, but {evidenceFailed}{' '}
+            {evidenceFailed === '1' ? 'photo' : 'photos'} did not upload. The record and its
+            notice clock are safe — attach the evidence again when you can.
+          </span>
+        </p>
+      ) : null}
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">

@@ -4,14 +4,19 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { AlertCircle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CancelButton } from '@/components/ui/page-actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input, Label, Select, Textarea } from '@/components/ui/input';
 import { reportChange, type ReportState } from './actions';
 
+/**
+ * Cancel sits to the LEFT and the primary action to the right, on both phone
+ * and desktop, so the thumb never lands on "discard" while reaching for "file".
+ */
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size="lg" className="w-full" disabled={pending}>
+    <Button type="submit" size="lg" className="w-full sm:w-auto sm:min-w-56" disabled={pending}>
       {pending ? 'Filing…' : 'File this change'}
     </Button>
   );
@@ -271,7 +276,10 @@ export function ReportChangeForm({
         </p>
       ) : null}
 
-      <SubmitButton />
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <CancelButton href="/variations" className="w-full sm:w-auto" label="Cancel" />
+        <SubmitButton />
+      </div>
     </form>
   );
 }

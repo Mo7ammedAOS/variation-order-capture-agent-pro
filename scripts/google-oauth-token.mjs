@@ -33,7 +33,19 @@ const PORT = 53682;
 const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 const SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const rl = createInterface({ input: stdin, output: stdout });
+/**
+ * Values may come from the environment, which is what makes this usable
+ * non-interactively:
+ *
+ *   GOOGLE_OAUTH_CLIENT_ID=… GOOGLE_OAUTH_CLIENT_SECRET=… npm run drive:token
+ *
+ * Prompting is the fallback. Piping answers into readline does NOT work — the
+ * second question never resolves once stdin closes, and the script hangs with
+ * an unsettled await rather than failing usefully.
+ */
+const envId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+const envSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+const fromEnv = Boolean(envId && envSecret);
 
 console.log(`
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -53,9 +65,25 @@ Before you start, in console.cloud.google.com:
      Exactly. A trailing slash is a different URI and Google will refuse.
 `);
 
-const clientId = (await rl.question('Client ID:     ')).trim();
-const clientSecret = (await rl.question('Client secret: ')).trim();
-rl.close();
+let clientId = envId ?? '';
+let clientSecret = envSecret ?? '';
+
+if (fromEnv) {
+  console.log('Using GOOGLE_OAUTH_CLIENT_ID / _SECRET from the environment.\n');
+} else {
+  if (!stdin.isTTY) {
+    console.error(
+      'Nothing to read: stdin is not a terminal and the environment holds no\n' +
+        'credentials. Re-run as:\n\n' +
+        '  GOOGLE_OAUTH_CLIENT_ID=… GOOGLE_OAUTH_CLIENT_SECRET=… npm run drive:token\n',
+    );
+    process.exit(1);
+  }
+  const rl = createInterface({ input: stdin, output: stdout });
+  clientId = (await rl.question('Client ID:     ')).trim();
+  clientSecret = (await rl.question('Client secret: ')).trim();
+  rl.close();
+}
 
 if (!clientId || !clientSecret) {
   console.error('\nBoth values are required. Nothing was sent anywhere.');

@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
@@ -13,6 +11,7 @@ import { isAppError } from '@/lib/errors';
 import { formatDate, daysUntil, todayUtc } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { formatMoney } from '@/components/domain/money';
+import { BackButton } from '@/components/ui/page-actions';
 import { PrintButton } from './print-button';
 
 export const dynamic = 'force-dynamic';
@@ -96,13 +95,7 @@ export default async function ProjectReportPage({
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 print:max-w-none print:gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <Link
-          href={`/projects/${id}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft aria-hidden className="size-4" />
-          Back to project
-        </Link>
+        <BackButton href={`/projects/${id}`} label="Back to project" />
         <PrintButton />
       </div>
 

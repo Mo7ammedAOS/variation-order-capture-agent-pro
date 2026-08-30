@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
@@ -16,6 +16,7 @@ import { formatDate, formatDateTime } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
+import { BackButton } from '@/components/ui/page-actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -69,13 +70,7 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-5">
-      <Link
-        href="/projects"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft aria-hidden className="size-4" />
-        All projects
-      </Link>
+      <BackButton href="/projects" label="All projects" />
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>

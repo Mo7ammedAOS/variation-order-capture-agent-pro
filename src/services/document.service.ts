@@ -53,42 +53,66 @@ function assertAcceptableFile(mimeType: string, sizeBytes: number) {
 /**
  * Returns the project's storage folder, creating the tree on first use.
  *
- * Serialised with a Postgres advisory lock keyed on the project. Without it two
- * concurrent captures would each find no folder and each create one, and the
- * store would silently hold two `07 Potential Changes` trees.
+ * ── Network calls do NOT happen inside a database transaction ──────────────
+ * They used to. Creating the nine-folder tree in Drive takes about nine
+ * seconds and Prisma's interactive transaction timeout is five, so the
+ * transaction expired before the UPDATE that stores the folder id ran. The
+ * folders appeared in Drive, the id was never saved, and the next upload built
+ * the whole tree again — duplicating it, which is the precise outcome the lock
+ * was there to prevent.
+ *
+ * So the slow work happens outside, and the database is touched twice, briefly:
+ * once to read, once to claim. The claim is a conditional UPDATE — whoever
+ * writes first wins, and a loser adopts the winner's id rather than overwriting
+ * it, so the store and the index can never disagree about which folder is the
+ * project's.
+ *
+ * A genuine simultaneous first upload can still create two trees in Drive,
+ * because `ensureFolder` is a lookup followed by a create and Drive permits
+ * duplicate names. Only one id is ever recorded, and the database is the index,
+ * so the orphan is untidy rather than harmful.
  */
 export async function ensureProjectFolders(projectId: string): Promise<string> {
   const env = getEnv();
   const storage = getStorageProvider();
 
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`project-folder:${projectId}`}))`;
-
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: { id: true, projectCode: true, projectName: true, driveFolderId: true },
-    });
-    if (!project) throw new NotFoundError('Project not found');
-    if (project.driveFolderId) return project.driveFolderId;
-
-    const root = env.GOOGLE_DRIVE_ROOT_FOLDER_ID || 'root';
-    const projectFolderId = await storage.ensureFolder(
-      `${project.projectCode} — ${project.projectName}`,
-      root,
-    );
-    for (const child of PROJECT_FOLDER_TREE) {
-      await storage.ensureFolder(child, projectFolderId);
-    }
-
-    await tx.project.update({
-      where: { id: projectId },
-      data: { driveFolderId: projectFolderId },
-    });
-    return projectFolderId;
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, projectCode: true, projectName: true, driveFolderId: true },
   });
+  if (!project) throw new NotFoundError('Project not found');
+  if (project.driveFolderId) return project.driveFolderId;
+
+  const root = env.GOOGLE_DRIVE_ROOT_FOLDER_ID || 'root';
+  const projectFolderId = await storage.ensureFolder(
+    `${project.projectCode} — ${project.projectName}`,
+    root,
+  );
+  for (const child of PROJECT_FOLDER_TREE) {
+    await storage.ensureFolder(child, projectFolderId);
+  }
+
+  const claimed = await prisma.project.updateMany({
+    where: { id: projectId, driveFolderId: null },
+    data: { driveFolderId: projectFolderId },
+  });
+  if (claimed.count === 1) return projectFolderId;
+
+  // Someone else claimed it while we were talking to Drive. Theirs is the one
+  // the rest of the system will use, so use it here too.
+  const winner = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { driveFolderId: true },
+  });
+  return winner?.driveFolderId ?? projectFolderId;
 }
 
-/** The `07 Potential Changes/PC-.../Evidence` folder for one change. */
+/**
+ * The `07 Potential Changes/PC-.../Evidence` folder for one change.
+ *
+ * Same shape as above and for the same reason: Drive calls outside any
+ * transaction, then one conditional claim.
+ */
 export async function ensurePotentialChangeFolders(potentialChangeId: string): Promise<{
   folderId: string;
   evidenceFolderId: string;
@@ -103,30 +127,29 @@ export async function ensurePotentialChangeFolders(potentialChangeId: string): P
 
   const projectFolderId = await ensureProjectFolders(change.projectId);
 
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pc-folder:${potentialChangeId}`}))`;
-
-    const fresh = await tx.potentialChange.findUnique({
-      where: { id: potentialChangeId },
-      select: { driveFolderId: true },
-    });
-
-    let folderId = fresh?.driveFolderId ?? null;
-    if (!folderId) {
-      const changesFolder = await storage.ensureFolder(PC_PARENT_FOLDER, projectFolderId);
-      folderId = await storage.ensureFolder(change.pcNumber, changesFolder);
-      for (const child of PC_FOLDER_TREE) {
-        await storage.ensureFolder(child, folderId);
-      }
-      await tx.potentialChange.update({
-        where: { id: potentialChangeId },
-        data: { driveFolderId: folderId },
-      });
+  let folderId = change.driveFolderId;
+  if (!folderId) {
+    const changesFolder = await storage.ensureFolder(PC_PARENT_FOLDER, projectFolderId);
+    folderId = await storage.ensureFolder(change.pcNumber, changesFolder);
+    for (const child of PC_FOLDER_TREE) {
+      await storage.ensureFolder(child, folderId);
     }
 
-    const evidenceFolderId = await storage.ensureFolder('Evidence', folderId);
-    return { folderId, evidenceFolderId };
-  });
+    const claimed = await prisma.potentialChange.updateMany({
+      where: { id: potentialChangeId, driveFolderId: null },
+      data: { driveFolderId: folderId },
+    });
+    if (claimed.count !== 1) {
+      const winner = await prisma.potentialChange.findUnique({
+        where: { id: potentialChangeId },
+        select: { driveFolderId: true },
+      });
+      folderId = winner?.driveFolderId ?? folderId;
+    }
+  }
+
+  const evidenceFolderId = await storage.ensureFolder('Evidence', folderId);
+  return { folderId, evidenceFolderId };
 }
 
 export const documentRegisterSchema = z.object({
