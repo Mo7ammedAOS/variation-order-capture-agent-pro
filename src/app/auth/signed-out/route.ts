@@ -34,11 +34,25 @@ export async function GET(request: NextRequest) {
   const requested = request.nextUrl.searchParams.get('reason') ?? 'signed_out';
   const reason = REASONS[requested] ?? 'signed_out';
 
-  const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = '/login';
-  loginUrl.search = `?reason=${reason}`;
-
-  const response = NextResponse.redirect(loginUrl);
+  /**
+   * A RELATIVE Location header, deliberately.
+   *
+   * `NextResponse.redirect()` needs an absolute URL, and behind Traefik the
+   * absolute URL this handler can see is the container's own bind address —
+   * so it sent people to `https://0.0.0.0:3000/login`, which resolves nowhere.
+   * Middleware does not have the problem, which is exactly why it went unseen
+   * until the redirect was tested through the proxy rather than against
+   * localhost.
+   *
+   * Reconstructing the public origin from `x-forwarded-*` would mean trusting
+   * headers an outside caller can set. A relative redirect is allowed by
+   * RFC 7231, is resolved against the address the browser actually used, and
+   * needs no proxy configuration to stay correct.
+   */
+  const response = new NextResponse(null, {
+    status: 307,
+    headers: { location: `/login?reason=${reason}` },
+  });
 
   // Every Supabase auth cookie, including the numbered chunks a large ES256
   // token is split across. Missing a chunk leaves a token that still parses.
