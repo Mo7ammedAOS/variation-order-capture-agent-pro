@@ -26,7 +26,8 @@ const serverSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  STORAGE_PROVIDER: z.enum(['google_drive', 'local']).default('local'),
+  STORAGE_PROVIDER: z.enum(['supabase', 'google_drive', 'local']).default('local'),
+  SUPABASE_STORAGE_BUCKET: z.string().default('vo-documents'),
   LOCAL_STORAGE_ROOT: z.string().default('./.uploads'),
   GOOGLE_DRIVE_AUTH_MODE: z.enum(['service_account', 'oauth']).default('oauth'),
   GOOGLE_DRIVE_ROOT_FOLDER_ID: z.string().default(''),
@@ -102,6 +103,9 @@ function parseEnv(): ServerEnv {
 
   if (env.STORAGE_PROVIDER === 'google_drive' && env.GOOGLE_DRIVE_ROOT_FOLDER_ID === '') {
     throw new Error('STORAGE_PROVIDER=google_drive requires GOOGLE_DRIVE_ROOT_FOLDER_ID');
+  }
+  if (env.STORAGE_PROVIDER === 'supabase' && env.SUPABASE_STORAGE_BUCKET === '') {
+    throw new Error('STORAGE_PROVIDER=supabase requires SUPABASE_STORAGE_BUCKET');
   }
   if (env.JOB_DRIVER === 'bullmq' && env.REDIS_URL === '') {
     throw new Error('JOB_DRIVER=bullmq requires REDIS_URL');

@@ -110,9 +110,37 @@ SUPABASE_SERVICE_ROLE_KEY="eyJ…"
 Turn **off** public signups: Authentication → Providers → Email → disable
 "Enable sign ups". Accounts are created by an admin.
 
-## 2. Google Drive
+## 2. File storage
 
-Two modes. Which one you can use depends on the account.
+**Decision, 2026-08-30: Supabase Storage.** Bytes live in the same Supabase
+project as the database, so one vendor and one backup regime cover both. Vectors
+stay in that project's Postgres via pgvector, where they already are.
+
+```bash
+STORAGE_PROVIDER=supabase
+SUPABASE_STORAGE_BUCKET=vo-documents
+```
+
+Create the bucket: Supabase dashboard → Storage → New bucket → name it
+`vo-documents` → leave **Public bucket OFF**.
+
+> **The bucket must stay private.** Reads are served by
+> `/api/documents/[id]/content`, which asserts project access *before* fetching
+> bytes. A public bucket makes every object reachable by URL and routes around
+> that check completely. The adapter never mints a signed URL either, because a
+> signed URL outlives the permission that created it.
+
+No folders are created. An object store has keys, not directories, so the
+project tree (`01 Contract/`, `07 Potential Changes/PC-…/Evidence/`) becomes a
+key prefix. `ensureFolder` derives the prefix and calls nothing.
+
+The service role key is what authenticates the adapter, so it stays server-side
+and never reaches a browser.
+
+### Alternate: Google Drive
+
+Only if a client insists their evidence live in their own Drive. Two modes,
+depending on the account.
 
 ### Google Workspace → service account + Shared Drive
 
@@ -152,7 +180,12 @@ client id under the gear icon, and tick "offline access").
 Files are then owned by that Google account — worth knowing before a client asks
 whose Drive their evidence lives in.
 
-**To skip Drive entirely while testing:** `STORAGE_PROVIDER=local`.
+### Alternate: local disk
+
+`STORAGE_PROVIDER=local` with `LOCAL_STORAGE_ROOT=/data/uploads`. Correct for
+tests and local development. In production it is the one store nothing backs
+up — the database rows survive a lost volume and point at files that no longer
+exist, which reads as "evidence exists" when it does not.
 
 ## 3. DNS
 
@@ -282,6 +315,33 @@ docker compose --env-file .env.production down        # stop
 Backups are Supabase's (Database → Backups) — daily on the free tier, PITR on
 paid. Drive keeps its own version history. **Test a restore before you need
 one.**
+
+## Outgrowing Supabase
+
+Supabase is the right answer at this size and the wrong answer at some larger
+one. Both halves move independently, and neither touches application code.
+
+**Files → S3 or any S3-compatible store** (AWS S3, Cloudflare R2, Hetzner
+Object Storage, Backblaze B2). Write one adapter against `StorageProvider` in
+`src/integrations/storage/`, the same four methods the Supabase one implements,
+then copy the bucket across and switch `STORAGE_PROVIDER`. `project_documents`
+holds the object key, so a migration is a copy plus a key rewrite, and the
+proxy route is unchanged. R2 is worth a look first — no egress charges, which
+matters when the expensive traffic is a QS pulling drawing sets.
+
+**Database and vectors → self-hosted Postgres with pgvector.** The vector store
+is already plain pgvector with an HNSW index and `vector_cosine_ops`; nothing
+about it is Supabase-specific. Moving means standing up Postgres 17 with the
+`vector` extension, `pg_dump | pg_restore`, and repointing `DATABASE_URL` and
+`DIRECT_URL`. The only genuinely Supabase-shaped dependency is **Auth**, so a
+move either keeps Supabase for auth alone or swaps the `AuthProvider` adapter —
+which is why auth sits behind an interface.
+
+**What would actually trigger this:** Supabase Storage egress costs, a client
+contractually requiring data residency in the UAE, or a database large enough
+that connection-pooler limits start biting. None of those are true today, and
+migrating before they are would be paying now to solve a problem you may never
+have.
 
 ## Troubleshooting
 
