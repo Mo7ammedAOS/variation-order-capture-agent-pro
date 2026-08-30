@@ -25,7 +25,9 @@ import { getEnv } from '@/lib/env';
  * Evidence is immutable. The app trashes, never purges, and never overwrites.
  */
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+// Must stay <= serverActions.bodySizeLimit in next.config.ts. A fit-out
+// drawing set is routinely tens of megabytes; 25 MB rejected real drawings.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 const ALLOWED_MIME_PREFIXES = ['image/', 'audio/', 'video/'];
 const ALLOWED_MIME_TYPES = new Set([

@@ -107,6 +107,20 @@ function parseEnv(): ServerEnv {
   if (env.STORAGE_PROVIDER === 'supabase' && env.SUPABASE_STORAGE_BUCKET === '') {
     throw new Error('STORAGE_PROVIDER=supabase requires SUPABASE_STORAGE_BUCKET');
   }
+  if (env.STORAGE_PROVIDER === 'google_drive' && env.GOOGLE_DRIVE_AUTH_MODE === 'oauth') {
+    const missing = (
+      [
+        ['GOOGLE_OAUTH_CLIENT_ID', env.GOOGLE_OAUTH_CLIENT_ID],
+        ['GOOGLE_OAUTH_CLIENT_SECRET', env.GOOGLE_OAUTH_CLIENT_SECRET],
+        ['GOOGLE_OAUTH_REFRESH_TOKEN', env.GOOGLE_OAUTH_REFRESH_TOKEN],
+      ] as const
+    )
+      .filter(([, value]) => !value)
+      .map(([name]) => name);
+    if (missing.length > 0) {
+      throw new Error(`GOOGLE_DRIVE_AUTH_MODE=oauth requires ${missing.join(', ')}`);
+    }
+  }
   if (env.JOB_DRIVER === 'bullmq' && env.REDIS_URL === '') {
     throw new Error('JOB_DRIVER=bullmq requires REDIS_URL');
   }

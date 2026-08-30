@@ -112,37 +112,68 @@ Turn **off** public signups: Authentication → Providers → Email → disable
 
 ## 2. File storage
 
-**Decision, 2026-08-30: Supabase Storage.** Bytes live in the same Supabase
-project as the database, so one vendor and one backup regime cover both. Vectors
-stay in that project's Postgres via pgvector, where they already are.
+**Decision, 2026-08-30: Google Drive, OAuth mode.** Supabase Storage caps each
+upload at 50 MB on the free plan with 1 GB in total, and a fit-out drawing set
+exceeds that on one file. Drive gives 15 GB and no meaningful per-file limit.
+
+The database, pgvector and Auth all stay on Supabase. Only the bytes moved.
 
 ```bash
-STORAGE_PROVIDER=supabase
-SUPABASE_STORAGE_BUCKET=vo-documents
+STORAGE_PROVIDER=google_drive
+GOOGLE_DRIVE_AUTH_MODE=oauth
 ```
 
-Create the bucket: Supabase dashboard → Storage → New bucket → name it
-`vo-documents` → leave **Public bucket OFF**.
+`osmanflow.com` is a personal Gmail account, so **service-account mode is not
+available**: Shared Drives require Workspace, and a service account has no
+storage quota of its own, so uploading into a merely-shared My Drive folder
+fails with `storageQuotaExceeded`. OAuth against a real user is the route.
 
-> **The bucket must stay private.** Reads are served by
-> `/api/documents/[id]/content`, which asserts project access *before* fetching
-> bytes. A public bucket makes every object reachable by URL and routes around
-> that check completely. The adapter never mints a signed URL either, because a
-> signed URL outlives the permission that created it.
+### Minting the refresh token
 
-No folders are created. An object store has keys, not directories, so the
-project tree (`01 Contract/`, `07 Potential Changes/PC-…/Evidence/`) becomes a
-key prefix. `ensureFolder` derives the prefix and calls nothing.
+```bash
+npm run drive:token
+```
 
-The service role key is what authenticates the adapter, so it stays server-side
-and never reaches a browser.
+Runs on localhost, prompts for the client id and secret, opens consent, and
+prints the four lines to paste into `.env.production`. It also names the account
+it authorised and its remaining storage, so a token minted while signed in to
+the wrong Google account is caught then rather than in production.
 
-### Alternate: Google Drive
+Three things that make this fail, all of them silently:
 
-Only if a client insists their evidence live in their own Drive. Two modes,
-depending on the account.
+- **The consent screen left in "Testing"** — Google expires those refresh tokens
+  after 7 days and the app then dies at every Drive call. **Publish it.**
+- **Consenting a second time without revoking** — a refresh token is returned
+  only on first consent for a client. The script passes `prompt=consent` to
+  force it, and tells you to revoke at myaccount.google.com/permissions if it
+  still comes back empty.
+- **A trailing slash on the redirect URI.** It must be exactly
+  `http://localhost:53682/callback`.
 
-### Google Workspace → service account + Shared Drive
+### What this means in practice
+
+Evidence is owned by that personal Google account and counts against its 15 GB,
+shared with Gmail and Photos. Fine now, and worth revisiting before a client
+asks whose Drive their evidence sits in. Moving to Workspace later is a
+`GOOGLE_DRIVE_AUTH_MODE` change plus a folder copy, not a code change.
+
+Files are never linked directly. `sourceUrl` holds Drive's `webViewLink` but the
+UI never renders it — reads go through `/api/documents/[id]/content`, which
+checks project access first. A `webViewLink` in the HTML routes around every
+access rule in the system.
+
+### Alternate: Supabase Storage
+
+`STORAGE_PROVIDER=supabase` with a **private** bucket named in
+`SUPABASE_STORAGE_BUCKET`. One vendor for bytes and index, one backup regime,
+and no OAuth token to keep alive. Ruled out here only on the 50 MB cap; on a
+paid plan that limit rises to 50 GB and this becomes the simpler option again.
+
+### Alternate: Google Drive on Workspace
+
+If the account ever moves to Workspace, service-account mode is better: files
+are owned by the organisation rather than a person, and no refresh token has to
+be kept alive.
 
 ```bash
 GOOGLE_DRIVE_AUTH_MODE=service_account
@@ -160,25 +191,6 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=<folder inside the Shared Drive>
 > My Drive folder merely *shared* with it fails with `storageQuotaExceeded`. It
 > must be a Shared Drive, which requires Workspace. The adapter catches this
 > error and explains it rather than surfacing a raw API failure.
-
-### Personal @gmail.com → OAuth refresh token
-
-Shared Drives do not exist on a personal account, so use OAuth:
-
-```bash
-GOOGLE_DRIVE_AUTH_MODE=oauth
-GOOGLE_OAUTH_CLIENT_ID=…
-GOOGLE_OAUTH_CLIENT_SECRET=…
-GOOGLE_OAUTH_REFRESH_TOKEN=…
-GOOGLE_DRIVE_ROOT_FOLDER_ID=<folder in My Drive>
-```
-
-Create an OAuth client (Desktop app), then mint a refresh token once with scope
-`https://www.googleapis.com/auth/drive` via the OAuth Playground (use your own
-client id under the gear icon, and tick "offline access").
-
-Files are then owned by that Google account — worth knowing before a client asks
-whose Drive their evidence lives in.
 
 ### Alternate: local disk
 

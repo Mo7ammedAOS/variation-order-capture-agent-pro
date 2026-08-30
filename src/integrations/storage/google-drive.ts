@@ -51,6 +51,22 @@ function getDrive(): drive_v3.Drive {
     return client;
   }
 
+  const missing = (
+    [
+      ['GOOGLE_OAUTH_CLIENT_ID', env.GOOGLE_OAUTH_CLIENT_ID],
+      ['GOOGLE_OAUTH_CLIENT_SECRET', env.GOOGLE_OAUTH_CLIENT_SECRET],
+      ['GOOGLE_OAUTH_REFRESH_TOKEN', env.GOOGLE_OAUTH_REFRESH_TOKEN],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+  if (missing.length > 0) {
+    throw new IntegrationError(
+      `GOOGLE_DRIVE_AUTH_MODE=oauth requires ${missing.join(', ')}. ` +
+        'Mint a refresh token with `npm run drive:token` — see DEPLOYMENT_GUIDE.md.',
+    );
+  }
+
   const oauth = new google.auth.OAuth2(
     env.GOOGLE_OAUTH_CLIENT_ID,
     env.GOOGLE_OAUTH_CLIENT_SECRET,
