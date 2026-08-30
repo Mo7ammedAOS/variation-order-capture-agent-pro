@@ -19,7 +19,8 @@
     "worker": "tsx --conditions=react-server src/workers/index.ts",
     "test:db": "vitest run tests/integration",
     "test:all": "vitest run",
-    "drive:token": "node scripts/google-oauth-token.mjs"
+    "drive:token": "node scripts/google-oauth-token.mjs",
+    "drive:connect": "bash scripts/drive-connect.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

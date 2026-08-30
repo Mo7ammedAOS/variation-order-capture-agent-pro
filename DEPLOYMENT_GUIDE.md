@@ -128,11 +128,25 @@ available**: Shared Drives require Workspace, and a service account has no
 storage quota of its own, so uploading into a merely-shared My Drive folder
 fails with `storageQuotaExceeded`. OAuth against a real user is the route.
 
-### Minting the refresh token
+### Connecting Drive
 
 ```bash
-npm run drive:token
+npm run drive:connect
 ```
+
+One command, and the only one you need. It mints the refresh token on your own
+machine, ensures the root folder exists in that Drive, writes all four values
+into `.env.production` on the server over SSH, switches `STORAGE_PROVIDER`, and
+releases. The client secret is read without echo and the token file is mode 600
+and deleted on exit; neither is ever passed as a command argument, because
+arguments are visible in `ps` to every user on the machine.
+
+`npm run drive:token` is the lower-level piece, if you only want the token.
+
+**Re-run it when the OAuth client is DELETED and recreated.** Rotating only the
+client *secret* does not need a new token — a refresh token is bound to the
+client id, so it survives a secret change. Deleting the client does not, and the
+failure reads `deleted_client`.
 
 Runs on localhost, prompts for the client id and secret, opens consent, and
 prints the four lines to paste into `.env.production`. It also names the account
