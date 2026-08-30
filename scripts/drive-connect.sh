@@ -27,7 +27,23 @@ REDIRECT="http://localhost:53682/callback"
 
 TOKEN_FILE="$(mktemp -t vo-drive-token)"
 chmod 600 "$TOKEN_FILE"
-trap 'rm -f "$TOKEN_FILE"' EXIT
+
+# The token file is destroyed on SUCCESS only. Consent is the one step that
+# needs a human, so throwing away a good token because a later step failed
+# would make the person do the browser dance again for no reason.
+SUCCEEDED=0
+cleanup() {
+  if [[ "$SUCCEEDED" == 1 ]]; then
+    rm -f "$TOKEN_FILE"
+  else
+    echo
+    echo "Consent succeeded but a later step did not. Your token is kept at:"
+    echo "  $TOKEN_FILE"
+    echo "It is mode 600. Delete it once this has finished, or re-run and it"
+    echo "will be replaced."
+  fi
+}
+trap cleanup EXIT
 
 cat <<BANNER
 
@@ -75,12 +91,31 @@ ROOT_ID="$(TOKEN_FILE="$TOKEN_FILE" node scripts/drive-ensure-root.mjs)"
 echo "    root folder: $ROOT_ID"
 
 echo "==> Writing credentials to $VPS:$REMOTE_DIR/.env.production"
-# Values travel on stdin, never as arguments.
+# The writer is SENT, not assumed to be on the server. Calling a path under
+# $REMOTE_DIR meant this failed the first time it ran for real, because the
+# server had not pulled the commit that added the file. Sending it makes the
+# step depend on nothing but ssh and python3.
+#
+# It travels base64-encoded in the command, and the VALUES travel on stdin —
+# arguments are visible in `ps` to every user on the box, and this is the one
+# moment the refresh token is in the open.
+WRITER_B64="$(base64 < scripts/write-drive-env.py | tr -d '\n')"
+
 printf '%s\n%s\n%s\n%s\n' "$CLIENT_ID" "$CLIENT_SECRET" "$REFRESH_TOKEN" "$ROOT_ID" \
-  | ssh "$VPS" "cd $REMOTE_DIR && python3 scripts/write-drive-env.py"
+  | ssh "$VPS" "cd $REMOTE_DIR \
+      && WRITER=\$(mktemp) && chmod 600 \$WRITER \
+      && printf '%s' '$WRITER_B64' | base64 -d > \$WRITER \
+      && python3 \$WRITER; STATUS=\$?; rm -f \$WRITER; exit \$STATUS"
+
+echo "==> Bringing the server to this commit"
+# release.sh builds from the checkout, so a server behind on code would deploy
+# an older app with the new credentials.
+ssh "$VPS" "cd $REMOTE_DIR && git pull --ff-only origin main"
 
 echo "==> Releasing"
 ssh "$VPS" "cd $REMOTE_DIR && ./deploy/release.sh"
+
+SUCCEEDED=1
 
 echo
 echo "Done. Storage is Google Drive. The local token file has been deleted."
