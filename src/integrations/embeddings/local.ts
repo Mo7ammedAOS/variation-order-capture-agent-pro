@@ -28,7 +28,31 @@ let extractorPromise: Promise<FeatureExtractor> | undefined;
 
 async function getExtractor(): Promise<FeatureExtractor> {
   extractorPromise ??= (async () => {
-    const { pipeline } = await import('@huggingface/transformers');
+    const { pipeline, env } = await import('@huggingface/transformers');
+
+    // Where the weights live, stated rather than inherited.
+    //
+    // Transformers.js defaults to caching inside its own package directory,
+    // `node_modules/@huggingface/transformers/.cache`. The Docker image builds
+    // in one stage and runs in another that carries only a traced subset of
+    // node_modules, so a cache written to the library's default path in the
+    // build stage is not necessarily at the same path at runtime. Naming the
+    // directory makes both stages agree, and it is one COPY.
+    //
+    // Neither variable is set in local development, so this is inert there and
+    // the library behaves exactly as before.
+    if (process.env.TRANSFORMERS_CACHE_DIR) {
+      env.cacheDir = process.env.TRANSFORMERS_CACHE_DIR;
+    }
+
+    // In the container the weights are already present. Refusing to reach out
+    // turns "the cache path is wrong" into an immediate loud failure, instead
+    // of a silent download on the first capture — which would work, slowly,
+    // and only until the VPS could not reach huggingface.co.
+    if (process.env.TRANSFORMERS_OFFLINE === '1') {
+      env.allowRemoteModels = false;
+    }
+
     const pipe = await pipeline('feature-extraction', MODEL_ID);
     return pipe as unknown as FeatureExtractor;
   })();

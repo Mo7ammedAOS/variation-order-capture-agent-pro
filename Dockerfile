@@ -41,12 +41,19 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 
 RUN npx prisma generate && npm run build
 
-# Pre-download the embedding model into the image.
+# Pre-download the embedding model into the image, at a path both stages agree
+# on. Transformers.js otherwise caches inside its own package directory, which
+# the runner does not carry verbatim.
+ENV TRANSFORMERS_CACHE_DIR=/app/.model-cache
 RUN node -e "\
   import('@huggingface/transformers') \
-    .then(({ pipeline }) => pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')) \
+    .then(async ({ pipeline, env }) => { \
+      env.cacheDir = '/app/.model-cache'; \
+      await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2'); \
+    }) \
     .then(() => console.log('embedding model cached')) \
-    .catch((e) => { console.error('model cache failed:', e.message); process.exit(1); })"
+    .catch((e) => { console.error('model cache failed:', e.message); process.exit(1); })" \
+    && du -sh /app/.model-cache
 
 # ── runner ───────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS runner
@@ -61,14 +68,14 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE_DIR=/app/.model-cache \
     TRANSFORMERS_OFFLINE=1
 
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=build --chown=nextjs:nodejs /root/.cache/huggingface /app/.cache/huggingface
+COPY --from=build --chown=nextjs:nodejs /app/.model-cache /app/.model-cache
 
 # Prisma CLI and the migration engine, for `migrate deploy` on release.
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
