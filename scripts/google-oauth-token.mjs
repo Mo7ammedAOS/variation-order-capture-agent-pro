@@ -24,6 +24,7 @@
  * testing-mode refresh tokens after 7 days. Publish the consent screen.
  */
 
+import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
@@ -47,7 +48,7 @@ const envId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim();
 const envSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
 const fromEnv = Boolean(envId && envSecret);
 
-console.log(`
+console.error(`
 ┌───────────────────────────────────────────────────────────────────────┐
 │  Google Drive refresh token                                           │
 └───────────────────────────────────────────────────────────────────────┘
@@ -69,7 +70,7 @@ let clientId = envId ?? '';
 let clientSecret = envSecret ?? '';
 
 if (fromEnv) {
-  console.log('Using GOOGLE_OAUTH_CLIENT_ID / _SECRET from the environment.\n');
+  console.error('Using GOOGLE_OAUTH_CLIENT_ID / _SECRET from the environment.\n');
 } else {
   if (!stdin.isTTY) {
     console.error(
@@ -137,8 +138,15 @@ const code = await new Promise((resolve, reject) => {
   });
 
   server.listen(PORT, () => {
-    console.log(`\nOpen this in the browser signed in to the RIGHT Google account:\n\n${url}\n`);
-    console.log(`Waiting on ${REDIRECT_URI} …`);
+    console.error(`\nOpen this in the browser signed in to the RIGHT Google account:\n\n${url}\n`);
+
+    // Convenience only. If it fails the printed link above still works, so the
+    // failure is deliberately ignored rather than aborting the flow.
+    const opener =
+      process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    execFile(opener, [url], () => undefined);
+
+    console.error(`Waiting on ${REDIRECT_URI} …`);
   });
 });
 
@@ -163,19 +171,35 @@ const { data } = await google.drive({ version: 'v3', auth: oauth }).about.get({
 const quota = data.storageQuota ?? {};
 const gb = (bytes) => (Number(bytes) / 1024 ** 3).toFixed(1);
 
-console.log(`
-Authorised as:  ${data.user?.emailAddress ?? 'unknown'}
-Drive storage:  ${quota.usage ? gb(quota.usage) : '?'} GB used${quota.limit ? ` of ${gb(quota.limit)} GB` : ''}
+/**
+ * Two streams, deliberately.
+ *
+ *   stdout  the four assignable lines, and nothing else. Callers redirect this
+ *           to a file and read the token out of it.
+ *   stderr  everything a person reads. It stays on screen even when stdout is
+ *           redirected — which is the bug this split fixes: the consent URL
+ *           used to go into the capture file, leaving the person staring at
+ *           "approve in the browser" with no link.
+ *
+ * `Authorised as` and `Drive storage` go to BOTH: a person needs to see them,
+ * and drive-connect.sh greps them back out of the captured file to show them.
+ */
+const summary = `Authorised as:  ${data.user?.emailAddress ?? 'unknown'}
+Drive storage:  ${quota.usage ? gb(quota.usage) : '?'} GB used${quota.limit ? ` of ${gb(quota.limit)} GB` : ''}`;
 
-Add to .env.production on the VPS — never to the repo:
+console.error(`\n${summary}\n`);
 
-GOOGLE_DRIVE_AUTH_MODE=oauth
-GOOGLE_OAUTH_CLIENT_ID=${clientId}
-GOOGLE_OAUTH_CLIENT_SECRET=${clientSecret}
-GOOGLE_OAUTH_REFRESH_TOKEN=${tokens.refresh_token}
+console.log(summary);
+console.log(`GOOGLE_DRIVE_AUTH_MODE=oauth`);
+console.log(`GOOGLE_OAUTH_CLIENT_ID=${clientId}`);
+console.log(`GOOGLE_OAUTH_CLIENT_SECRET=${clientSecret}`);
+console.log(`GOOGLE_OAUTH_REFRESH_TOKEN=${tokens.refresh_token}`);
 
-Then create a folder in that account's Drive to hold everything, and set
-GOOGLE_DRIVE_ROOT_FOLDER_ID to the id — the tail of the folder's URL.
+console.error(`
+Those four values belong in .env.production on the VPS and nowhere else —
+never the repo, never a message, never a screenshot. \`npm run drive:connect\`
+puts them there for you.
 
-That storage is shared with Gmail and Photos on a personal account, so watch it.
+On a personal account that storage is shared with Gmail and Photos, so when it
+fills, mail stops arriving too.
 `);
