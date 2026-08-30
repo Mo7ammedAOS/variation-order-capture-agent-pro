@@ -190,3 +190,19 @@ export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
   client_viewer: 'Client Viewer',
   consultant_viewer: 'Consultant Viewer',
 };
+
+/**
+ * Who should be offered the entitlement question first, where more than one
+ * person on a project is permitted to answer it.
+ *
+ * Preference, not permission. Permission is the matrix; this only breaks a tie
+ * between people who already hold it. Commercial Manager first because
+ * entitlement is their trade, Contract Administrator next, and the Project
+ * Manager last — many fit-out contractors run projects without a commercial
+ * manager at all, and on those the PM is the decision.
+ */
+export const NOTICE_ASSESSMENT_PREFERENCE: ProjectRole[] = [
+  'commercial_manager',
+  'contract_administrator',
+  'project_manager',
+];

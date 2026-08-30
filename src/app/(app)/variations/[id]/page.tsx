@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  AlertTriangle, ClipboardList, Copy, FileText, History, MapPin, Paperclip, User,
+  AlertTriangle, ClipboardList, Copy, FileText, History, MapPin, Paperclip, ShieldAlert, User,
 } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
@@ -10,7 +10,8 @@ import { findSimilarChanges } from '@/services/search.service';
 import { prisma } from '@/lib/prisma';
 import { formatDate, formatDateTime, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
-import { hasCapability } from '@/services/permissions.service';
+import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
+import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,6 +80,33 @@ export default async function PotentialChangeDetailPage({
   ]);
 
   const canAssess = mayAssess && change.noticeStatus === 'not_assessed';
+
+  /*
+    When the entitlement question is still open and the person looking at it
+    cannot answer it, the page has to SAY so.
+
+    Showing nothing was the original behaviour, and it produced the worst
+    version of this: a task assigned to a project manager, sitting on his own
+    My Tasks page, with no control anywhere on the change and no reason given.
+    He can only conclude the app is broken. It was in fact refusing him, on
+    purpose, in silence.
+  */
+  const awaitingAssessment = change.noticeStatus === 'not_assessed' && !mayAssess;
+  const assessors = awaitingAssessment
+    ? await listMembersWithCapability(change.projectId, 'potentialChange.assessNotice')
+    : [];
+  const assessorNames = assessors.length
+    ? await prisma.user.findMany({
+        where: { id: { in: assessors.map((a) => a.userId) } },
+        select: { id: true, fullName: true },
+      })
+    : [];
+  const assignedToViewer = change.tasks.some(
+    (task) =>
+      task.taskType === 'notice_assessment' &&
+      task.assignedToUserId === user.id &&
+      (task.status === 'open' || task.status === 'in_progress'),
+  );
   const nextStatuses = allowedNextStatuses(change.currentStatus);
 
   // How long the change sat before anyone said so. Evidence in its own right:
@@ -250,6 +278,53 @@ export default async function PotentialChangeDetailPage({
           </Card>
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+
+          {awaitingAssessment ? (
+            <Card tone={assessors.length === 0 || assignedToViewer ? 'notice' : 'plain'}>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldAlert aria-hidden className="size-4" />
+                  {assessors.length === 0
+                    ? 'Nobody can assess this notice'
+                    : assignedToViewer
+                      ? 'This is assigned to you, but the decision is not yours'
+                      : 'Waiting on the notice assessment'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-relaxed">
+                {assessors.length === 0 ? (
+                  <p>
+                    No active member of this project holds the authority to decide whether a
+                    contractual notice is required, so this change cannot move on. The notice
+                    clock is still running. Ask your administrator to grant{' '}
+                    <span className="font-semibold">Assess notice</span> to a role on this
+                    project, in Settings → Permissions.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      {assignedToViewer
+                        ? 'The task is on your list, but your project role does not carry this authority. Either it should be reassigned, or your administrator should grant it to your role in Settings → Permissions.'
+                        : 'This change is waiting on whether a contractual notice is required. That decision belongs to:'}
+                    </p>
+                    <ul className="mt-2.5 flex flex-col gap-1">
+                      {assessors.map((assessor) => (
+                        <li key={assessor.userId} className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-semibold">
+                            {assessorNames.find((n) => n.id === assessor.userId)?.fullName ??
+                              'Unknown'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {PROJECT_ROLE_LABELS[assessor.projectRole]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
 
           {canChangeStatus ? (
             <StatusForm

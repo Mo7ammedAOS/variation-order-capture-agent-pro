@@ -112,6 +112,70 @@ export async function hasCapability(
  * else — which also makes "who can see every project" something the admin can
  * actually change.
  */
+/**
+ * Everyone on a project who may actually do a given thing.
+ *
+ * This exists because of a defect that is very easy to write and almost
+ * impossible to spot from the code: work was routed by ROLE NAME, while
+ * permission is decided by the matrix. `commercial_manager ?? project_manager`
+ * looks like a sensible fallback and is not one, because the fallback target
+ * may hold no such authority. The result was a notice assessment assigned to a
+ * project manager who then saw no button anywhere on the page, and no
+ * explanation — the app asking someone for a decision it would refuse to
+ * accept from them.
+ *
+ * Routing therefore asks the same question the button asks. If an admin grants
+ * project managers the right to assess a notice, they start receiving the work
+ * in the same moment, with no code change.
+ *
+ * A member's own system role counts too: a Commercial Director sitting on a
+ * project as an observer still holds company-wide authority.
+ */
+export async function listMembersWithCapability(projectId: string, capability: Capability) {
+  const [matrix, members] = await Promise.all([
+    getPermissionMatrix(),
+    prisma.projectMember.findMany({
+      // A deactivated person is not a candidate for work. Their membership row
+      // survives so history still reads correctly; that is not the same as
+      // being available on Monday.
+      where: { projectId, active: true, user: { active: true } },
+      orderBy: { assignedAt: 'asc' },
+      select: { userId: true, projectRole: true, user: { select: { systemRole: true } } },
+    }),
+  ]);
+
+  return members.filter(
+    (member) =>
+      matrix.project[member.projectRole]?.has(capability) === true ||
+      matrix.system[member.user.systemRole]?.has(capability) === true,
+  );
+}
+
+/**
+ * Who should be given this piece of work, or null when nobody on the project
+ * may do it.
+ *
+ * `preferredRoles` is seniority for this particular decision, not seniority in
+ * general — the entitlement question belongs to the Commercial Manager where
+ * one exists. Null is a legitimate and important answer: better an unowned
+ * task that shows as a bottleneck than one parked on somebody who cannot act,
+ * which looks handled and is not.
+ */
+export async function pickResponsibleMember(
+  projectId: string,
+  capability: Capability,
+  preferredRoles: ProjectRole[] = [],
+): Promise<string | null> {
+  const holders = await listMembersWithCapability(projectId, capability);
+
+  for (const role of preferredRoles) {
+    const match = holders.find((holder) => holder.projectRole === role);
+    if (match) return match.userId;
+  }
+
+  return holders[0]?.userId ?? null;
+}
+
 export async function hasCompanyWideProjectAccess(systemRole: SystemRole): Promise<boolean> {
   return systemRoleHasCapability(systemRole, 'project.viewAll');
 }

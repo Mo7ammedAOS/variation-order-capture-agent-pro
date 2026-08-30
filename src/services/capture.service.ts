@@ -6,6 +6,8 @@ import { calculateNoticeDueDate } from '@/lib/dates';
 import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
 import { recordAudit } from '@/services/audit-log.service';
+import { pickResponsibleMember } from '@/services/permissions.service';
+import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 import { getAiProvider } from '@/integrations/claude';
 
 /**
@@ -105,6 +107,17 @@ export async function captureFromChannel(input: {
 
   const eventDate = input.eventDate ?? todayUtc();
 
+  // Asked as a capability, and asked out here rather than inside the
+  // transaction, which holds a row lock on the project's PC counter.
+  // Null means nobody on this project may assess a notice, and the change is
+  // deliberately created unowned so it surfaces as a bottleneck instead of
+  // sitting on someone who cannot act on it.
+  const noticeOwner = await pickResponsibleMember(
+    target.projectId,
+    'potentialChange.assessNotice',
+    NOTICE_ASSESSMENT_PREFERENCE,
+  );
+
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
       where: { id: target.projectId },
@@ -127,10 +140,6 @@ export async function captureFromChannel(input: {
     const noticePeriodDays = project.contractRules?.noticePeriodDays ?? 28;
     const noticeDueDate = calculateNoticeDueDate(eventDate, noticePeriodDays);
 
-    const cm = await tx.projectMember.findFirst({
-      where: { projectId: target.projectId, active: true, projectRole: 'commercial_manager' },
-      select: { userId: true },
-    });
 
     const dueDays = project.contractRules?.pmScopeReviewDueDays ?? 3;
     const nextActionDue = new Date(todayUtc());
@@ -152,7 +161,7 @@ export async function captureFromChannel(input: {
         trade: extraction.extractedData.affectedTrade[0] ?? null,
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
-        currentOwnerUserId: cm?.userId ?? null,
+        currentOwnerUserId: noticeOwner,
         waitingFor: 'Notice assessment',
         nextAction: 'Assess whether a contractual notice is required',
         nextActionDueDate: nextActionDue,
@@ -168,7 +177,7 @@ export async function captureFromChannel(input: {
         potentialChangeId: change.id,
         taskType: 'notice_assessment',
         title: `Notice assessment — ${pcNumber}`,
-        assignedToUserId: cm?.userId ?? null,
+        assignedToUserId: noticeOwner,
         dueDate: nextActionDue,
       },
     });

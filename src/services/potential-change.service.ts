@@ -9,6 +9,8 @@ import { formatPcNumber } from '@/lib/pc-number';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit, diffChanges } from '@/services/audit-log.service';
 import { assertProjectAccess, scopeToUser } from '@/services/project-access.service';
+import { pickResponsibleMember } from '@/services/permissions.service';
+import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 
 /**
  * The Potential Change register — the heart of the system.
@@ -165,6 +167,16 @@ export async function createPotentialChange(
 ) {
   await assertProjectAccess(user, input.projectId, 'potentialChange.create');
 
+  // Resolved BEFORE the transaction, and asked as a capability rather than a
+  // role name. Reading the permission matrix is a separate query on the shared
+  // client; doing it inside would add a round trip to a transaction that holds
+  // a row lock on the project's PC counter.
+  const noticeOwner = await pickResponsibleMember(
+    input.projectId,
+    'potentialChange.assessNotice',
+    NOTICE_ASSESSMENT_PREFERENCE,
+  );
+
   const created = await prisma.$transaction(
     async (tx) => {
       const project = await tx.project.findUnique({
@@ -189,7 +201,6 @@ export async function createPotentialChange(
       const noticeDueDate = calculateNoticeDueDate(input.eventDate, noticePeriodDays);
       const { riskLevel } = calculateNoticeCountdown(noticeDueDate);
 
-      const { pm, cm } = await findResponsibleMembers(tx, input.projectId);
       const reviewDueDays = project.contractRules?.pmScopeReviewDueDays ?? 3;
       const nextActionDue = new Date(todayUtc());
       nextActionDue.setUTCDate(nextActionDue.getUTCDate() + reviewDueDays);
@@ -219,10 +230,12 @@ export async function createPotentialChange(
           reportedByUserId: user.id,
 
           currentStatus: 'notice_assessment',
-          // The Commercial Manager owns the entitlement question. If the project
-          // has no CM assigned it falls to the PM, and if it has neither it stays
-          // unowned and shows as a bottleneck rather than quietly going nowhere.
-          currentOwnerUserId: cm ?? pm ?? null,
+          // The Commercial Manager owns the entitlement question where the
+          // project has one. Failing that it goes to whoever else on this
+          // project the admin has granted the authority to — and if that is
+          // nobody, it stays UNOWNED and shows as a bottleneck, rather than
+          // being parked on a person who would find no button to press.
+          currentOwnerUserId: noticeOwner,
           waitingFor: 'Notice assessment',
           nextAction: 'Assess whether a contractual notice is required',
           nextActionDueDate: nextActionDue,
@@ -242,7 +255,7 @@ export async function createPotentialChange(
           description:
             `Decide whether a contractual notice is required for "${input.title}". ` +
             `Notice period is ${noticePeriodDays} days from the event date.`,
-          assignedToUserId: cm ?? pm ?? null,
+          assignedToUserId: noticeOwner,
           assignedByUserId: user.id,
           dueDate: nextActionDue,
           priority: input.urgency,
@@ -470,21 +483,4 @@ export async function changeStatus(
 /** Recomputes the RAG colour from the notice clock. Used by the deadline worker. */
 export function deriveRiskLevel(noticeDueDate: Date | null, amberThresholdDays: number): RiskLevel {
   return calculateNoticeCountdown(noticeDueDate, { amberThresholdDays }).riskLevel;
-}
-
-async function findResponsibleMembers(tx: Prisma.TransactionClient, projectId: string) {
-  const members = await tx.projectMember.findMany({
-    where: {
-      projectId,
-      active: true,
-      projectRole: { in: ['project_manager', 'commercial_manager'] },
-    },
-    orderBy: { assignedAt: 'asc' },
-    select: { userId: true, projectRole: true },
-  });
-
-  return {
-    pm: members.find((m) => m.projectRole === 'project_manager')?.userId ?? null,
-    cm: members.find((m) => m.projectRole === 'commercial_manager')?.userId ?? null,
-  };
 }
