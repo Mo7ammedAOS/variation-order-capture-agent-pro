@@ -24,6 +24,8 @@ export const memberAssignSchema = z.object({
     'planning_engineer', 'finance_officer', 'document_controller',
     'project_viewer', 'client_viewer', 'consultant_viewer',
   ]),
+  /** Separate from access. See the schema comment on notifyOnChange. */
+  notifyOnChange: z.boolean().default(false),
 });
 
 export async function listMembers(user: AuthenticatedUser, projectId: string) {
@@ -56,7 +58,12 @@ export async function assignMember(
         },
       },
       create: { ...input, assignedByUserId: user.id, active: true },
-      update: { active: true, assignedByUserId: user.id, assignedAt: new Date() },
+      update: {
+        active: true,
+        notifyOnChange: input.notifyOnChange,
+        assignedByUserId: user.id,
+        assignedAt: new Date(),
+      },
     });
 
     await recordAudit({
@@ -70,6 +77,7 @@ export async function assignMember(
         userId: input.userId,
         userName: target.fullName,
         projectRole: input.projectRole,
+        notifyOnChange: input.notifyOnChange,
       },
     });
 
@@ -100,5 +108,49 @@ export async function removeMember(user: AuthenticatedUser, memberId: string) {
       oldValue: { userName: existing.user.fullName, projectRole: existing.projectRole },
     });
     return updated;
+  });
+}
+
+/**
+ * Who to tell when something happens on this project.
+ *
+ * Kept out of `assignMember` on purpose: changing whether someone is notified
+ * must not require re-stating their role, and re-stating their role must not
+ * silently reset their notifications.
+ */
+export async function setMemberNotify(
+  user: AuthenticatedUser,
+  memberId: string,
+  notifyOnChange: boolean,
+) {
+  const member = await prisma.projectMember.findUnique({ where: { id: memberId } });
+  if (!member) throw new NotFoundError('Membership not found');
+
+  await assertProjectAccess(user, member.projectId, 'project.manageMembers');
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.projectMember.update({
+      where: { id: memberId },
+      data: { notifyOnChange },
+    });
+    await recordAudit({
+      db: tx,
+      projectId: member.projectId,
+      userId: user.id,
+      recordType: 'project_member',
+      recordId: memberId,
+      actionType: 'updated',
+      oldValue: { notifyOnChange: member.notifyOnChange },
+      newValue: { notifyOnChange },
+    });
+    return updated;
+  });
+}
+
+/** The list a notification lane asks for. Used by Phase 2, defined now. */
+export async function getNotifyRecipients(projectId: string) {
+  return prisma.projectMember.findMany({
+    where: { projectId, active: true, notifyOnChange: true },
+    select: { user: { select: { id: true, fullName: true, email: true, phone: true } } },
   });
 }

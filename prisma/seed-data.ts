@@ -29,21 +29,25 @@ export interface SeedUser {
 }
 
 export const USERS: SeedUser[] = [
+  // Six people, deliberately. Twelve made every test a hunt for which of four
+  // near-identical accounts to sign in as, and none of the extras proved
+  // anything the six do not.
+  //
+  // The separation that matters is intact: the QS prices, the MD approves, and
+  // neither of them is the person who captured it. That is what makes a
+  // variation file defensible when the client's QS challenges it.
   { key: 'md',    fullName: 'Khalid Al Suwaidi',  email: 'khalid.alsuwaidi@abcfitout.example',  phone: '+971501000001', systemRole: 'managing_director' },
-  { key: 'cd',    fullName: 'Rania Haddad',       email: 'rania.haddad@abcfitout.example',      phone: '+971501000002', systemRole: 'commercial_director' },
-  { key: 'cm1',   fullName: 'Omar Farouk',        email: 'omar.farouk@abcfitout.example',       phone: '+971501000003', systemRole: 'commercial_manager' },
-  { key: 'cm2',   fullName: 'Priya Nair',         email: 'priya.nair@abcfitout.example',        phone: '+971501000004', systemRole: 'commercial_manager' },
-  { key: 'pm1',   fullName: 'Daniel Okafor',      email: 'daniel.okafor@abcfitout.example',     phone: '+971501000005', systemRole: 'standard_user' },
-  { key: 'pm2',   fullName: 'Mariam Al Zaabi',    email: 'mariam.alzaabi@abcfitout.example',    phone: '+971501000006', systemRole: 'standard_user' },
-  { key: 'qs1',   fullName: 'Suresh Iyer',        email: 'suresh.iyer@abcfitout.example',       phone: '+971501000007', systemRole: 'standard_user' },
-  { key: 'qs2',   fullName: 'Layla Hassan',       email: 'layla.hassan@abcfitout.example',      phone: '+971501000008', systemRole: 'standard_user' },
-  { key: 'se1',   fullName: 'Ahmed Rashid',       email: 'ahmed.rashid@abcfitout.example',      phone: '+971501000009', systemRole: 'standard_user' },
-  { key: 'se2',   fullName: 'Grace Mensah',       email: 'grace.mensah@abcfitout.example',      phone: '+971501000010', systemRole: 'standard_user' },
-  { key: 'fin',   fullName: 'Ivan Petrov',        email: 'ivan.petrov@abcfitout.example',       phone: '+971501000011', systemRole: 'finance_manager' },
-  // Administration sits here, with the administrator. It stays a FLAG rather
-  // than a role so a company that puts it on its Finance Manager or office
-  // manager can, without pretending that person's job is something else.
-  { key: 'admin', fullName: 'Noura Al Blooshi',   email: 'noura.alblooshi@abcfitout.example',   phone: '+971501000012', systemRole: 'company_admin', canAdministerCompany: true },
+
+  // Administration sits with the administrator. It stays a FLAG rather than a
+  // role, so a firm that puts it on its Finance Manager or office manager can,
+  // without pretending that person's job is something else.
+  { key: 'admin', fullName: 'Noura Al Blooshi',   email: 'noura.alblooshi@abcfitout.example',   phone: '+971501000002', systemRole: 'company_admin', canAdministerCompany: true },
+
+  { key: 'qs1',   fullName: 'Suresh Iyer',        email: 'suresh.iyer@abcfitout.example',       phone: '+971501000003', systemRole: 'standard_user' },
+  { key: 'pm1',   fullName: 'Daniel Okafor',      email: 'daniel.okafor@abcfitout.example',     phone: '+971501000004', systemRole: 'standard_user' },
+  { key: 'pm2',   fullName: 'Mariam Al Zaabi',    email: 'mariam.alzaabi@abcfitout.example',    phone: '+971501000005', systemRole: 'standard_user' },
+  { key: 'se1',   fullName: 'Ahmed Rashid',       email: 'ahmed.rashid@abcfitout.example',      phone: '+971501000006', systemRole: 'standard_user' },
+  { key: 'se2',   fullName: 'Grace Mensah',       email: 'grace.mensah@abcfitout.example',      phone: '+971501000007', systemRole: 'standard_user' },
 ];
 
 export interface SeedProject {
@@ -59,14 +63,25 @@ export interface SeedProject {
 }
 
 export const PROJECTS: SeedProject[] = [
+  /*
+    Membership is arranged so the access rule is PROVABLE by signing in, not
+    only by reading a test:
+
+      Ahmed  (se1) is on DXB-001 and DXB-004 only  -> AUH-003 must 403
+      Grace  (se2) is on DXB-002 and AUH-003 only
+      Daniel (pm1) runs DXB-001 and AUH-003        -> a PM across two sites
+      Mariam (pm2) runs DXB-002 and DXB-004
+      Suresh (qs1) prices ALL FOUR                 -> one QS, as Osman set it
+      Khalid (md)  is on none of them, and sees every one anyway, through the
+                   project.viewAll capability rather than a membership row.
+  */
   {
     code: 'DXB-001', name: 'DIFC Gate Avenue Office Fit-Out', client: 'Meridian Capital Partners',
     consultant: 'Aedas Interiors', location: 'Gate Avenue, DIFC, Dubai',
     contractNumber: 'ABC/2026/001', value: 18_500_000, noticePeriodDays: 28,
     members: [
-      { userKey: 'pm1', role: 'project_manager' }, { userKey: 'cm1', role: 'commercial_manager' },
-      { userKey: 'qs1', role: 'quantity_surveyor' }, { userKey: 'se1', role: 'site_engineer' },
-      { userKey: 'fin', role: 'finance_officer' },
+      { userKey: 'pm1', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
+      { userKey: 'se1', role: 'site_engineer' },
     ],
   },
   {
@@ -74,8 +89,8 @@ export const PROJECTS: SeedProject[] = [
     consultant: 'Woods Bagot', location: 'Dubai Hills Mall, Dubai',
     contractNumber: 'ABC/2026/002', value: 7_200_000, noticePeriodDays: 21,
     members: [
-      { userKey: 'pm2', role: 'project_manager' }, { userKey: 'cm1', role: 'commercial_manager' },
-      { userKey: 'qs2', role: 'quantity_surveyor' }, { userKey: 'se2', role: 'site_engineer' },
+      { userKey: 'pm2', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
+      { userKey: 'se2', role: 'site_engineer' },
     ],
   },
   {
@@ -83,8 +98,8 @@ export const PROJECTS: SeedProject[] = [
     consultant: 'Perkins Eastman', location: 'Al Maryah Island, Abu Dhabi',
     contractNumber: 'ABC/2026/003', value: 11_900_000, noticePeriodDays: 28,
     members: [
-      { userKey: 'pm1', role: 'project_manager' }, { userKey: 'cm2', role: 'commercial_manager' },
-      { userKey: 'qs1', role: 'quantity_surveyor' }, { userKey: 'se2', role: 'site_engineer' },
+      { userKey: 'pm1', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
+      { userKey: 'se2', role: 'site_engineer' },
     ],
   },
   {
@@ -92,17 +107,8 @@ export const PROJECTS: SeedProject[] = [
     consultant: 'Godwin Austen Johnson', location: 'Business Bay, Dubai',
     contractNumber: 'ABC/2026/004', value: 24_300_000, noticePeriodDays: 14,
     members: [
-      { userKey: 'pm2', role: 'project_manager' }, { userKey: 'cm2', role: 'commercial_manager' },
-      { userKey: 'qs2', role: 'quantity_surveyor' }, { userKey: 'se1', role: 'site_engineer' },
-    ],
-  },
-  {
-    code: 'SHJ-005', name: 'Sharjah Publishing City HQ', client: 'SPC Authority',
-    consultant: 'Dewan Architects', location: 'Sharjah Publishing City',
-    contractNumber: 'ABC/2026/005', value: 5_600_000, noticePeriodDays: 28,
-    members: [
-      { userKey: 'pm1', role: 'project_manager' }, { userKey: 'cm1', role: 'commercial_manager' },
-      { userKey: 'qs1', role: 'quantity_surveyor' },
+      { userKey: 'pm2', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
+      { userKey: 'se1', role: 'site_engineer' },
     ],
   },
 ];
@@ -141,7 +147,6 @@ export const CHANGES: SeedChange[] = [
   { projectCode: 'DXB-004', title: 'Kitchen appliance package upgraded', description: 'Client upgraded the appliance package across all 120 units after the show apartment review.', location: 'All units', trade: 'Joinery', daysAgo: 18, estimatedValue: 940_000, workStarted: false, timeImpact: true, source: 'meeting' },
   { projectCode: 'DXB-004', title: 'Additional power points to bedrooms', description: 'Client added two additional sockets per bedroom across all unit types.', location: 'All units', trade: 'Electrical', daysAgo: 11, estimatedValue: 205_000, workStarted: true, timeImpact: false, source: 'mobile_form' },
   { projectCode: 'DXB-004', title: 'Corridor carpet changed to luxury vinyl tile', description: 'Operator changed corridor floor finish from carpet to LVT for maintenance reasons.', location: 'Corridors, all levels', trade: 'Finishes', daysAgo: 3, estimatedValue: 156_000, workStarted: false, timeImpact: false, source: 'email' },
-  { projectCode: 'SHJ-005', title: 'Reception desk relocated after layout review', description: 'Client relocated the reception desk to the opposite wall, affecting power, data and flooring.', location: 'Ground floor reception', trade: 'Joinery', daysAgo: 8, estimatedValue: 72_000, workStarted: false, timeImpact: false, source: 'whatsapp' },
 ];
 
 export const CONTACTS = [
@@ -151,7 +156,6 @@ export const CONTACTS = [
   { projectCode: 'DXB-002', fullName: 'Mall Operations Desk', companyName: 'Dubai Hills Mall', jobTitle: 'Operations', contactType: 'landlord' as const, verified: false, canRequest: false, canInstruct: false, canApproveCost: false, canSign: false },
   { projectCode: 'AUH-003', fullName: 'Dr Samir Nasser', companyName: 'Gulf Health Holdings', jobTitle: 'Facilities Lead', contactType: 'client' as const, verified: true, canRequest: true, canInstruct: false, canApproveCost: true, canSign: true },
   { projectCode: 'DXB-004', fullName: 'Elena Petrova', companyName: 'Anchor Living FZ-LLC', jobTitle: 'Development Manager', contactType: 'client_representative' as const, verified: true, canRequest: true, canInstruct: true, canApproveCost: true, canSign: false },
-  { projectCode: 'SHJ-005', fullName: 'Abdulrahman Bin Saeed', companyName: 'SPC Authority', jobTitle: 'Project Engineer', contactType: 'engineer' as const, verified: false, canRequest: true, canInstruct: false, canApproveCost: false, canSign: false },
 ];
 
 export const DOCUMENT_TEMPLATES = [

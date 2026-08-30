@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FolderKanban } from 'lucide-react';
+import { FolderKanban, Plus } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
+import { hasCapability } from '@/services/permissions.service';
 import { listProjects } from '@/services/project.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
+import { Button } from '@/components/ui/button';
 import { humanise } from '@/services/dashboard.service';
 import { Money } from '@/components/domain/money';
 import { StatusChip } from '@/components/domain/risk-chip';
@@ -21,7 +23,10 @@ export default async function ProjectsPage({
 }) {
   const user = await requireUser();
   const { q } = await searchParams;
-  const projects = await listProjects(user, { search: q });
+  const [projects, mayCreate] = await Promise.all([
+    listProjects(user, { search: q }),
+    hasCapability(user.systemRole, [], 'project.create'),
+  ]);
 
   function roleHolder(
     members: { projectRole: string; user: { fullName: string } }[],
@@ -32,11 +37,21 @@ export default async function ProjectsPage({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {projects.length} {projects.length === 1 ? 'project' : 'projects'} you can see
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-[-0.02em]">Projects</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {projects.length} {projects.length === 1 ? 'project' : 'projects'} you can see
+          </p>
+        </div>
+        {mayCreate ? (
+          <Button asChild>
+            <Link href="/projects/new">
+              <Plus aria-hidden className="size-4" />
+              New project
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       {projects.length === 0 ? (

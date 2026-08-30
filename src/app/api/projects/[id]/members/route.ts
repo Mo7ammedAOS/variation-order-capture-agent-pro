@@ -20,6 +20,7 @@ export const POST = withAuth<{ id: string }>(async (request, { user, params }) =
       projectId: params.id,
       userId: body.userId,
       projectRole: body.projectRole,
+      notifyOnChange: body.notifyOnChange,
     }),
     201,
   );

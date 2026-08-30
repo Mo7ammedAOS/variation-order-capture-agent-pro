@@ -410,6 +410,16 @@ model ProjectMember {
   userId                 String      @map("user_id") @db.Uuid
   projectRole            ProjectRole @map("project_role")
   permissionOverrideJson Json?       @map("permission_override_json")
+
+  /// "Who should be updated here" — Osman's phrase, and deliberately NOT the
+  /// same thing as access.
+  ///
+  /// A commercial director may need telling when a change is raised on a
+  /// project they never open. A site engineer needs full access and does not
+  /// need a message every time a colleague files something. Conflating the two
+  /// gives you either a silent system or one everybody mutes.
+  notifyOnChange         Boolean     @default(false) @map("notify_on_change")
+
   active                 Boolean     @default(true)
   assignedAt             DateTime    @default(now()) @map("assigned_at")
   assignedByUserId       String?     @map("assigned_by_user_id") @db.Uuid

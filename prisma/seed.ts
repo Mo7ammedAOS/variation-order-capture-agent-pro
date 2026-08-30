@@ -383,11 +383,14 @@ async function main() {
   console.log('\nDone.');
   if (admin) {
     console.log(`\nSign in as any seeded user with the password: ${DEFAULT_PASSWORD}`);
-    console.log(`  Director   ${USERS.find((u) => u.key === 'md')?.email}`);
-    console.log(`  Commercial ${USERS.find((u) => u.key === 'cm1')?.email}`);
-    console.log(`  Engineer   ${USERS.find((u) => u.key === 'se1')?.email}`);
-    console.log(`  Admin      ${USERS.find((u) => u.key === 'admin')?.email}`);
-    console.log(`  Admin      ${USERS.find((u) => u.key === 'fin')?.email}  (Finance Manager who also administers)`);
+    const who = (key: string) => USERS.find((u) => u.key === key)?.email ?? '(missing)';
+    console.log(`  Administrator  ${who('admin')}   adds projects, people and permissions`);
+    console.log(`  Director       ${who('md')}   approves, and sees every project`);
+    console.log(`  QS             ${who('qs1')}   prices, on all four projects`);
+    console.log(`  PM             ${who('pm1')}   DXB-001 and AUH-003`);
+    console.log(`  PM             ${who('pm2')}   DXB-002 and DXB-004`);
+    console.log(`  Site engineer  ${who('se1')}   DXB-001 and DXB-004 only`);
+    console.log(`  Site engineer  ${who('se2')}   DXB-002 and AUH-003 only`);
   } else {
     console.log('\n  !! NO SUPABASE SERVICE ROLE KEY — identities were not created.');
     console.log('     The data is seeded but NOBODY CAN SIGN IN. Set the Supabase');

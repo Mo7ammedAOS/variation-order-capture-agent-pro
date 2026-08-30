@@ -2,6 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/session';
+import {
+  assignMember,
+  memberAssignSchema,
+  removeMember,
+  setMemberNotify,
+} from '@/services/project-member.service';
+import { contactSchema, createContact } from '@/services/contact.service';
 import { isAppError } from '@/lib/errors';
 import { contractRuleUpdateSchema, updateContractRules } from '@/services/project.service';
 
@@ -73,4 +80,113 @@ export async function saveContractRules(
 
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
+}
+
+/* ───────────────────────────── team ─────────────────────────────────────── */
+
+export interface MemberFormState {
+  error?: string;
+  ok?: string;
+}
+
+export async function assignMemberAction(
+  _prev: MemberFormState,
+  formData: FormData,
+): Promise<MemberFormState> {
+  const user = await requireUser();
+
+  const parsed = memberAssignSchema.safeParse({
+    projectId: formData.get('projectId'),
+    userId: formData.get('userId'),
+    projectRole: formData.get('projectRole'),
+    notifyOnChange: formData.get('notifyOnChange') === 'on',
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Check the details' };
+  }
+
+  try {
+    await assignMember(user, parsed.data);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  return { ok: 'Added to the project' };
+}
+
+/** Notification is toggled on its own, never as a side effect of a role change. */
+export async function toggleMemberNotifyAction(formData: FormData) {
+  const user = await requireUser();
+  const memberId = String(formData.get('memberId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  const notify = formData.get('notify') === 'true';
+
+  await setMemberNotify(user, memberId, notify);
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function removeMemberAction(formData: FormData) {
+  const user = await requireUser();
+  const memberId = String(formData.get('memberId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+
+  await removeMember(user, memberId);
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/* ──────────────────────────── contacts ──────────────────────────────────── */
+
+export interface ContactFormState {
+  error?: string;
+  ok?: string;
+}
+
+export async function createContactAction(
+  _prev: ContactFormState,
+  formData: FormData,
+): Promise<ContactFormState> {
+  const user = await requireUser();
+
+  const text = (key: string) => {
+    const value = formData.get(key);
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+  };
+
+  const parsed = contactSchema.safeParse({
+    projectId: formData.get('projectId'),
+    fullName: formData.get('fullName'),
+    companyName: text('companyName'),
+    jobTitle: text('jobTitle'),
+    email: text('email'),
+    phone: text('phone'),
+    contactType: text('contactType') ?? 'other',
+    // Authority is what makes an instruction binding, so each flag is explicit
+    // rather than inferred from the contact type. A client representative who
+    // cannot approve cost is common, and guessing would be worse than asking.
+    authorityVerified: formData.get('authorityVerified') === 'on',
+    canRequestChange: formData.get('canRequestChange') === 'on',
+    canIssueTechnicalInstruction: formData.get('canIssueTechnicalInstruction') === 'on',
+    canInstructWork: formData.get('canInstructWork') === 'on',
+    canApproveCost: formData.get('canApproveCost') === 'on',
+    canApproveTime: formData.get('canApproveTime') === 'on',
+    canSignFinalVo: formData.get('canSignFinalVo') === 'on',
+    notes: text('notes'),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Check the details' };
+  }
+
+  try {
+    await createContact(user, parsed.data);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  return { ok: `${parsed.data.fullName} added` };
 }

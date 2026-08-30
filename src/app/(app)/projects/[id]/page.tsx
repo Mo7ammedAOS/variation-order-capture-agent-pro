@@ -7,6 +7,7 @@ import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
 import { listContacts } from '@/services/contact.service';
 import { listMembers } from '@/services/project-member.service';
+import { listAssignableUsers } from '@/services/user.service';
 import { listPotentialChanges } from '@/services/potential-change.service';
 import { listDocuments } from '@/services/document.service';
 import { listTasks } from '@/services/task.service';
@@ -17,8 +18,12 @@ import { humanise } from '@/services/dashboard.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
 import { BackButton } from '@/components/ui/page-actions';
+import { AddMemberForm } from './team-form';
+import { AddContactForm } from './contact-form';
+import { toggleMemberNotifyAction } from './actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Money } from '@/components/domain/money';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
@@ -352,10 +357,15 @@ async function ContractRulesTab({
 }
 
 async function ContactsTab({ user, projectId }: { user: User; projectId: string }) {
-  const contacts = await listContacts(user, projectId);
-  if (contacts.length === 0) return <Empty message="No contacts recorded." />;
+  const [contacts, canManage] = await Promise.all([
+    listContacts(user, projectId),
+    hasCapability(user.systemRole, await getProjectRoles(user, projectId), 'contact.manage'),
+  ]);
 
   return (
+    <div className="flex flex-col gap-4">
+      {canManage ? <AddContactForm projectId={projectId} /> : null}
+      {contacts.length === 0 ? <Empty message="No contacts recorded." /> : (
     <Card className="overflow-hidden">
       <Table>
         <TableHeader>
@@ -401,38 +411,82 @@ async function ContactsTab({ user, projectId }: { user: User; projectId: string 
         </TableBody>
       </Table>
     </Card>
+      )}
+    </div>
   );
 }
 
 async function TeamTab({ user, projectId }: { user: User; projectId: string }) {
-  const members = await listMembers(user, projectId);
-  if (members.length === 0) return <Empty message="No one is assigned to this project." />;
+  const [members, canManage] = await Promise.all([
+    listMembers(user, projectId),
+    hasCapability(user.systemRole, await getProjectRoles(user, projectId), 'project.manageMembers'),
+  ]);
+
+  // Everyone not already on the project, so the picker cannot offer a
+  // duplicate assignment the service would then merge.
+  const assigned = new Set(members.map((m) => m.user.id));
+  const people = canManage
+    ? (await listAssignableUsers()).filter((p) => !assigned.has(p.id))
+    : [];
 
   return (
-    <Card className="overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Project role</TableHead>
-            <TableHead>Assigned</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {members.map((member) => (
-            <TableRow key={member.id}>
-              <TableCell className="font-medium">{member.user.fullName}</TableCell>
-              <TableCell className="text-muted-foreground">{member.user.email}</TableCell>
-              <TableCell>{PROJECT_ROLE_LABELS[member.projectRole]}</TableCell>
-              <TableCell className="tabular text-muted-foreground">
-                {formatDate(member.assignedAt)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Card>
+    <div className="flex flex-col gap-4">
+      {canManage ? <AddMemberForm projectId={projectId} people={people} /> : null}
+
+      {members.length === 0 ? (
+        <Empty message="No one is assigned to this project." />
+      ) : (
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Project role</TableHead>
+                <TableHead>Notified</TableHead>
+                <TableHead>Assigned</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map((member) => (
+                <TableRow key={member.id}>
+                  <TableCell className="font-medium">{member.user.fullName}</TableCell>
+                  <TableCell className="text-muted-foreground">{member.user.email}</TableCell>
+                  <TableCell>{PROJECT_ROLE_LABELS[member.projectRole]}</TableCell>
+                  <TableCell>
+                    {canManage ? (
+                      <form action={toggleMemberNotifyAction}>
+                        <input type="hidden" name="memberId" value={member.id} />
+                        <input type="hidden" name="projectId" value={projectId} />
+                        <input
+                          type="hidden"
+                          name="notify"
+                          value={String(!member.notifyOnChange)}
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant={member.notifyOnChange ? 'secondary' : 'ghost'}
+                        >
+                          {member.notifyOnChange ? 'Notified' : 'Not notified'}
+                        </Button>
+                      </form>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {member.notifyOnChange ? 'Yes' : 'No'}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular text-muted-foreground">
+                    {formatDate(member.assignedAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
   );
 }
 
