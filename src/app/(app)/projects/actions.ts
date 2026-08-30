@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { isAppError } from '@/lib/errors';
 import { createProject, projectCreateSchema, updateProject } from '@/services/project.service';
 
@@ -20,7 +20,7 @@ export async function createProjectAction(
   _prev: ProjectFormState,
   formData: FormData,
 ): Promise<ProjectFormState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   // Blank optional fields arrive as '' from a form. Zod's coercion turns '' into
   // 0 for a number and Invalid Date for a date, so they are nulled here rather
@@ -75,7 +75,7 @@ export async function createProjectAction(
  * record you reach for when the same client argues about the next one.
  */
 export async function setProjectStatusAction(formData: FormData) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const projectId = String(formData.get('projectId') ?? '');
   const projectStatus = String(formData.get('projectStatus') ?? '');
 

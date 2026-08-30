@@ -85,7 +85,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && pathname === '/login') {
+  // `reason` is the loop breaker, and it is load-bearing rather than cosmetic.
+  // A browser holding a token for an account the `users` table no longer
+  // accepts is sent here by /auth/signed-out. If the cookie clearing did not
+  // fully take, this rule would send it straight back to /dashboard, which
+  // fails, which sends it here again — an unbreakable cycle that a person
+  // cannot escape by refreshing or by navigating. Carrying the reason means
+  // the login page always wins that argument.
+  if (user && pathname === '/login' && !request.nextUrl.searchParams.has('reason')) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     redirectUrl.search = '';

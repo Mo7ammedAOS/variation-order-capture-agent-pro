@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { getMyTasks } from '@/services/task.service';
 import { formatDate } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 type TaskRow = Awaited<ReturnType<typeof getMyTasks>>['all'][number];
 
 export default async function MyTasksPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { overdue, dueToday, upcoming } = await getMyTasks(user);
 
   const nothing = overdue.length === 0 && dueToday.length === 0 && upcoming.length === 0;

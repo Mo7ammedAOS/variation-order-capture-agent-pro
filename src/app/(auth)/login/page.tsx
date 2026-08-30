@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Camera, Clock, HardHat, ShieldCheck } from 'lucide-react';
+import { Camera, Clock, HardHat, Info, ShieldCheck } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { LoginForm } from './login-form';
 
@@ -33,12 +33,30 @@ const PROMISES = [
   },
 ];
 
+/**
+ * Why a session ended, said in words rather than left as a mystery.
+ *
+ * Someone arriving here involuntarily has just had a page taken away from
+ * them. If the screen simply asks for a password again they will assume they
+ * mistyped it, try the same one, and be no wiser. The two account states are
+ * worth distinguishing because the remedy differs: one is "use your other
+ * account", the other is "your administrator has to act".
+ */
+const SIGN_OUT_REASONS: Record<string, string> = {
+  account_missing:
+    'That account is no longer set up in this company, so you have been signed out. Sign in with a current account, or ask your administrator to add you.',
+  account_deactivated:
+    'Your access has been switched off, so you have been signed out. Your administrator can switch it back on.',
+  signed_out: 'You have been signed out.',
+};
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; reason?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, reason } = await searchParams;
+  const notice = reason ? SIGN_OUT_REASONS[reason] : undefined;
 
   // Branding comes from company settings so a deployment looks like the client
   // company rather than like our product. Failing to read it must not block
@@ -95,6 +113,16 @@ export default async function LoginPage({
               </p>
             </div>
           </div>
+
+          {notice ? (
+            <p
+              role="status"
+              className="mb-5 flex items-start gap-2 rounded-xl bg-risk-amber-bg px-3.5 py-2.5 text-sm leading-snug text-risk-amber"
+            >
+              <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+              {notice}
+            </p>
+          ) : null}
 
           <LoginForm next={next} />
 

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { listProjects } from '@/services/project.service';
 import { toDateInputValue, todayUtc } from '@/lib/dates';
 import { EmptyState } from '@/components/domain/empty-state';
@@ -14,7 +14,7 @@ export default async function ReportChangePage({
 }: {
   searchParams: Promise<{ projectId?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { projectId } = await searchParams;
 
   // Only projects this person is actually on. The picker cannot offer a

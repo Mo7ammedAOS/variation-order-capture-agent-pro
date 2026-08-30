@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { HardHat, LogOut } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
 import { SYSTEM_ROLE_LABELS } from '@/lib/rbac';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { CommandTrigger } from './command-trigger';
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const settings = await prisma.companySettings
     .findFirst({ select: { displayCompanyName: true } })
     .catch(() => null);

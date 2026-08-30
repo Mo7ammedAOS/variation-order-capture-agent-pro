@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PartyPopper } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { listBottlenecks } from '@/services/bottleneck.service';
 import { humanise } from '@/services/dashboard.service';
 import { formatDate } from '@/lib/dates';
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: 'Bottlenecks' };
 export const dynamic = 'force-dynamic';
 
 export default async function BottlenecksPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const bottlenecks = await listBottlenecks(user);
 
   return (

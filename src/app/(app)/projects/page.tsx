@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FolderKanban, Plus } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { hasCapability } from '@/services/permissions.service';
 import { listProjects } from '@/services/project.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
@@ -21,7 +21,7 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { q } = await searchParams;
   const [projects, mayCreate] = await Promise.all([
     listProjects(user, { search: q }),

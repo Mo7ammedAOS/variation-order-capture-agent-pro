@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { getCompanySettings } from '@/services/company.service';
 import { hasCapability } from '@/services/permissions.service';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Company settings' };
 export const dynamic = 'force-dynamic';
 
 export default async function CompanySettingsPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const mayManage = await hasCapability(user.systemRole, [], 'companySettings.manage');
 
   if (!mayManage) {

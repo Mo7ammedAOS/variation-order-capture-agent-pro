@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import {
   AlertTriangle, ClipboardList, Copy, FileText, History, MapPin, Paperclip, User,
 } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
 import { prisma } from '@/lib/prisma';
@@ -43,7 +43,7 @@ export default async function PotentialChangeDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ evidenceFailed?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { id } = await params;
   // Set by the capture action when a photo failed to reach storage. Someone who
   // watched an upload and got no warning would believe the evidence exists.

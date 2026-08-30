@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
 import { listPotentialChanges } from '@/services/potential-change.service';
@@ -56,7 +56,7 @@ export default async function ProjectReportPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { id } = await params;
 
   let project;

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { isAppError } from '@/lib/errors';
 import { companySettingsSchema, updateCompanySettings } from '@/services/company.service';
 
@@ -14,7 +14,7 @@ export async function saveCompanySettingsAction(
   _prev: CompanyFormState,
   formData: FormData,
 ): Promise<CompanyFormState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   const text = (key: string) => {
     const value = formData.get(key);

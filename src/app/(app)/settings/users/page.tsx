@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: 'Users' };
 export const dynamic = 'force-dynamic';
 
 export default async function UsersPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   let users;
   try {

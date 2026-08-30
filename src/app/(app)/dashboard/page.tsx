@@ -3,7 +3,7 @@ import {
   AlertOctagon, CalendarClock, CalendarX2, ClipboardList,
   FileWarning, FolderKanban, Gavel, Timer, Wallet,
 } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { getOverview } from '@/services/dashboard.service';
 import { StatCard } from '@/components/domain/stat-card';
 import { formatMoney } from '@/components/domain/money';
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Overview' };
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { stats, charts } = await getOverview(user);
 
   return (

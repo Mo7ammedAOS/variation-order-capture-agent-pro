@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FileWarning, PanelRightOpen } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { listPotentialChanges } from '@/services/potential-change.service';
 import { listProjects } from '@/services/project.service';
 import { formatDate, daysSince } from '@/lib/dates';
@@ -23,7 +23,7 @@ export default async function VariationsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const params = await searchParams;
 
   const [changes, projects] = await Promise.all([

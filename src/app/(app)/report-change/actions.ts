@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { isAppError } from '@/lib/errors';
 import {
   createPotentialChange,
@@ -25,7 +25,7 @@ export interface ReportState {
  * capture because a network hiccup ate a JPEG would be exactly backwards.
  */
 export async function reportChange(_prev: ReportState, formData: FormData): Promise<ReportState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   const parsed = potentialChangeCreateSchema.safeParse({
     projectId: formData.get('projectId'),

@@ -76,6 +76,35 @@ describe('middleware', () => {
     expect(new URL(response.headers.get('location') ?? '').pathname).toBe('/dashboard');
   });
 
+  /**
+   * The regression this exists for took the deployment down on 2026-08-30.
+   *
+   * Middleware trusts the token; the render trusts the `users` table. When a
+   * live token belongs to an account the table no longer accepts, the render
+   * sends the browser to /auth/signed-out, which clears the cookies and lands
+   * on /login. If the rule above still fired there — signed in, so go to
+   * /dashboard — a browser whose cookies had not fully cleared would cycle
+   * between the two forever, with no page it could reach and no way out by
+   * refreshing. The reason parameter is what breaks that cycle.
+   */
+  it('leaves the login page alone when it carries a sign-out reason', async () => {
+    currentUser = { id: 'user-1' };
+
+    const response = await middleware(request('/login?reason=account_missing'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('lets the sign-out route run while still holding a valid token', async () => {
+    currentUser = { id: 'user-1' };
+
+    const response = await middleware(request('/auth/signed-out?reason=account_missing'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
   it('lets a signed-in API call through to the route handler', async () => {
     currentUser = { id: 'user-1' };
 

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import {
   assignMember,
   memberAssignSchema,
@@ -33,7 +33,7 @@ export async function saveContractRules(
   _prev: ContractRulesState,
   formData: FormData,
 ): Promise<ContractRulesState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const projectId = String(formData.get('projectId') ?? '');
 
   const raw = Object.fromEntries(
@@ -93,7 +93,7 @@ export async function assignMemberAction(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   const parsed = memberAssignSchema.safeParse({
     projectId: formData.get('projectId'),
@@ -119,7 +119,7 @@ export async function assignMemberAction(
 
 /** Notification is toggled on its own, never as a side effect of a role change. */
 export async function toggleMemberNotifyAction(formData: FormData) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const memberId = String(formData.get('memberId') ?? '');
   const projectId = String(formData.get('projectId') ?? '');
   const notify = formData.get('notify') === 'true';
@@ -129,7 +129,7 @@ export async function toggleMemberNotifyAction(formData: FormData) {
 }
 
 export async function removeMemberAction(formData: FormData) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const memberId = String(formData.get('memberId') ?? '');
   const projectId = String(formData.get('projectId') ?? '');
 
@@ -148,7 +148,7 @@ export async function createContactAction(
   _prev: ContactFormState,
   formData: FormData,
 ): Promise<ContactFormState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   const text = (key: string) => {
     const value = formData.get(key);

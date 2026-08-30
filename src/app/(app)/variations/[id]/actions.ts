@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { assessNotice, noticeAssessmentSchema } from '@/services/notice.service';
 import { changeStatus, statusChangeSchema } from '@/services/potential-change.service';
 import { isAppError } from '@/lib/errors';
@@ -20,7 +20,7 @@ export async function submitNoticeAssessment(
   _prev: AssessmentState,
   formData: FormData,
 ): Promise<AssessmentState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const potentialChangeId = String(formData.get('potentialChangeId') ?? '');
 
   const parsed = noticeAssessmentSchema.safeParse({
@@ -62,7 +62,7 @@ export async function submitStatusChange(
   _prev: StatusState,
   formData: FormData,
 ): Promise<StatusState> {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const potentialChangeId = String(formData.get('potentialChangeId') ?? '');
 
   const parsed = statusChangeSchema.safeParse({

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { inviteSchema, inviteUser, setCompanyAdmin, setUserActive } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 
@@ -14,7 +14,7 @@ export async function inviteUserAction(
   _prev: InviteState,
   formData: FormData,
 ): Promise<InviteState> {
-  const actor = await requireUser();
+  const actor = await requirePageUser();
 
   const parsed = inviteSchema.safeParse({
     email: formData.get('email'),
@@ -40,7 +40,7 @@ export async function inviteUserAction(
 }
 
 export async function toggleUserActiveAction(formData: FormData) {
-  const actor = await requireUser();
+  const actor = await requirePageUser();
   const userId = String(formData.get('userId') ?? '');
   const active = formData.get('active') === 'true';
 
@@ -55,7 +55,7 @@ export async function toggleUserActiveAction(formData: FormData) {
  * the Finance Manager. The service refuses to leave the company with none.
  */
 export async function toggleCompanyAdminAction(formData: FormData) {
-  const actor = await requireUser();
+  const actor = await requirePageUser();
   const userId = String(formData.get('userId') ?? '');
   const canAdminister = formData.get('canAdminister') === 'true';
 

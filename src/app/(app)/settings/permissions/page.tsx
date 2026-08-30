@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { listPermissions } from '@/services/permissions.service';
 import { isAppError } from '@/lib/errors';
 import { PROJECT_ROLE_LABELS, SYSTEM_ROLE_LABELS, type Capability } from '@/lib/rbac';
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const LOCKED_PROJECT_ROLES = new Set(['client_viewer', 'consultant_viewer']);
 
 export default async function PermissionsPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   let rows;
   try {

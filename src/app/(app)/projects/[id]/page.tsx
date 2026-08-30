@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FileText } from 'lucide-react';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { getProject } from '@/services/project.service';
 import { getProjectDashboard } from '@/services/dashboard.service';
 import { listContacts } from '@/services/contact.service';
@@ -59,7 +59,7 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePageUser();
   const { id } = await params;
   const { tab: rawTab } = await searchParams;
 
@@ -133,7 +133,7 @@ export default async function ProjectDetailPage({
   );
 }
 
-type User = Awaited<ReturnType<typeof requireUser>>;
+type User = Awaited<ReturnType<typeof requirePageUser>>;
 
 async function OverviewTab({ user, projectId }: { user: User; projectId: string }) {
   const data = await getProjectDashboard(user, projectId);
@@ -251,7 +251,7 @@ async function ContractRulesTab({
   projectId,
   rules,
 }: {
-  user: Awaited<ReturnType<typeof requireUser>>;
+  user: Awaited<ReturnType<typeof requirePageUser>>;
   projectId: string;
   rules: Awaited<ReturnType<typeof getProject>>['contractRules'];
 }) {

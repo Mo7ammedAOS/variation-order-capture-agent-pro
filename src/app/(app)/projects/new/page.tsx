@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { hasCapability } from '@/services/permissions.service';
 import { Card, CardContent } from '@/components/ui/card';
 import { BackButton } from '@/components/ui/page-actions';
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'New project' };
 export const dynamic = 'force-dynamic';
 
 export default async function NewProjectPage() {
-  const user = await requireUser();
+  const user = await requirePageUser();
 
   // Asked of the same source the service consults, so this page can never
   // offer a form the server would then refuse.

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth/session';
+import { requirePageUser } from '@/lib/auth/session';
 import { isAppError } from '@/lib/errors';
 import { resetPermissionsToDefaults, setPermission } from '@/services/permissions.service';
 
@@ -14,7 +14,7 @@ export async function togglePermissionAction(
   _prev: PermissionState,
   formData: FormData,
 ): Promise<PermissionState> {
-  const actor = await requireUser();
+  const actor = await requirePageUser();
 
   const scope = String(formData.get('scope') ?? '');
   const role = String(formData.get('role') ?? '');
@@ -43,7 +43,7 @@ export async function resetPermissionsAction(
   _prev: PermissionState,
   _formData: FormData,
 ): Promise<PermissionState> {
-  const actor = await requireUser();
+  const actor = await requirePageUser();
 
   try {
     const { restored } = await resetPermissionsToDefaults(actor);
