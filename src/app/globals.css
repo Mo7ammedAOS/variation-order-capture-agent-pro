@@ -55,6 +55,28 @@
   --risk-neutral: oklch(0.55 0.02 258);
   --risk-neutral-bg: oklch(0.96 0.006 255);
 
+  /*
+    PANEL GRADIENTS — the mosaic language.
+
+    Five soft grounds, each owning one kind of information, so a person learns
+    where to look before they read anything. They are DECORATIVE and carry no
+    commercial meaning, which is what keeps them clear of the RAG scale above:
+    on this product a red chip means a deadline is at risk, and nothing else in
+    the interface may borrow that vocabulary.
+  */
+  --panel-notice: linear-gradient(135deg, #f9d9e9 0%, #fbdfec 55%, #fce6f1 100%);
+  --panel-connect: linear-gradient(180deg, #fcfdfd 0%, #f4f7f9 30%, #e2ebef 66%, #cedce4 100%);
+  --panel-work: linear-gradient(168deg, #e2ebc9 0%, #e9f0c4 48%, #f0f4b8 78%, #f3f5b0 100%);
+  --panel-insight: linear-gradient(180deg, #f9f1e8 0%, #f7efe6 100%);
+  --panel-search: linear-gradient(103deg, #eae9f5 0%, #e2e0f1 34%, #cfcdea 72%, #c2c0e6 100%);
+
+  /* The mosaic ground and the chrome that sits on it. */
+  --mosaic-ground: #f0f0f0;
+  --panel-radius: 22px;
+  --panel-edge: rgba(255, 255, 255, 0.92);
+  --panel-shadow: 0 2px 16px rgba(24, 30, 45, 0.045);
+  --panel-shadow-lifted: 0 8px 28px rgba(24, 30, 45, 0.09);
+
   /* charts */
   --chart-1: oklch(0.53 0.19 259);
   --chart-2: oklch(0.62 0.15 150);
@@ -113,6 +135,9 @@
 }
 
 @theme inline {
+  --font-sans: var(--font-jakarta), -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -238,5 +263,68 @@
 
   a[href]::after {
     content: none;
+  }
+}
+
+/*
+  THE MOSAIC PANEL.
+
+  One soft-gradient surface with a white edge and a shadow so faint it reads as
+  depth rather than as a border. `.panel` is the shape; the `.panel-*` variants
+  only change the ground, so a panel can be re-themed without touching layout.
+
+  The white 1.6px edge is doing real work: on a light ground these surfaces
+  would otherwise bleed into the page, and the edge is what separates them
+  without drawing a line anyone consciously sees.
+*/
+@layer components {
+  .panel {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--panel-radius);
+    border: 1.6px solid var(--panel-edge);
+    box-shadow: var(--panel-shadow);
+    background: var(--card);
+  }
+
+  .panel-notice { background: var(--panel-notice); }
+  .panel-connect { background: var(--panel-connect); }
+  .panel-work { background: var(--panel-work); }
+  .panel-insight { background: var(--panel-insight); }
+  .panel-search { background: var(--panel-search); }
+
+  /*
+    A pill on a panel. The ring is a box-shadow rather than a border because a
+    border would add to the element's box and shift everything beside it by a
+    pixel when the state changes.
+  */
+  .panel-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0 1rem;
+    background: linear-gradient(
+      180deg,
+      rgba(247, 253, 255, 0.97) 0%,
+      rgba(240, 250, 254, 0.93) 100%
+    );
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.047);
+    backdrop-filter: blur(7px);
+    white-space: nowrap;
+  }
+}
+
+/*
+  Anyone who has asked not to see motion gets none of it. This covers the
+  entrance choreography as well as hovers.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

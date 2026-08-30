@@ -1,5 +1,16 @@
 import type { Metadata, Viewport } from 'next';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+  // Numbers sit in tables of money and dates, where a wandering column edge
+  // reads as a mistake in the figures.
+  adjustFontFallback: true,
+});
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const dir = locale === 'en' ? 'ltr' : 'rtl';
 
   return (
-    <html lang={locale} dir={dir} suppressHydrationWarning>
+    <html lang={locale} dir={dir} className={jakarta.variable} suppressHydrationWarning>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );
