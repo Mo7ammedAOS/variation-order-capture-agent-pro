@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Phase 1 — running against the live Supabase database.**
+**Phase 1 — DEPLOYED and live at https://vo.osmanflow.com.**
 Last updated 2026-08-30.
 
 ## Gates
@@ -14,13 +14,61 @@ npm run db:migrate  PASS — 4 migrations: schema, capture source fields,
                     pgvector indexes, row level security
 npm run db:seed     PASS — 12 users, 5 projects, 20 changes, 25 tasks,
                     11 bottlenecks from the real sweep, 20 local embeddings
-deploy/release.sh   NOT RUN — domain settled (vo.osmanflow.com); waiting on
-                    the DNS A record and SSH access to the VPS
+deployment         LIVE — https://vo.osmanflow.com, valid Let's Encrypt
+                    certificate, HSTS, sign-in and project scoping verified
+                    from outside on a phone viewport
 ```
 
 The database is live. Outstanding: the deployment domain, and the Google Drive
 decision (Workspace + Shared Drive, or a personal Gmail with an OAuth refresh
 token). `STORAGE_PROVIDER=local` works fully in the meantime.
+
+## Deployment, 2026-08-30
+
+Live on the Hostinger VPS `srv1859636` behind the Traefik that already fronts
+n8n. n8n stayed up throughout — Traefik discovers the new container from labels,
+so there was no shared config file to reload and no way for this to take n8n
+down.
+
+| Page | Warm |
+|---|---|
+| sign-in → dashboard | 1,979 ms |
+| dashboard | 1,300 ms |
+| register | 1,313 ms |
+| my tasks | 1,195 ms |
+| capture form | 1,206 ms |
+
+Verified from outside: valid certificate, HSTS, `http` → `https`, a signed-out
+`/api/*` returning 401 JSON rather than a redirect, a Site Engineer seeing only
+his two projects, and a change on a project he is not assigned to returning
+**403** from the API and **404** from the page.
+
+### Four faults the first deploy exposed
+
+Each one had been sitting in code that had never been built or run.
+
+**`NEXT_PUBLIC_*` were build-time placeholders.** Next inlines them into the
+compiled output including the Edge middleware, so the middleware asked a
+Supabase project that does not exist whether the cookie was valid, found no
+session, and redirected every user to `/login` forever — with no error anywhere,
+while the login page rendered from the real database and credentials were
+accepted. They are required build args now and the build fails without them.
+
+**Evidence photos had no volume.** `LOCAL_STORAGE_ROOT=./.uploads` wrote into the
+container, so every rebuild would have destroyed them silently: the rows survive
+and only the bytes vanish, discovered months later when a photo is needed to
+defend a variation.
+
+**The Dockerfile had never been built.** It copied `/app/public`, which does not
+exist, and the model cache from `/root/.cache/huggingface`, where
+transformers.js does not put it.
+
+**`prisma migrate deploy` could not run in the runner.** Next's standalone output
+traces a subset of `node_modules`, and the hand-copied Prisma CLI's own
+dependencies were not in it. Migrations now run from the build stage.
+
+Plus: the reverse proxy was Traefik, not the Caddy every deployment document
+had described.
 
 ## Phase 1 goals
 

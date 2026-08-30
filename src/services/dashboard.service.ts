@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { humanise } from '@/lib/labels';
 import { NOTICE_OUTSTANDING_STATUSES } from '@/services/notice.service';
 import { todayUtc } from '@/lib/dates';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
@@ -162,31 +163,5 @@ function tally(values: string[]): { label: string; count: number }[] {
     .sort((a, b) => b.count - a.count);
 }
 
-/**
- * Trade acronyms, which are not words and must not be title-cased into ones.
- *
- * `qs_pricing` became "Qs Pricing" on the printed register — a document that
- * goes to a consultant. In this industry QS, CM and PM are how people are
- * addressed, and getting them wrong on a commercial document reads as though
- * the document was produced by somebody who does not work here.
- */
-const ACRONYMS = new Set(['qs', 'pm', 'cm', 'md', 'mep', 'eot', 'vo', 'rfi', 'si', 'boq', 'hse']);
-
-/** Proper nouns that own their own capitalisation. */
-const PROPER_NOUNS: Record<string, string> = {
-  whatsapp: 'WhatsApp',
-};
-
-export function humanise(value: string): string {
-  const words = value.replace(/_/g, ' ').split(' ');
-
-  return words
-    .map((word, index) => {
-      const lower = word.toLowerCase();
-      if (ACRONYMS.has(lower)) return word.toUpperCase();
-      if (PROPER_NOUNS[lower]) return PROPER_NOUNS[lower];
-      if (index === 0) return word.charAt(0).toUpperCase() + word.slice(1);
-      return word;
-    })
-    .join(' ');
-}
+/** Re-exported so existing imports from this service keep working. */
+export { humanise };

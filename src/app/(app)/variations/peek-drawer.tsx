@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ExternalLink, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { humanise } from '@/lib/labels';
 
 /**
  * The register peek.
@@ -40,20 +41,6 @@ interface PeekChange {
   project: { projectCode: string; projectName: string };
 }
 
-function humanise(value: string) {
-  const ACRONYMS = new Set(['qs', 'pm', 'cm', 'md', 'mep', 'eot', 'vo', 'rfi', 'si']);
-  return value
-    .replace(/_/g, ' ')
-    .split(' ')
-    .map((word, index) =>
-      ACRONYMS.has(word.toLowerCase())
-        ? word.toUpperCase()
-        : index === 0
-          ? word.charAt(0).toUpperCase() + word.slice(1)
-          : word,
-    )
-    .join(' ');
-}
 
 export function PeekDrawer() {
   const [id, setId] = useState<string | null>(null);

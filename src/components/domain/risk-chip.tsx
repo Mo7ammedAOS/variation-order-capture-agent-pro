@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import type { RiskLevel } from '@prisma/client';
 import { Badge } from '@/components/ui/badge';
+import { humanise } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
 const CONFIG = {
@@ -33,10 +34,8 @@ export function RiskChip({
 }
 
 export function StatusChip({ status }: { status: string }) {
-  const text = status.replace(/_/g, ' ');
-  return (
-    <Badge variant="secondary" className="capitalize">
-      {text}
-    </Badge>
-  );
+  // No `capitalize` class: humanise() already decided the casing, and the class
+  // would title-case the acronyms it deliberately left alone — which is how
+  // "QS pricing" was rendering as "Qs Pricing" on the register.
+  return <Badge variant="secondary">{humanise(status)}</Badge>;
 }

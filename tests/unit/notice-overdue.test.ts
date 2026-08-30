@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isNoticeOverdue, NOTICE_OUTSTANDING_STATUSES } from '@/services/notice.service';
-import { humanise } from '@/services/dashboard.service';
+import { humanise } from '@/lib/labels';
 
 /**
  * One definition of "overdue", used by the dashboard, the register and the
