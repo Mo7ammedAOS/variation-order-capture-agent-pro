@@ -75,6 +75,13 @@ COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/p
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.bin ./node_modules/.bin
 
+# Evidence lives here when STORAGE_PROVIDER=local, and a named volume is mounted
+# over it. Creating it in the image, owned by the app user, is what makes that
+# work: Docker seeds a fresh named volume from the image directory including its
+# ownership, so the non-root process can write to it. Without this the volume
+# arrives root-owned and every upload fails with EACCES.
+RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data
+
 USER nextjs
 EXPOSE 3000
 

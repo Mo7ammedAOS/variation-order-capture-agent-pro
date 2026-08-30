@@ -41,6 +41,12 @@ services:
       - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.frameDeny=true'
       - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.browserXssFilter=true'
       - 'traefik.http.middlewares.${TRAEFIK_ROUTER:-vo}-headers.headers.referrerPolicy=strict-origin-when-cross-origin'
+    volumes:
+      # Evidence photographs, when STORAGE_PROVIDER=local. Without this they
+      # live in the container's writable layer and every rebuild destroys them
+      # — silently, since the database rows survive and only the files vanish.
+      # Set LOCAL_STORAGE_ROOT=/data/uploads to match.
+      - evidence_data:/data/uploads
     depends_on:
       redis:
         condition: service_healthy
@@ -61,6 +67,8 @@ services:
     labels:
       - 'traefik.enable=false'
     command: ['node', '-e', "require('./server.js')"]
+    volumes:
+      - evidence_data:/data/uploads
     depends_on:
       app:
         condition: service_started
@@ -88,3 +96,4 @@ services:
 
 volumes:
   redis_data:
+  evidence_data:
