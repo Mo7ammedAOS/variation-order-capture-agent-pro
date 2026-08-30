@@ -27,15 +27,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# next build needs the env contract satisfied. These are BUILD-TIME placeholders
-# only — the real values arrive as runtime environment. Nothing secret is baked
-# into the image, and src/lib/env.ts refuses to start in production against a
-# placeholder, so a misconfigured deploy fails loudly instead of running blind.
+# NEXT_PUBLIC_* MUST be real at build time. They are not runtime configuration.
+#
+# Next INLINES every NEXT_PUBLIC_ variable into the compiled output — client
+# bundles and, critically, the Edge middleware. Supplying placeholders here and
+# the real values at runtime produces an app whose server code is correctly
+# configured and whose middleware talks to a Supabase project that does not
+# exist. It finds no session for any cookie and redirects every user to the
+# login page forever, with no error logged anywhere. That is exactly what the
+# first production deploy did.
+#
+# The anon key is designed to be public — it ships to browsers by definition —
+# so baking it in costs nothing. The consequence to know is that the IMAGE IS
+# CLIENT-SPECIFIC: a second client needs its own build, not just its own .env.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" \
+ && test -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+ || (echo "ERROR: build args NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required." \
+     && echo "       Without them the middleware is compiled against a Supabase project that" \
+     && echo "       does not exist, and every sign-in silently loops back to /login." && exit 1)
+
+# The remaining values are genuine build-time placeholders: they are read at
+# runtime from the environment, never inlined, and src/lib/env.ts refuses to
+# start in production against a placeholder.
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
     DATABASE_URL="postgresql://build:build@localhost:5432/build" \
-    NEXT_PUBLIC_SUPABASE_URL="https://build.supabase.co" \
-    NEXT_PUBLIC_SUPABASE_ANON_KEY="build" \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     SUPABASE_SERVICE_ROLE_KEY="build" \
     N8N_WEBHOOK_SECRET="build-time-only-secret"
 

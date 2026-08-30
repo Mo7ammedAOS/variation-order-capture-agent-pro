@@ -19,6 +19,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Inlined by Next at build time, not read at runtime. See the Dockerfile:
+      # placeholders here compile a middleware that authenticates against a
+      # Supabase project that does not exist, and every sign-in loops silently.
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     image: vo-capture-control:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: [.env.production]
@@ -92,6 +98,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: build
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     image: vo-capture-control-migrate:${IMAGE_TAG:-latest}
     env_file: [.env.production]
     command: ['npx', 'prisma', 'migrate', 'deploy']
