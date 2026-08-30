@@ -18,8 +18,11 @@ docker compose --env-file "$ENV_FILE" build
 echo "==> Applying migrations"
 # Runs against DIRECT_URL. `migrate deploy` never generates or resets; it only
 # applies what is already committed, which is what you want on a live database.
-docker compose --env-file "$ENV_FILE" run --rm --no-deps app \
-  npx prisma migrate deploy
+#
+# Uses the `migrate` service, which is the BUILD stage: the runner has no
+# complete node_modules, so the Prisma CLI there cannot load its own
+# dependencies.
+docker compose --env-file "$ENV_FILE" --profile tools run --rm --no-deps migrate
 
 # pgvector indexes and RLS policies are MIGRATIONS now, applied by the step
 # above. They used to be run here from prisma/sql/*.sql, which meant a database

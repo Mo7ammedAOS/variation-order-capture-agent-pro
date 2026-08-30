@@ -76,6 +76,30 @@ services:
         condition: service_healthy
     profiles: ['workers']
 
+  # Migrations, from the BUILD stage rather than the runner.
+  #
+  # The runner carries only the subset of node_modules that Next's standalone
+  # output traced, plus a hand-picked copy of the Prisma CLI — and that CLI's
+  # own dependencies were not traced, so `prisma migrate deploy` there dies with
+  # MODULE_NOT_FOUND inside @prisma/config. The build stage has the complete
+  # dependency tree and is already built and cached, so this costs a tag rather
+  # than a second build.
+  #
+  # Under a profile, so it never starts with the stack. It is run explicitly by
+  # deploy/release.sh, before the new code serves traffic.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    image: vo-capture-control-migrate:${IMAGE_TAG:-latest}
+    env_file: [.env.production]
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    labels:
+      - 'traefik.enable=false'
+    profiles: ['tools']
+    restart: 'no'
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
