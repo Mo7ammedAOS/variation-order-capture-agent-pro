@@ -35,6 +35,7 @@ export const getCurrentUser = cache(async (): Promise<AuthenticatedUser | null> 
   const { data, error } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
 
+  if (error) console.warn('[auth] getClaims failed in session:', error.message);
   if (error || !userId) return null;
 
   const record = await prisma.user.findUnique({ where: { id: userId } });

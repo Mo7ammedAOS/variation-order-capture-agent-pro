@@ -54,7 +54,17 @@ export async function middleware(request: NextRequest) {
   // navigation. `getClaims()` still verifies the token properly; it just does
   // it in process, and falls back to the network by itself if the project ever
   // returns to symmetric signing keys.
-  const { data: claims } = await supabase.auth.getClaims();
+  const { data: claims, error: claimsError } = await supabase.auth.getClaims();
+
+  // A rejected token and an unreachable JWKS endpoint both arrive here as
+  // "not signed in", and the difference matters enormously: one is a signed-out
+  // visitor, the other is every user in the deployment being bounced to the
+  // login page by an infrastructure fault. Silence made that indistinguishable
+  // once already, so it is logged.
+  if (claimsError) {
+    console.warn('[auth] getClaims failed:', claimsError.message);
+  }
+
   const user = claims?.claims?.sub ? { id: claims.claims.sub } : null;
 
   const { pathname } = request.nextUrl;
