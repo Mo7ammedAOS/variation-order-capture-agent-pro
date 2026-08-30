@@ -8,7 +8,7 @@ import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
 import { prisma } from '@/lib/prisma';
-import { formatDate, formatDateTime, daysSince } from '@/lib/dates';
+import { toDateInputValue, formatDate, formatDateTime, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
@@ -23,6 +23,7 @@ import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
+import { EditPanel } from './edit-panel';
 import { StatusForm } from './status-form';
 
 export const dynamic = 'force-dynamic';
@@ -125,6 +126,27 @@ export default async function PotentialChangeDetailPage({
         })),
       )
     : [];
+
+  /*
+    Correcting your own report.
+
+    `updateOwn` is a separate right from `update` because they are different
+    acts: fixing what you wrote is not rewriting what a colleague wrote. Both
+    are asked here, and the answer decides whether the panel appears at all —
+    a form you are not allowed to submit is worse than no form.
+  */
+  const [mayEditAny, mayEditOwn, mayReopen, mayUpload] = await Promise.all([
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.update'),
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.updateOwn'),
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.reopen'),
+    hasCapability(user.systemRole, projectRoles, 'document.upload'),
+  ]);
+
+  const isReporter = change.reportedByUserId === user.id;
+  const canEdit = mayEditAny || (isReporter && mayEditOwn);
+  const editableNow = ['new_potential_change', 'notice_assessment', 'needs_evidence'].includes(
+    change.currentStatus,
+  );
 
   const awaitingAssessment = change.noticeStatus === 'not_assessed' && !mayAssess;
   const assessors = awaitingAssessment
@@ -322,6 +344,23 @@ export default async function PotentialChangeDetailPage({
           ) : null}
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+
+          <EditPanel
+            potentialChangeId={change.id}
+            projectId={change.projectId}
+            canEdit={canEdit}
+            canReopen={mayReopen && change.currentStatus !== 'cancelled'}
+            canAddEvidence={mayUpload}
+            editableNow={editableNow}
+            current={{
+              title: change.title,
+              description: change.description ?? '',
+              location: change.location ?? '',
+              trade: change.trade ?? '',
+              eventDate: toDateInputValue(change.eventDate),
+              workStatus: change.workStatus,
+            }}
+          />
 
           {awaitingAssessment ? (
             <Card tone={assessors.length === 0 || assignedToViewer ? 'notice' : 'plain'}>

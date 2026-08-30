@@ -3,7 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { requirePageUser } from '@/lib/auth/session';
 import { assessNotice, noticeAssessmentSchema } from '@/services/notice.service';
-import { changeStatus, statusChangeSchema } from '@/services/potential-change.service';
+import {
+  changeStatus,
+  potentialChangeUpdateSchema,
+  reopenPotentialChange,
+  reopenSchema,
+  statusChangeSchema,
+  updatePotentialChange,
+} from '@/services/potential-change.service';
+import { uploadDocument } from '@/services/document.service';
 import { isAppError } from '@/lib/errors';
 import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
 
@@ -139,4 +147,130 @@ export async function decideApprovalAction(
     if (isAppError(error)) return { error: error.message };
     throw error;
   }
+}
+
+export interface EditState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * The reporter correcting their own account.
+ *
+ * Only the fields a person who was standing there would fix. Money and
+ * programme are not here: those belong to whoever prices it, and letting the
+ * reporter set them would put a number on the file that nobody with the
+ * authority to stand behind it has seen.
+ */
+export async function updateChangeAction(
+  _prev: EditState,
+  formData: FormData,
+): Promise<EditState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+
+  const parsed = potentialChangeUpdateSchema.safeParse({
+    title: formData.get('title') || undefined,
+    description: formData.get('description') || undefined,
+    location: formData.get('location') || undefined,
+    trade: formData.get('trade') || undefined,
+    eventDate: formData.get('eventDate') || undefined,
+    workStatus: formData.get('workStatus') || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Check the details and try again' };
+  }
+
+  try {
+    await updatePotentialChange(user, id, parsed.data);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/variations/${id}`);
+  return { ok: 'Saved. The change history records what you altered.' };
+}
+
+/**
+ * Sending it back for rework. Withdraws pending approvals, which is why it
+ * insists on a reason and says plainly what it withdrew.
+ */
+export async function reopenChangeAction(
+  _prev: EditState,
+  formData: FormData,
+): Promise<EditState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+
+  const parsed = reopenSchema.safeParse({ reason: formData.get('reason') });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Give a reason' };
+  }
+
+  try {
+    const { approvalsWithdrawn } = await reopenPotentialChange(user, id, parsed.data);
+    revalidatePath(`/variations/${id}`);
+    revalidatePath('/my-tasks');
+    return {
+      ok:
+        approvalsWithdrawn > 0
+          ? `Reopened. ${approvalsWithdrawn} pending approval${approvalsWithdrawn === 1 ? ' was' : 's were'} withdrawn and nobody is being chased for them.`
+          : 'Reopened and back with you for rework.',
+    };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * More evidence, added later.
+ *
+ * Never gated on the change's stage, and never treated as an edit. A
+ * photograph that turns up a week later does not contradict anything anybody
+ * approved — it only makes the file stronger, and refusing it would push
+ * people into raising a duplicate change to carry one picture.
+ */
+export async function addEvidenceAction(
+  _prev: EditState,
+  formData: FormData,
+): Promise<EditState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+
+  const files = formData
+    .getAll('evidence')
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  if (files.length === 0) return { error: 'Choose at least one photograph or file' };
+
+  let failed = 0;
+  for (const file of files) {
+    try {
+      await uploadDocument(user, {
+        projectId,
+        potentialChangeId: id,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        content: Buffer.from(await file.arrayBuffer()),
+      });
+    } catch (error) {
+      failed++;
+      console.error('[variations] evidence upload failed', error);
+    }
+  }
+
+  revalidatePath(`/variations/${id}`);
+
+  if (failed === files.length) {
+    return { error: 'Nothing uploaded. Check your signal and try again.' };
+  }
+  // Said out loud rather than swallowed: someone who watched an upload and got
+  // no warning would believe the evidence is there.
+  if (failed > 0) {
+    return { ok: `${files.length - failed} added, ${failed} failed. Try the rest again.` };
+  }
+  return { ok: `${files.length} added.` };
 }

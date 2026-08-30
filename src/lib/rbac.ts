@@ -35,6 +35,8 @@ export const ALL_CAPABILITIES = [
   'document.manageRegister',
   'potentialChange.create',
   'potentialChange.update',
+  'potentialChange.updateOwn',
+  'potentialChange.reopen',
   'potentialChange.assessNotice',
   'potentialChange.changeStatus',
   'approval.projectManager',

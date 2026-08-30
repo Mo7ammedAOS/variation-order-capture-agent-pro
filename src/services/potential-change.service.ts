@@ -2,14 +2,14 @@ import 'server-only';
 import type { Prisma, PotentialChangeStatus, RiskLevel } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { NotFoundError, ValidationError } from '@/lib/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/errors';
 import { calculateNoticeDueDate, todayUtc } from '@/lib/dates';
 import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit, diffChanges } from '@/services/audit-log.service';
 import { assertProjectAccess, scopeToUser } from '@/services/project-access.service';
-import { pickResponsibleMember } from '@/services/permissions.service';
+import { hasCapability, pickResponsibleMember } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { openGate } from '@/services/approval.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
@@ -320,6 +320,172 @@ export const potentialChangeUpdateSchema = potentialChangeCreateSchema
   .partial()
   .omit({ projectId: true, urgency: true });
 
+/**
+ * Who may edit a Potential Change, and when.
+ *
+ * ── Two different rights ───────────────────────────────────────────────────
+ * `potentialChange.update` is editing ANYBODY's change. `updateOwn` is
+ * correcting your own report, and it is the one a site engineer holds. They
+ * are separate because they are different acts: fixing what you wrote is not
+ * the same as rewriting what a colleague wrote.
+ *
+ * Why the reporter needs it at all: a site engineer files from a phone, on
+ * site, often one-handed, and what they write is a first account rather than a
+ * final one. With no way to correct it they raise a SECOND change describing
+ * the same event — and a duplicate is worse than a typo, because now there are
+ * two records of one thing and somebody has to explain which is real.
+ *
+ * ── Editing stops where deciding starts ────────────────────────────────────
+ * Once a change has moved past assessment, people have made decisions ABOUT
+ * ITS CONTENT. Editing underneath them would leave two directors' approvals
+ * attached to wording they never read, which is precisely the document you
+ * cannot defend when the client's QS challenges it. Past that point the route
+ * is `reopenPotentialChange`: the same edit, but announced, reasoned, and it
+ * takes the approvals down with it.
+ */
+const EDITABLE_STATUSES: readonly PotentialChangeStatus[] = [
+  'new_potential_change',
+  'notice_assessment',
+  'needs_evidence',
+];
+
+async function assertEditable(
+  user: AuthenticatedUser,
+  existing: {
+    projectId: string;
+    reportedByUserId: string | null;
+    currentStatus: PotentialChangeStatus;
+  },
+): Promise<void> {
+  const { projectRoles } = await assertProjectAccess(user, existing.projectId);
+
+  const mayEditAnything = await hasCapability(
+    user.systemRole,
+    projectRoles,
+    'potentialChange.update',
+  );
+
+  if (!mayEditAnything) {
+    const isReporter = existing.reportedByUserId === user.id;
+    const mayEditOwn = await hasCapability(
+      user.systemRole,
+      projectRoles,
+      'potentialChange.updateOwn',
+    );
+    if (!isReporter || !mayEditOwn) {
+      throw new ForbiddenError(
+        isReporter
+          ? 'You are not permitted to edit changes.'
+          : 'You can only edit a change you reported yourself.',
+      );
+    }
+  }
+
+  if (!EDITABLE_STATUSES.includes(existing.currentStatus)) {
+    throw new ValidationError(
+      `This change has moved on to ${humaniseStatus(existing.currentStatus)}, and people have ` +
+        'decided things about what it currently says. Reopen it instead, with a reason — that ' +
+        'sends it back for rework and withdraws any approval already given.',
+    );
+  }
+}
+
+export const reopenSchema = z.object({
+  reason: z.string().trim().min(5, 'Say what is changing and why. One line is enough.').max(2000),
+});
+
+export type ReopenInput = z.infer<typeof reopenSchema>;
+
+/**
+ * Sends a change back for rework, and withdraws whatever was decided on the
+ * strength of the old version.
+ *
+ * A live approval round is CANCELLED rather than left standing. An approval is
+ * a statement about a specific set of facts; once those facts change it is not
+ * an approval of anything. Leaving it would produce a file in which the
+ * managing director appears to have approved wording he never saw.
+ *
+ * The withdrawn round is kept rather than deleted, so the history shows the
+ * change was approved, reopened, and approved again — which is the honest
+ * account, and the one that survives being challenged.
+ */
+export async function reopenPotentialChange(
+  user: AuthenticatedUser,
+  id: string,
+  input: ReopenInput,
+) {
+  const parsed = reopenSchema.parse(input);
+
+  const existing = await prisma.potentialChange.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Potential Change not found');
+
+  const { projectRoles } = await assertProjectAccess(user, existing.projectId);
+
+  // Reopening is deliberately narrower than editing, because it cancels other
+  // people's pending decisions. Being the reporter is not enough on its own.
+  const mayReopen = await hasCapability(user.systemRole, projectRoles, 'potentialChange.reopen');
+  if (!mayReopen) {
+    throw new ForbiddenError(
+      'Reopening withdraws approvals, so it needs the reopen permission. Ask your administrator.',
+    );
+  }
+
+  if (existing.currentStatus === 'cancelled') {
+    throw new ValidationError('This change was cancelled. Raise a new one rather than reviving it.');
+  }
+  if (EDITABLE_STATUSES.includes(existing.currentStatus)) {
+    throw new ValidationError('This change is already open for editing — no need to reopen it.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.potentialChange.update({
+      where: { id },
+      data: {
+        currentStatus: 'notice_assessment',
+        noticeStatus: 'not_assessed',
+        waitingFor: 'Rework by the person who raised it',
+        nextAction: `Reopened by ${user.fullName}: ${parsed.reason}`,
+        blockerReason: null,
+      },
+    });
+
+    const live = await tx.approval.findMany({
+      where: { potentialChangeId: id, decision: 'pending' },
+      select: { id: true, taskId: true },
+    });
+
+    if (live.length > 0) {
+      await tx.approval.updateMany({
+        where: { id: { in: live.map((row) => row.id) } },
+        data: { decision: 'rejected', comment: `Withdrawn — reopened: ${parsed.reason}` },
+      });
+      // Stop chasing the seats: nobody should be reminded daily about a
+      // decision that no longer applies to anything.
+      await tx.task.updateMany({
+        where: {
+          id: { in: live.map((row) => row.taskId).filter((v): v is string => Boolean(v)) },
+          status: { in: ['open', 'in_progress'] },
+        },
+        data: { status: 'cancelled' },
+      });
+    }
+
+    await recordAudit({
+      db: tx,
+      projectId: existing.projectId,
+      userId: user.id,
+      recordType: 'potential_change',
+      recordId: id,
+      actionType: 'status_changed',
+      oldValue: { currentStatus: existing.currentStatus, noticeStatus: existing.noticeStatus },
+      newValue: { currentStatus: 'notice_assessment', reopened: true },
+      metadata: { reason: parsed.reason, approvalsWithdrawn: live.length },
+    });
+
+    return { change: updated, approvalsWithdrawn: live.length };
+  });
+}
+
 export async function updatePotentialChange(
   user: AuthenticatedUser,
   id: string,
@@ -327,7 +493,7 @@ export async function updatePotentialChange(
 ) {
   const existing = await prisma.potentialChange.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('Potential Change not found');
-  await assertProjectAccess(user, existing.projectId, 'potentialChange.update');
+  await assertEditable(user, existing);
 
   return prisma.$transaction(async (tx) => {
     const data: Prisma.PotentialChangeUpdateInput = { ...input };

@@ -29,6 +29,8 @@ export interface PermissionCell {
 }
 
 const CAPABILITY_LABELS: Record<Capability, string> = {
+  'potentialChange.updateOwn': 'Edit a change they reported',
+  'potentialChange.reopen': 'Reopen a change for rework',
   'approval.projectManager': 'Approve as project manager',
   'approval.managingDirector': 'Approve as managing director',
   'project.create': 'Create projects',
