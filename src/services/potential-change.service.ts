@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit, diffChanges } from '@/services/audit-log.service';
 import { assertProjectAccess, scopeToUser } from '@/services/project-access.service';
 import { pickResponsibleMember } from '@/services/permissions.service';
+import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 
 /**
@@ -176,6 +177,7 @@ export async function createPotentialChange(
     'potentialChange.assessNotice',
     NOTICE_ASSESSMENT_PREFERENCE,
   );
+  const noticeRecipients = await loadRecipients([noticeOwner]);
 
   const created = await prisma.$transaction(
     async (tx) => {
@@ -246,7 +248,7 @@ export async function createPotentialChange(
         },
       });
 
-      await tx.task.create({
+      const assessmentTask = await tx.task.create({
         data: {
           projectId: input.projectId,
           potentialChangeId: change.id,
@@ -260,6 +262,21 @@ export async function createPotentialChange(
           dueDate: nextActionDue,
           priority: input.urgency,
         },
+      });
+
+      // Same transaction as the task. If the change is committed, so is the
+      // notice of it; if it rolls back, nobody is told about work that does
+      // not exist.
+      await recordTaskNotifications(tx, {
+        taskId: assessmentTask.id,
+        potentialChangeId: change.id,
+        kind: 'task_assigned',
+        subject: `Notice assessment needed — ${pcNumber}`,
+        body:
+          `${input.title}. Decide whether a contractual notice is required. ` +
+          `Notice period is ${noticePeriodDays} days from the event date.`,
+        on: todayUtc(),
+        recipients: noticeRecipients,
       });
 
       await recordAudit({

@@ -141,6 +141,38 @@ export function addWorkingDays(
   return cursor;
 }
 
+/**
+ * Working days from one date to another, counting the days WORKED in between.
+ *
+ * Used to decide how hard to chase an unanswered decision, so it deliberately
+ * ignores weekends: a task that fell due on Friday is one working day late on
+ * Monday, not three. Chasing someone for a weekend they were not expected to
+ * work is how a system teaches people to ignore it.
+ *
+ * Returns 0 when `to` is on or before `from` — never a negative number, since
+ * "not yet due" is not "minus two days late".
+ */
+export function workingDaysBetween(
+  from: Date | string,
+  to: Date | string,
+  workweekStartDay = 1,
+  workweekEndDay = 5,
+): number {
+  const start = toDate(from);
+  const end = toDate(to);
+  if (!start || !end) throw new Error('workingDaysBetween: invalid date');
+
+  let cursor = startOfDayUtc(start);
+  const target = startOfDayUtc(end);
+  let count = 0;
+
+  while (cursor.getTime() < target.getTime()) {
+    cursor = addDays(cursor, 1);
+    if (isWorkingDay(cursor, workweekStartDay, workweekEndDay)) count += 1;
+  }
+  return count;
+}
+
 /** Day numbering follows `Date.getUTCDay()`: 0 = Sunday … 6 = Saturday. */
 export function isWorkingDay(date: Date, workweekStartDay = 1, workweekEndDay = 5): boolean {
   const day = date.getUTCDay();

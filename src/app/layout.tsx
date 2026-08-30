@@ -1,6 +1,25 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import { startScheduler } from '@/lib/scheduler';
+
+/**
+ * Started here, at module scope, rather than from `instrumentation.ts`.
+ *
+ * Next compiles instrumentation for the edge runtime as well, because this app
+ * has middleware — and the reminder sweep reaches Prisma and `node:crypto`,
+ * neither of which exists there. The build failed outright rather than
+ * degrading, which is the better of the two outcomes but still a build.
+ *
+ * The root layout is server-only and Node-only, and this module is evaluated
+ * once per server process. The container's own healthcheck requests /login
+ * every thirty seconds, so the timer is running within half a minute of a
+ * deploy without anyone visiting the site.
+ *
+ * `startScheduler` is a no-op unless ENABLE_SCHEDULER=true, so a build, a test
+ * run and a second replica all decline to start one.
+ */
+startScheduler();
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],

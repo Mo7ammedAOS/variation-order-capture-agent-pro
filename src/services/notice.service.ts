@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { DeliveryStatus, NoticeStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -7,6 +8,7 @@ import { calculateNoticeDueDate, todayUtc } from '@/lib/dates';
 import { calculateNoticeCountdown, type NoticeCountdown } from '@/lib/risk';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit } from '@/services/audit-log.service';
+import { recordTaskNotifications } from '@/services/notification.service';
 import { assertProjectAccess } from '@/services/project-access.service';
 
 /**
@@ -108,7 +110,7 @@ export async function assessNotice(
         where: { projectId: change.projectId, active: true, projectRole: 'project_manager' },
         select: { userId: true },
       });
-      await tx.task.create({
+      const reviewTask = await tx.task.create({
         data: {
           projectId: change.projectId,
           potentialChangeId,
@@ -119,6 +121,28 @@ export async function assessNotice(
           dueDate: nextDue,
         },
       });
+
+      if (pm?.userId) {
+        const reviewRecipients = await tx.user.findMany({
+          where: { id: pm.userId, active: true },
+          select: { id: true, fullName: true, email: true, phone: true },
+        });
+
+        await recordTaskNotifications(tx, {
+          taskId: reviewTask.id,
+          potentialChangeId,
+          kind: 'task_assigned',
+          subject: `Scope review needed — ${change.pcNumber}`,
+          body: `${change.title}. The notice assessment concluded no notice is required; review the scope.`,
+          on: todayUtc(),
+          recipients: reviewRecipients.map((r) => ({
+            userId: r.id,
+            fullName: r.fullName,
+            email: r.email,
+            phone: r.phone,
+          })),
+        });
+      }
     }
 
     await recordAudit({
@@ -189,6 +213,13 @@ export async function requestNotification(input: {
   subject?: string;
   payloadSummary?: string;
   db?: Prisma.TransactionClient;
+  /**
+   * Supply this for anything that can legitimately be asked for twice — a
+   * scheduled chase, a retried webhook — and the unique index refuses the
+   * second copy. One-off requests get a random key, because two deliberate
+   * sends of the same notice are two notices.
+   */
+  dedupeKey?: string;
 }) {
   const db = input.db ?? prisma;
   return db.notificationLog.create({
@@ -199,6 +230,7 @@ export async function requestNotification(input: {
       subject: input.subject ?? null,
       payloadSummary: input.payloadSummary ?? null,
       status: 'pending',
+      dedupeKey: input.dedupeKey ?? randomUUID(),
     },
   });
 }

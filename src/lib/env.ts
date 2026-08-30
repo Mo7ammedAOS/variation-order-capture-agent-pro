@@ -39,6 +39,16 @@ const serverSchema = z.object({
   EMBEDDING_PROVIDER: z.enum(['mock', 'local', 'voyage']).default('local'),
   VOYAGE_API_KEY: z.string().default(''),
 
+  /**
+   * Whether THIS process runs the daily chase.
+   *
+   * Off by default, and it must stay off in anything that is not the one
+   * long-lived server: a build step, a test run or a second replica would each
+   * start their own timer. The unique dedupe key means a double run sends
+   * nothing twice, but the correct number of processes doing this work is one.
+   */
+  ENABLE_SCHEDULER: z.enum(['true', 'false']).default('false'),
+
   JOB_DRIVER: z.enum(['memory', 'bullmq']).default('memory'),
   REDIS_URL: z.string().default(''),
 

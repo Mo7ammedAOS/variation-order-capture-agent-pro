@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { HardHat, LogOut } from 'lucide-react';
+import { Bell, HardHat, LogOut } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
+import { countMyUnread } from '@/services/notification.service';
 import { SYSTEM_ROLE_LABELS } from '@/lib/rbac';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/(auth)/login/actions';
@@ -11,11 +12,40 @@ import { CommandTrigger } from './command-trigger';
 
 export const dynamic = 'force-dynamic';
 
+
+/**
+ * The count is written out, not just implied by a dot.
+ *
+ * "You have something" is not actionable; "you have four things, two of them
+ * overdue" is the difference between opening it now and opening it later. The
+ * label carries the number too, so it is announced rather than merely seen.
+ */
+function NotificationBell({ unread, className }: { unread: number; className?: string }) {
+  return (
+    <Link
+      href="/notifications"
+      aria-label={unread === 0 ? 'Notifications' : `Notifications, ${unread} unread`}
+      className={`relative inline-flex size-9 items-center justify-center rounded-lg transition-colors hover:bg-secondary ${className ?? ''}`}
+    >
+      <Bell aria-hidden className="size-4" />
+      {unread > 0 ? (
+        <span className="absolute -end-0.5 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-risk-red px-1 text-[10px] font-bold leading-4 text-white">
+          {unread > 9 ? '9+' : unread}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePageUser();
-  const settings = await prisma.companySettings
-    .findFirst({ select: { displayCompanyName: true } })
-    .catch(() => null);
+  const [settings, unread] = await Promise.all([
+    prisma.companySettings
+      .findFirst({ select: { displayCompanyName: true } })
+      .catch(() => null),
+    // A failure to count must never cost someone the whole application shell.
+    countMyUnread(user).catch(() => 0),
+  ]);
 
   return (
     <div
@@ -41,11 +71,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         <div className="p-3">
-          <div className="mb-2 px-2">
-            <p className="truncate text-sm font-medium">{user.fullName}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {SYSTEM_ROLE_LABELS[user.systemRole]}
-            </p>
+          <div className="mb-2 flex items-center gap-2 px-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user.fullName}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {SYSTEM_ROLE_LABELS[user.systemRole]}
+              </p>
+            </div>
+            <NotificationBell unread={unread} className="shrink-0" />
           </div>
           <form action={signOut}>
             <Button type="submit" variant="ghost" size="sm" className="w-full justify-start">
@@ -65,11 +98,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {settings?.displayCompanyName ?? 'VO Capture'}
           </span>
         </Link>
-        <form action={signOut}>
-          <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
-            <LogOut aria-hidden className="size-4" />
-          </Button>
-        </form>
+        <div className="flex items-center gap-1">
+          <NotificationBell unread={unread} />
+          <form action={signOut}>
+            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
+              <LogOut aria-hidden className="size-4" />
+            </Button>
+          </form>
+        </div>
       </header>
 
       {/* Bottom padding clears the mobile nav bar and the capture button. */}

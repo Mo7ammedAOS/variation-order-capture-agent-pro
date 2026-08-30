@@ -7,6 +7,7 @@ import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
 import { recordAudit } from '@/services/audit-log.service';
 import { pickResponsibleMember } from '@/services/permissions.service';
+import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 import { getAiProvider } from '@/integrations/claude';
 
@@ -117,6 +118,7 @@ export async function captureFromChannel(input: {
     'potentialChange.assessNotice',
     NOTICE_ASSESSMENT_PREFERENCE,
   );
+  const noticeRecipients = await loadRecipients([noticeOwner]);
 
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
@@ -171,7 +173,7 @@ export async function captureFromChannel(input: {
       },
     });
 
-    await tx.task.create({
+    const assessmentTask = await tx.task.create({
       data: {
         projectId: target.projectId,
         potentialChangeId: change.id,
@@ -180,6 +182,16 @@ export async function captureFromChannel(input: {
         assignedToUserId: noticeOwner,
         dueDate: nextActionDue,
       },
+    });
+
+    await recordTaskNotifications(tx, {
+      taskId: assessmentTask.id,
+      potentialChangeId: change.id,
+      kind: 'task_assigned',
+      subject: `Notice assessment needed — ${pcNumber}`,
+      body: `Captured from ${input.channel}: ${change.title}. Decide whether a contractual notice is required.`,
+      on: todayUtc(),
+      recipients: noticeRecipients,
     });
 
     await recordAudit({

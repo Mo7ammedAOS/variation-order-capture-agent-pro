@@ -261,6 +261,17 @@ enum IntegrationEventStatus {
   ignored
 }
 
+/**
+ * Why a notification exists. Kept apart from the channel because the SAME
+ * message goes out by three routes, and a person should not be chased three
+ * times for three different reasons when it is one decision.
+ */
+enum NotificationKind {
+  task_assigned
+  task_reminder
+  task_escalation
+}
+
 enum NotificationChannel {
   email
   whatsapp
@@ -350,6 +361,7 @@ model User {
   blockingBottlenecks  Bottleneck[]     @relation("BottleneckBlockedByUser")
   uploadedDocuments    ProjectDocument[]
   activityLogs         ActivityLog[]
+  notifications        NotificationLog[]
 
   @@index([systemRole])
   @@index([active])
@@ -656,6 +668,7 @@ model Task {
   potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
   assignedTo      User?            @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   assignedBy      User?            @relation("TaskAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  notifications   NotificationLog[]
 
   @@index([assignedToUserId, status])
   @@index([projectId, status])
@@ -752,21 +765,43 @@ model IntegrationEvent {
 model NotificationLog {
   id                String              @id @default(uuid()) @db.Uuid
   potentialChangeId String?             @map("potential_change_id") @db.Uuid
+  taskId            String?             @map("task_id") @db.Uuid
+  /// Who this is for. Null on messages addressed outside the company.
+  userId            String?             @map("user_id") @db.Uuid
+  kind              NotificationKind    @default(task_assigned)
   channel           NotificationChannel
   recipient         String
   subject           String?
+  body              String?
   payloadSummary    String?             @map("payload_summary")
+  escalationLevel   EscalationLevel     @default(none) @map("escalation_level")
   status            DeliveryStatus      @default(pending)
   externalMessageId String?             @map("external_message_id")
   failureReason     String?             @map("failure_reason")
-  requestedAt       DateTime            @default(now()) @map("requested_at")
-  sentAt            DateTime?           @map("sent_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  /// What makes the daily sweep safe to run twice.
+  ///
+  /// Shaped `task:<id>:<kind>:<yyyy-mm-dd>:<channel>:<recipient>`, so a second
+  /// run on the same day collides on the unique index and inserts nothing. The
+  /// alternative — remembering in the application when it last ran — loses that
+  /// memory on every container restart, and the failure mode is chasing a
+  /// director six times before lunch.
+  dedupeKey         String              @unique @map("dedupe_key")
+
+  readAt        DateTime? @map("read_at")
+  requestedAt   DateTime  @default(now()) @map("requested_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  sentAt        DateTime? @map("sent_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: SetNull)
+  task            Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, requestedAt])
   @@index([potentialChangeId])
+  @@index([userId, readAt])
+  @@index([taskId])
   @@map("notification_logs")
 }
 
