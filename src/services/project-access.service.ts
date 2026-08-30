@@ -2,7 +2,8 @@ import 'server-only';
 import type { Prisma, PrismaClient, ProjectRole } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ForbiddenError } from '@/lib/errors';
-import { hasCapability, hasCompanyWideProjectAccess, type Capability } from '@/lib/rbac';
+import type { Capability } from '@/lib/rbac';
+import { hasCapability, hasCompanyWideProjectAccess } from '@/services/permissions.service';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 
 /**
@@ -34,7 +35,7 @@ export async function getAccessibleProjectIds(
   user: AuthenticatedUser,
   db: Db = prisma,
 ): Promise<string[] | null> {
-  if (hasCompanyWideProjectAccess(user.systemRole)) return null;
+  if (await hasCompanyWideProjectAccess(user.systemRole)) return null;
 
   const memberships = await db.projectMember.findMany({
     where: { userId: user.id, active: true },
@@ -86,7 +87,7 @@ export async function canAccessProject(
   projectId: string,
   db: Db = prisma,
 ): Promise<boolean> {
-  if (hasCompanyWideProjectAccess(user.systemRole)) return true;
+  if (await hasCompanyWideProjectAccess(user.systemRole)) return true;
 
   const membership = await db.projectMember.findFirst({
     where: { userId: user.id, projectId, active: true },
@@ -109,14 +110,16 @@ export async function assertProjectAccess(
   capability?: Capability,
   db: Db = prisma,
 ): Promise<{ projectRoles: ProjectRole[] }> {
-  const companyWide = hasCompanyWideProjectAccess(user.systemRole);
-  const projectRoles = await getProjectRoles(user, projectId, db);
+  const [companyWide, projectRoles] = await Promise.all([
+    hasCompanyWideProjectAccess(user.systemRole),
+    getProjectRoles(user, projectId, db),
+  ]);
 
   if (!companyWide && projectRoles.length === 0) {
     throw new ForbiddenError();
   }
 
-  if (capability && !hasCapability(user.systemRole, projectRoles, capability)) {
+  if (capability && !(await hasCapability(user.systemRole, projectRoles, capability))) {
     throw new ForbiddenError(`Your role does not permit this action on this project`);
   }
 
@@ -124,8 +127,11 @@ export async function assertProjectAccess(
 }
 
 /** Company-level authority, unrelated to any project. */
-export function assertCapability(user: AuthenticatedUser, capability: Capability): void {
-  if (!hasCapability(user.systemRole, [], capability)) {
+export async function assertCapability(
+  user: AuthenticatedUser,
+  capability: Capability,
+): Promise<void> {
+  if (!(await hasCapability(user.systemRole, [], capability))) {
     throw new ForbiddenError('Your role does not permit this action');
   }
 }

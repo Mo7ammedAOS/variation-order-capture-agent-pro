@@ -1,11 +1,33 @@
 import { describe, expect, it } from 'vitest';
+import type { ProjectRole, SystemRole } from '@prisma/client';
 import {
-  hasCapability,
-  hasCompanyWideProjectAccess,
-  isCompanyAdmin,
-  projectRoleHasCapability,
-  systemRoleHasCapability,
+  ALL_CAPABILITIES,
+  DEFAULT_PROJECT_ROLE_CAPABILITIES,
+  DEFAULT_SYSTEM_ROLE_CAPABILITIES,
+  type Capability,
 } from '@/lib/rbac';
+
+/**
+ * These cover the DEFAULTS — the baseline a new deployment is seeded with, and
+ * what "reset to defaults" restores.
+ *
+ * Live authority comes from the role_permissions table via permissions.service,
+ * so an admin can change any of this without a deploy. What must never change
+ * is that the shipped starting point is sane: capture is open, approval is not,
+ * and people outside the company get nothing.
+ */
+
+const systemHas = (role: SystemRole, capability: Capability) =>
+  DEFAULT_SYSTEM_ROLE_CAPABILITIES[role].includes(capability);
+
+const projectHas = (role: ProjectRole, capability: Capability) =>
+  DEFAULT_PROJECT_ROLE_CAPABILITIES[role].includes(capability);
+
+const combined = (
+  systemRole: SystemRole,
+  projectRoles: readonly ProjectRole[],
+  capability: Capability,
+) => systemHas(systemRole, capability) || projectRoles.some((r) => projectHas(r, capability));
 
 describe('company-wide project reach', () => {
   it('is granted to directors and company admins', () => {
@@ -16,7 +38,7 @@ describe('company-wide project reach', () => {
       'operations_director',
       'commercial_director',
     ] as const) {
-      expect(hasCompanyWideProjectAccess(role)).toBe(true);
+      expect(systemHas(role, 'project.viewAll')).toBe(true);
     }
   });
 
@@ -29,50 +51,87 @@ describe('company-wide project reach', () => {
       'standard_user',
       'viewer',
     ] as const) {
-      expect(hasCompanyWideProjectAccess(role)).toBe(false);
+      expect(systemHas(role, 'project.viewAll')).toBe(false);
     }
-  });
-});
-
-describe('capabilities', () => {
-  it('lets a Managing Director see everything without a membership', () => {
-    expect(systemRoleHasCapability('managing_director', 'project.viewAll')).toBe(true);
-  });
-
-  it('gives a viewer nothing', () => {
-    expect(hasCapability('viewer', [], 'potentialChange.create')).toBe(false);
-    expect(hasCapability('viewer', ['project_viewer'], 'potentialChange.create')).toBe(false);
-    expect(hasCapability('viewer', ['client_viewer'], 'document.upload')).toBe(false);
-  });
-
-  it('lets a site engineer raise a change but never assess the notice', () => {
-    expect(projectRoleHasCapability('site_engineer', 'potentialChange.create')).toBe(true);
-    expect(projectRoleHasCapability('site_engineer', 'potentialChange.assessNotice')).toBe(false);
-    expect(hasCapability('standard_user', ['site_engineer'], 'potentialChange.assessNotice')).toBe(
-      false,
-    );
-  });
-
-  it('lets a commercial manager assess the notice', () => {
-    expect(hasCapability('standard_user', ['commercial_manager'], 'potentialChange.assessNotice')).toBe(
-      true,
-    );
-    expect(systemRoleHasCapability('commercial_manager', 'potentialChange.assessNotice')).toBe(true);
-  });
-
-  it('takes the union across several project roles, not the intersection', () => {
-    expect(
-      hasCapability('standard_user', ['site_engineer', 'commercial_manager'], 'task.assign'),
-    ).toBe(true);
-  });
-
-  it('keeps user management to company admins', () => {
-    expect(isCompanyAdmin('company_admin')).toBe(true);
-    expect(isCompanyAdmin('managing_director')).toBe(false);
-    expect(hasCapability('managing_director', ['project_manager'], 'user.manage')).toBe(false);
   });
 
   it('does not let a project role grant company-wide reach', () => {
-    expect(hasCapability('standard_user', ['project_manager'], 'project.viewAll')).toBe(false);
+    expect(combined('standard_user', ['project_manager'], 'project.viewAll')).toBe(false);
+  });
+});
+
+describe('default capabilities', () => {
+  it('gives a viewer nothing', () => {
+    expect(combined('viewer', [], 'potentialChange.create')).toBe(false);
+    expect(combined('viewer', ['project_viewer'], 'potentialChange.create')).toBe(false);
+    expect(combined('viewer', ['client_viewer'], 'document.upload')).toBe(false);
+  });
+
+  it('lets a site engineer raise a change but never assess the notice', () => {
+    expect(projectHas('site_engineer', 'potentialChange.create')).toBe(true);
+    expect(projectHas('site_engineer', 'potentialChange.assessNotice')).toBe(false);
+    expect(combined('standard_user', ['site_engineer'], 'potentialChange.assessNotice')).toBe(false);
+  });
+
+  it('lets a commercial manager assess the notice', () => {
+    expect(combined('standard_user', ['commercial_manager'], 'potentialChange.assessNotice')).toBe(
+      true,
+    );
+    expect(systemHas('commercial_manager', 'potentialChange.assessNotice')).toBe(true);
+  });
+
+  it('takes the union across several project roles, not the intersection', () => {
+    expect(combined('standard_user', ['site_engineer', 'commercial_manager'], 'task.assign')).toBe(
+      true,
+    );
+  });
+
+  it('keeps user management away from directors who are not admins', () => {
+    expect(combined('managing_director', ['project_manager'], 'user.manage')).toBe(false);
+  });
+});
+
+describe('the controlled-document split', () => {
+  /**
+   * The commercial point of the split: a change you did not capture is a change
+   * you cannot claim, so capture stays open to everyone. Superseding a contract
+   * drawing is a different act and does not.
+   */
+  it('lets everyone who works on site upload evidence', () => {
+    for (const role of ['site_engineer', 'foreman', 'quantity_surveyor'] as const) {
+      expect(projectHas(role, 'document.upload')).toBe(true);
+    }
+  });
+
+  it('keeps the controlled register away from site roles', () => {
+    for (const role of ['site_engineer', 'foreman'] as const) {
+      expect(projectHas(role, 'document.manageRegister')).toBe(false);
+    }
+  });
+
+  it('gives the register to the document controller', () => {
+    expect(projectHas('document_controller', 'document.manageRegister')).toBe(true);
+    expect(projectHas('document_controller', 'potentialChange.assessNotice')).toBe(false);
+  });
+});
+
+describe('the capability list', () => {
+  it('has no duplicates', () => {
+    expect(new Set(ALL_CAPABILITIES).size).toBe(ALL_CAPABILITIES.length);
+  });
+
+  it('covers every capability the defaults hand out', () => {
+    // A capability granted in the defaults but absent from ALL_CAPABILITIES
+    // would be invisible on the admin screen — granted, unrevokable, unseen.
+    const granted = new Set<string>();
+    for (const caps of Object.values(DEFAULT_SYSTEM_ROLE_CAPABILITIES)) {
+      for (const c of caps) granted.add(c);
+    }
+    for (const caps of Object.values(DEFAULT_PROJECT_ROLE_CAPABILITIES)) {
+      for (const c of caps) granted.add(c);
+    }
+    for (const capability of granted) {
+      expect(ALL_CAPABILITIES).toContain(capability);
+    }
   });
 });

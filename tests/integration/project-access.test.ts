@@ -66,11 +66,11 @@ describeDb('project access isolation', () => {
 
     engineerA = {
       id: engineer.id, email: engineer.email, fullName: engineer.fullName,
-      systemRole: 'standard_user', active: true, preferredLanguage: 'en',
+      systemRole: 'standard_user', active: true, canAdministerCompany: false, preferredLanguage: 'en',
     };
     directorUser = {
       id: director.id, email: director.email, fullName: director.fullName,
-      systemRole: 'managing_director', active: true, preferredLanguage: 'en',
+      systemRole: 'managing_director', active: true, canAdministerCompany: false, preferredLanguage: 'en',
     };
   });
 

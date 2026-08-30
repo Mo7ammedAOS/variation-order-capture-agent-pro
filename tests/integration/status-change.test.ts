@@ -76,11 +76,11 @@ describeDb('potential change status transitions', () => {
 
     director = {
       id: directorRecord.id, email: directorRecord.email, fullName: directorRecord.fullName,
-      systemRole: 'commercial_director', active: true, preferredLanguage: 'en',
+      systemRole: 'commercial_director', active: true, canAdministerCompany: false, preferredLanguage: 'en',
     };
     engineer = {
       id: engineerRecord.id, email: engineerRecord.email, fullName: engineerRecord.fullName,
-      systemRole: 'standard_user', active: true, preferredLanguage: 'en',
+      systemRole: 'standard_user', active: true, canAdministerCompany: false, preferredLanguage: 'en',
     };
   });
 

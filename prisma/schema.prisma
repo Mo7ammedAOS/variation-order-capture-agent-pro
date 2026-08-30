@@ -324,6 +324,16 @@ model User {
   phone             String?
   avatarUrl         String?    @map("avatar_url")
   systemRole        SystemRole @default(standard_user) @map("system_role")
+
+  /// Company administration, deliberately SEPARATE from systemRole.
+  ///
+  /// Whoever administers the app is chosen by the company, and their job is
+  /// usually something else — a Finance Manager, an office manager. Folding
+  /// administration into systemRole forced a false choice between "what this
+  /// person does" and "this person holds the keys", so it is its own flag.
+  ///
+  /// The company can never reach zero holders; user.service enforces that.
+  canAdministerCompany Boolean @default(false) @map("can_administer_company")
   preferredLanguage String     @default("en") @map("preferred_language")
   active            Boolean    @default(true)
   lastLoginAt       DateTime?  @map("last_login_at")
@@ -343,6 +353,7 @@ model User {
 
   @@index([systemRole])
   @@index([active])
+  @@index([canAdministerCompany])
   @@map("users")
 }
 
@@ -796,4 +807,39 @@ model PotentialChangeEmbedding {
 
   @@index([projectId])
   @@map("potential_change_embeddings")
+}
+
+/// Who may do what, as DATA rather than as code.
+///
+/// The capability matrix used to be a hardcoded table in src/lib/rbac.ts, which
+/// meant that changing who may approve a variation was a code edit and a
+/// redeploy. Every contractor runs differently — in one firm the QS prices and
+/// the CM approves, in another the Contract Administrator does both — so the
+/// matrix has to be the admin's to set, on the authority of their director.
+///
+/// Rows are the complete truth. A missing row is a denial, not a fallback to
+/// some default in code, because a silent fallback is how a permission someone
+/// believed they had revoked comes back on the next deploy. The defaults are
+/// seeded into this table by a migration instead.
+model RolePermission {
+  id         String    @id @default(uuid()) @db.Uuid
+  scope      RoleScope
+  /// SystemRole or ProjectRole depending on scope. Held as text so adding a
+  /// role to either enum cannot orphan rows in a mismatched column type.
+  role       String
+  capability String
+  granted    Boolean   @default(true)
+
+  updatedByUserId String?  @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, role, capability])
+  @@index([scope, role])
+  @@map("role_permissions")
+}
+
+enum RoleScope {
+  system
+  project
 }

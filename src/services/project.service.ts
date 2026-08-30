@@ -80,7 +80,7 @@ export async function getProject(user: AuthenticatedUser, projectId: string) {
 }
 
 export async function createProject(user: AuthenticatedUser, input: ProjectCreateInput) {
-  assertCapability(user, 'project.create');
+  await assertCapability(user, 'project.create');
 
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.create({

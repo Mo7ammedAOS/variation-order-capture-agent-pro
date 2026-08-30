@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import { requireUser } from '@/lib/auth/session';
 import { listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
-import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS, isCompanyAdmin } from '@/lib/rbac';
+import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { formatDate } from '@/lib/dates';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InviteForm } from './invite-form';
-import { toggleUserActiveAction } from './actions';
+import { toggleCompanyAdminAction, toggleUserActiveAction } from './actions';
 
 export const metadata: Metadata = { title: 'Users' };
 export const dynamic = 'force-dynamic';
@@ -44,11 +44,13 @@ export default async function UsersPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {users.length} {users.length === 1 ? 'account' : 'accounts'}. There is no public
-          sign-up — every account exists because someone here created it.
+          sign-up — every account exists because someone here created it. Administration is
+          its own column because whoever runs the app is chosen by the company, and their job
+          is usually something else.
         </p>
       </header>
 
-      {isCompanyAdmin(user.systemRole) ? <InviteForm /> : null}
+      {user.canAdministerCompany ? <InviteForm /> : null}
 
       <Card className="overflow-hidden">
         <Table>
@@ -56,6 +58,7 @@ export default async function UsersPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Company role</TableHead>
+              <TableHead>Administers</TableHead>
               <TableHead>Projects</TableHead>
               <TableHead>Last signed in</TableHead>
               <TableHead>Status</TableHead>
@@ -70,6 +73,29 @@ export default async function UsersPage() {
                   <p className="text-xs text-muted-foreground">{row.email}</p>
                 </TableCell>
                 <TableCell>{SYSTEM_ROLE_LABELS[row.systemRole]}</TableCell>
+                <TableCell>
+                  {user.canAdministerCompany ? (
+                    <form action={toggleCompanyAdminAction}>
+                      <input type="hidden" name="userId" value={row.id} />
+                      <input
+                        type="hidden"
+                        name="canAdminister"
+                        value={String(!row.canAdministerCompany)}
+                      />
+                      <Button
+                        type="submit"
+                        variant={row.canAdministerCompany ? 'secondary' : 'ghost'}
+                        size="sm"
+                      >
+                        {row.canAdministerCompany ? 'Administrator' : 'Grant'}
+                      </Button>
+                    </form>
+                  ) : row.canAdministerCompany ? (
+                    <Badge variant="secondary">Administrator</Badge>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {row.memberships.length === 0 ? (
                     <span className="text-sm text-muted-foreground">None</span>
@@ -96,7 +122,7 @@ export default async function UsersPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-end">
-                  {isCompanyAdmin(user.systemRole) && row.id !== user.id ? (
+                  {user.canAdministerCompany && row.id !== user.id ? (
                     <form action={toggleUserActiveAction}>
                       <input type="hidden" name="userId" value={row.id} />
                       <input type="hidden" name="active" value={String(!row.active)} />

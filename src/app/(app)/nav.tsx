@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   AlertOctagon, FileWarning, FolderKanban, LayoutDashboard,
-  ListChecks, Plus, Settings,
+  ListChecks, Plus, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +19,8 @@ const LINKS = [
   { href: '/variations', label: 'Potential Changes', icon: FileWarning },
   { href: '/bottlenecks', label: 'Bottlenecks', icon: AlertOctagon },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
-  { href: '/settings/users', label: 'Settings', icon: Settings },
+  { href: '/settings/users', label: 'Users', icon: Settings },
+  { href: '/settings/permissions', label: 'Permissions', icon: ShieldCheck },
 ];
 
 export function SidebarNav() {

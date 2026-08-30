@@ -34,7 +34,7 @@ export const inviteSchema = z.object({
 });
 
 export async function listUsers(user: AuthenticatedUser) {
-  assertCapability(user, 'user.manage');
+  await assertCapability(user, 'user.manage');
   return prisma.user.findMany({
     orderBy: [{ active: 'desc' }, { fullName: 'asc' }],
     include: {
@@ -47,7 +47,7 @@ export async function listUsers(user: AuthenticatedUser) {
 }
 
 export async function inviteUser(actor: AuthenticatedUser, input: z.infer<typeof inviteSchema>) {
-  assertCapability(actor, 'user.manage');
+  await assertCapability(actor, 'user.manage');
 
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) throw new ConflictError('A user with that email already exists');
@@ -98,7 +98,7 @@ export async function setUserActive(
   userId: string,
   active: boolean,
 ) {
-  assertCapability(actor, 'user.manage');
+  await assertCapability(actor, 'user.manage');
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) throw new NotFoundError('User not found');
@@ -107,6 +107,9 @@ export async function setUserActive(
   // feature. The check is cheap.
   if (!active && userId === actor.id) {
     throw new ConflictError('You cannot deactivate your own account');
+  }
+  if (!active && target.canAdministerCompany) {
+    await assertAnotherAdminRemains(userId);
   }
 
   return prisma.$transaction(async (tx) => {
@@ -129,7 +132,7 @@ export async function setSystemRole(
   userId: string,
   systemRole: SystemRole,
 ) {
-  assertCapability(actor, 'user.manage');
+  await assertCapability(actor, 'user.manage');
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) throw new NotFoundError('User not found');
@@ -156,4 +159,58 @@ export async function listAssignableUsers() {
     orderBy: { fullName: 'asc' },
     select: { id: true, fullName: true, email: true, systemRole: true },
   });
+}
+
+/**
+ * Company administration, granted and revoked as a flag.
+ *
+ * Deliberately not a system role. Whoever administers the app is chosen by the
+ * company and their job is usually something else — often the Finance Manager.
+ * Folding the two together forced a false choice between recording what someone
+ * does and recording that they hold the keys.
+ */
+export async function setCompanyAdmin(
+  actor: AuthenticatedUser,
+  userId: string,
+  canAdministerCompany: boolean,
+) {
+  await assertCapability(actor, 'user.manage');
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) throw new NotFoundError('User not found');
+
+  if (!canAdministerCompany) await assertAnotherAdminRemains(userId);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: { canAdministerCompany },
+    });
+    await recordAudit({
+      db: tx,
+      userId: actor.id,
+      recordType: 'user',
+      recordId: userId,
+      actionType: 'updated',
+      oldValue: { canAdministerCompany: target.canAdministerCompany },
+      newValue: { canAdministerCompany },
+    });
+    return updated;
+  });
+}
+
+/**
+ * A company with no administrator cannot invite anyone, cannot change a
+ * permission, and cannot recover without a database client and someone who
+ * knows what a UUID is. There is no undo, so the check is a refusal.
+ */
+async function assertAnotherAdminRemains(excludingUserId: string): Promise<void> {
+  const others = await prisma.user.count({
+    where: { canAdministerCompany: true, active: true, id: { not: excludingUserId } },
+  });
+  if (others === 0) {
+    throw new ConflictError(
+      'This is the only company administrator. Give someone else administration first.',
+    );
+  }
 }

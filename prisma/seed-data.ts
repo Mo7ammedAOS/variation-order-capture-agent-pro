@@ -24,6 +24,8 @@ export interface SeedUser {
   email: string;
   phone: string;
   systemRole: SystemRole;
+  /** Separate from the job. See the Ivan Petrov row. */
+  canAdministerCompany?: boolean;
 }
 
 export const USERS: SeedUser[] = [
@@ -37,8 +39,11 @@ export const USERS: SeedUser[] = [
   { key: 'qs2',   fullName: 'Layla Hassan',       email: 'layla.hassan@abcfitout.example',      phone: '+971501000008', systemRole: 'standard_user' },
   { key: 'se1',   fullName: 'Ahmed Rashid',       email: 'ahmed.rashid@abcfitout.example',      phone: '+971501000009', systemRole: 'standard_user' },
   { key: 'se2',   fullName: 'Grace Mensah',       email: 'grace.mensah@abcfitout.example',      phone: '+971501000010', systemRole: 'standard_user' },
-  { key: 'fin',   fullName: 'Ivan Petrov',        email: 'ivan.petrov@abcfitout.example',       phone: '+971501000011', systemRole: 'finance_manager' },
-  { key: 'admin', fullName: 'Noura Al Blooshi',   email: 'noura.alblooshi@abcfitout.example',   phone: '+971501000012', systemRole: 'company_admin' },
+  // Deliberately BOTH: the company administrator here is the Finance Manager,
+  // which is how it usually falls in a fit-out firm. Administration is a flag,
+  // not a job, and this row is what proves the two do not have to agree.
+  { key: 'fin',   fullName: 'Ivan Petrov',        email: 'ivan.petrov@abcfitout.example',       phone: '+971501000011', systemRole: 'finance_manager', canAdministerCompany: true },
+  { key: 'admin', fullName: 'Noura Al Blooshi',   email: 'noura.alblooshi@abcfitout.example',   phone: '+971501000012', systemRole: 'company_admin', canAdministerCompany: true },
 ];
 
 export interface SeedProject {

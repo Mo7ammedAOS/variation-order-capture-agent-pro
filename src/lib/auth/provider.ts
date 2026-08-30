@@ -14,6 +14,8 @@ export interface AuthenticatedUser {
   email: string;
   fullName: string;
   systemRole: SystemRole;
+  /** Separate from systemRole — see the User model. */
+  canAdministerCompany: boolean;
   active: boolean;
   preferredLanguage: string;
 }
@@ -45,6 +47,7 @@ export function toAuthenticatedUser(user: User): AuthenticatedUser {
     email: user.email,
     fullName: user.fullName,
     systemRole: user.systemRole,
+    canAdministerCompany: user.canAdministerCompany,
     active: user.active,
     preferredLanguage: user.preferredLanguage,
   };

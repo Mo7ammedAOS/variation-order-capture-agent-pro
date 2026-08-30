@@ -1,6 +1,17 @@
 import type { ProjectRole, SystemRole } from '@prisma/client';
 
 /**
+ * Capability NAMES, DEFAULTS and LABELS only.
+ *
+ * The runtime answer to "may this person do this" lives in
+ * services/permissions.service.ts, reading the role_permissions table. It is
+ * deliberately not re-exported here: a synchronous copy reading the constants
+ * below would drift from what the admin has actually set, and the way that
+ * shows up is a page offering a button the service then refuses — or worse,
+ * hiding one the person is entitled to.
+ */
+
+/**
  * Two independent layers of authority, and conflating them is the classic bug:
  *
  *   SYSTEM role   what you are in the company. Governs company-wide reach and
@@ -13,6 +24,26 @@ import type { ProjectRole, SystemRole } from '@prisma/client';
  * may do there comes from the project role. Neither layer alone is sufficient.
  */
 
+export const ALL_CAPABILITIES = [
+  'project.create',
+  'project.update',
+  'project.viewAll',
+  'project.manageMembers',
+  'project.manageContractRules',
+  'contact.manage',
+  'document.upload',
+  'document.manageRegister',
+  'potentialChange.create',
+  'potentialChange.update',
+  'potentialChange.assessNotice',
+  'potentialChange.changeStatus',
+  'task.assign',
+  'task.complete',
+  'bottleneck.manage',
+  'user.manage',
+  'companySettings.manage',
+] as const;
+
 export type Capability =
   | 'project.create'
   | 'project.update'
@@ -21,6 +52,16 @@ export type Capability =
   | 'project.manageContractRules'
   | 'contact.manage'
   | 'document.upload'
+  /**
+   * Controlled documents: contract, drawing, specification, BOQ, programme.
+   *
+   * Split from `document.upload` deliberately. Capture must never be blocked by
+   * permissions — a change you did not capture is a change you cannot claim —
+   * so every role that can photograph a wall keeps `document.upload`. But a
+   * site engineer should not be able to supersede a contract drawing from a
+   * phone, and superseding is what the register does.
+   */
+  | 'document.manageRegister'
   | 'potentialChange.create'
   | 'potentialChange.update'
   | 'potentialChange.assessNotice'
@@ -31,63 +72,53 @@ export type Capability =
   | 'user.manage'
   | 'companySettings.manage';
 
-/** System roles that see every project without needing a membership row. */
-const COMPANY_WIDE_ROLES: ReadonlySet<SystemRole> = new Set<SystemRole>([
-  'company_owner',
-  'company_admin',
-  'managing_director',
-  'operations_director',
-  'commercial_director',
-]);
-
-export function hasCompanyWideProjectAccess(systemRole: SystemRole): boolean {
-  return COMPANY_WIDE_ROLES.has(systemRole);
-}
-
-const ADMIN_ROLES: ReadonlySet<SystemRole> = new Set<SystemRole>([
-  'company_owner',
-  'company_admin',
-]);
-
-/** Capabilities granted by the system role alone, on any project in reach. */
-const SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capability[]> = {
+/**
+ * THE DEFAULTS ONLY — not the live matrix.
+ *
+ * Authority is now read from the `role_permissions` table so an admin can set
+ * it without a deploy. These constants are the baseline a new deployment is
+ * seeded with, and the reference for what "reset to defaults" restores.
+ *
+ * Nothing at runtime should consult these. Use permissions.service.ts.
+ */
+export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capability[]> = {
   company_owner: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
-    'project.manageContractRules', 'contact.manage', 'document.upload',
+    'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.assessNotice',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
     'user.manage', 'companySettings.manage',
   ],
   company_admin: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
-    'project.manageContractRules', 'contact.manage', 'document.upload',
+    'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.assessNotice',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
     'user.manage', 'companySettings.manage',
   ],
   managing_director: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
-    'project.manageContractRules', 'contact.manage', 'document.upload',
+    'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
     'potentialChange.update', 'potentialChange.assessNotice', 'potentialChange.changeStatus',
     'task.assign', 'task.complete', 'bottleneck.manage',
   ],
   operations_director: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
-    'contact.manage', 'document.upload', 'potentialChange.update',
+    'contact.manage', 'document.upload', 'document.manageRegister', 'potentialChange.update',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
   ],
   commercial_director: [
     'project.viewAll', 'project.update', 'project.manageContractRules', 'contact.manage',
-    'document.upload', 'potentialChange.update', 'potentialChange.assessNotice',
+    'document.upload', 'document.manageRegister', 'potentialChange.update', 'potentialChange.assessNotice',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
   ],
   commercial_manager: [
-    'project.manageContractRules', 'contact.manage', 'document.upload',
+    'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.assessNotice',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
   ],
   contract_administrator: [
-    'contact.manage', 'document.upload', 'potentialChange.create', 'potentialChange.update',
+    'contact.manage', 'document.upload', 'document.manageRegister', 'potentialChange.create', 'potentialChange.update',
     'potentialChange.assessNotice', 'task.assign', 'task.complete', 'bottleneck.manage',
   ],
   finance_manager: ['document.upload', 'task.complete'],
@@ -98,10 +129,11 @@ const SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capability[]> = {
   viewer: [],
 };
 
-/** Extra capabilities a project role grants on that project only. */
-const PROJECT_ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
+/** Defaults for project roles. See the note above — seed data, not runtime. */
+export const DEFAULT_PROJECT_ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
   project_manager: [
     'project.update', 'project.manageMembers', 'contact.manage', 'document.upload',
+    'document.manageRegister',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.changeStatus',
     'task.assign', 'task.complete', 'bottleneck.manage',
   ],
@@ -123,37 +155,11 @@ const PROJECT_ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
   procurement_officer: ['document.upload', 'potentialChange.update', 'task.complete'],
   planning_engineer: ['document.upload', 'potentialChange.update', 'task.complete'],
   finance_officer: ['document.upload', 'task.complete'],
-  document_controller: ['document.upload', 'task.complete'],
+  document_controller: ['document.upload', 'document.manageRegister', 'task.complete'],
   project_viewer: [],
   client_viewer: [],
   consultant_viewer: [],
 };
-
-export function systemRoleHasCapability(role: SystemRole, capability: Capability): boolean {
-  return SYSTEM_ROLE_CAPABILITIES[role].includes(capability);
-}
-
-export function projectRoleHasCapability(role: ProjectRole, capability: Capability): boolean {
-  return PROJECT_ROLE_CAPABILITIES[role].includes(capability);
-}
-
-/**
- * The combined check. Membership in ANY project role that grants the capability
- * is enough — a person who is both QS and Contract Administrator on a project
- * gets the union, not the intersection.
- */
-export function hasCapability(
-  systemRole: SystemRole,
-  projectRoles: readonly ProjectRole[],
-  capability: Capability,
-): boolean {
-  if (systemRoleHasCapability(systemRole, capability)) return true;
-  return projectRoles.some((role) => projectRoleHasCapability(role, capability));
-}
-
-export function isCompanyAdmin(systemRole: SystemRole): boolean {
-  return ADMIN_ROLES.has(systemRole);
-}
 
 export const SYSTEM_ROLE_LABELS: Record<SystemRole, string> = {
   company_owner: 'Company Owner',

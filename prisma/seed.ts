@@ -86,9 +86,15 @@ async function main() {
         fullName: user.fullName,
         phone: user.phone,
         systemRole: user.systemRole,
+        canAdministerCompany: user.canAdministerCompany ?? false,
         active: true,
       },
-      update: { fullName: user.fullName, phone: user.phone, systemRole: user.systemRole },
+      update: {
+        fullName: user.fullName,
+        phone: user.phone,
+        systemRole: user.systemRole,
+        canAdministerCompany: user.canAdministerCompany ?? false,
+      },
     });
 
     userIds.set(user.key, id);
@@ -380,6 +386,8 @@ async function main() {
     console.log(`  Director   ${USERS.find((u) => u.key === 'md')?.email}`);
     console.log(`  Commercial ${USERS.find((u) => u.key === 'cm1')?.email}`);
     console.log(`  Engineer   ${USERS.find((u) => u.key === 'se1')?.email}`);
+    console.log(`  Admin      ${USERS.find((u) => u.key === 'admin')?.email}`);
+    console.log(`  Admin      ${USERS.find((u) => u.key === 'fin')?.email}  (Finance Manager who also administers)`);
   } else {
     console.log('\n  !! NO SUPABASE SERVICE ROLE KEY — identities were not created.');
     console.log('     The data is seeded but NOBODY CAN SIGN IN. Set the Supabase');

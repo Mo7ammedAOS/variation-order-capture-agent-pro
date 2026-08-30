@@ -14,7 +14,8 @@ import { prisma } from '@/lib/prisma';
 import { isAppError } from '@/lib/errors';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
-import { PROJECT_ROLE_LABELS, hasCapability } from '@/lib/rbac';
+import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
+import { hasCapability } from '@/services/permissions.service';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -260,7 +261,7 @@ async function ContractRulesTab({
   // rule — updateContractRules re-checks the same capability server-side, so
   // hiding the form is a courtesy and the service is the gate.
   const projectRoles = await getProjectRoles(user, projectId);
-  const canEdit = hasCapability(user.systemRole, projectRoles, 'project.manageContractRules');
+  const canEdit = await hasCapability(user.systemRole, projectRoles, 'project.manageContractRules');
 
   if (canEdit) {
     return (

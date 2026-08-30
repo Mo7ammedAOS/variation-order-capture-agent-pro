@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/session';
-import { inviteSchema, inviteUser, setUserActive } from '@/services/user.service';
+import { inviteSchema, inviteUser, setCompanyAdmin, setUserActive } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 
 export interface InviteState {
@@ -45,5 +45,20 @@ export async function toggleUserActiveAction(formData: FormData) {
   const active = formData.get('active') === 'true';
 
   await setUserActive(actor, userId, active);
+  revalidatePath('/settings/users');
+}
+
+/**
+ * Administration is a flag, not a role.
+ *
+ * The company chooses who runs the app and it is usually not a director — often
+ * the Finance Manager. The service refuses to leave the company with none.
+ */
+export async function toggleCompanyAdminAction(formData: FormData) {
+  const actor = await requireUser();
+  const userId = String(formData.get('userId') ?? '');
+  const canAdminister = formData.get('canAdminister') === 'true';
+
+  await setCompanyAdmin(actor, userId, canAdminister);
   revalidatePath('/settings/users');
 }

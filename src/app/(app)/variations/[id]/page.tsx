@@ -10,7 +10,7 @@ import { findSimilarChanges } from '@/services/search.service';
 import { prisma } from '@/lib/prisma';
 import { formatDate, formatDateTime, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
-import { hasCapability } from '@/lib/rbac';
+import { hasCapability } from '@/services/permissions.service';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,17 +65,14 @@ export default async function PotentialChangeDetailPage({
     findSimilarChanges(user, id).catch(() => []),
   ]);
 
-  const canAssess =
-    hasCapability(user.systemRole, projectRoles, 'potentialChange.assessNotice') &&
-    change.noticeStatus === 'not_assessed';
+  // Asked of the same source the service consults, so the page can never offer
+  // a button the admin has revoked, nor hide one they have granted.
+  const [mayAssess, canChangeStatus] = await Promise.all([
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.assessNotice'),
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.changeStatus'),
+  ]);
 
-  // What the service will actually permit, asked rather than assumed, so the
-  // form can never offer a move that would be rejected on arrival.
-  const canChangeStatus = hasCapability(
-    user.systemRole,
-    projectRoles,
-    'potentialChange.changeStatus',
-  );
+  const canAssess = mayAssess && change.noticeStatus === 'not_assessed';
   const nextStatuses = allowedNextStatuses(change.currentStatus);
 
   // How long the change sat before anyone said so. Evidence in its own right:
