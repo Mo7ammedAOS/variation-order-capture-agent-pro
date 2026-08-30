@@ -37,6 +37,8 @@ export const ALL_CAPABILITIES = [
   'potentialChange.update',
   'potentialChange.assessNotice',
   'potentialChange.changeStatus',
+  'approval.projectManager',
+  'approval.managingDirector',
   'task.assign',
   'task.complete',
   'bottleneck.manage',
@@ -44,33 +46,15 @@ export const ALL_CAPABILITIES = [
   'companySettings.manage',
 ] as const;
 
-export type Capability =
-  | 'project.create'
-  | 'project.update'
-  | 'project.viewAll'
-  | 'project.manageMembers'
-  | 'project.manageContractRules'
-  | 'contact.manage'
-  | 'document.upload'
-  /**
-   * Controlled documents: contract, drawing, specification, BOQ, programme.
-   *
-   * Split from `document.upload` deliberately. Capture must never be blocked by
-   * permissions — a change you did not capture is a change you cannot claim —
-   * so every role that can photograph a wall keeps `document.upload`. But a
-   * site engineer should not be able to supersede a contract drawing from a
-   * phone, and superseding is what the register does.
-   */
-  | 'document.manageRegister'
-  | 'potentialChange.create'
-  | 'potentialChange.update'
-  | 'potentialChange.assessNotice'
-  | 'potentialChange.changeStatus'
-  | 'task.assign'
-  | 'task.complete'
-  | 'bottleneck.manage'
-  | 'user.manage'
-  | 'companySettings.manage';
+/**
+ * Derived from the list above rather than written out again.
+ *
+ * The two were maintained by hand and drifted the moment a capability was
+ * added: the array had it, the union did not, and the permissions screen
+ * stopped compiling with an error that named a type rather than the omission.
+ * Deriving it means a new capability is one edit, in one place.
+ */
+export type Capability = (typeof ALL_CAPABILITIES)[number];
 
 /**
  * THE DEFAULTS ONLY — not the live matrix.

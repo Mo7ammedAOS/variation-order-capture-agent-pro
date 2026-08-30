@@ -29,6 +29,8 @@ export interface PermissionCell {
 }
 
 const CAPABILITY_LABELS: Record<Capability, string> = {
+  'approval.projectManager': 'Approve as project manager',
+  'approval.managingDirector': 'Approve as managing director',
   'project.create': 'Create projects',
   'project.update': 'Edit projects',
   'project.viewAll': 'See every project',

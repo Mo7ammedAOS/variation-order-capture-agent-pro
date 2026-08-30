@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { formatDate, formatDateTime, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
+import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
@@ -21,6 +22,7 @@ import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
+import { ApprovalPanel } from './approval-panel';
 import { StatusForm } from './status-form';
 
 export const dynamic = 'force-dynamic';
@@ -91,6 +93,39 @@ export default async function PotentialChangeDetailPage({
     He can only conclude the app is broken. It was in fact refusing him, on
     purpose, in silence.
   */
+  /*
+    The gate the change is standing at, if any.
+
+    Only ONE is ever live: notice_issue while a notice is waiting to go to the
+    client, final_variation once a price exists. Both are read so that a change
+    which has moved past the first still shows what was decided and by whom —
+    an approval is evidence, and it stops being useful the moment it is hidden.
+  */
+  const activeGate =
+    change.currentStatus === 'notice_required'
+      ? ('notice_issue' as const)
+      : change.currentStatus === 'internal_approval'
+        ? ('final_variation' as const)
+        : null;
+
+  const gateState = activeGate ? await getGateState(change.id, activeGate) : null;
+  const gateSeats = gateState
+    ? await Promise.all(
+        gateState.seats.map(async (seat) => ({
+          id: seat.id,
+          seatLabel: seat.seatLabel,
+          decision: seat.decision,
+          assignedToName: seat.assignedToName,
+          decidedByName: seat.decidedByName,
+          decidedAt: seat.decidedAt ? formatDate(seat.decidedAt) : null,
+          comment: seat.comment,
+          mine:
+            seat.decision === 'pending' &&
+            (await canFillSeat(user, change.projectId, seat.seat)),
+        })),
+      )
+    : [];
+
   const awaitingAssessment = change.noticeStatus === 'not_assessed' && !mayAssess;
   const assessors = awaitingAssessment
     ? await listMembersWithCapability(change.projectId, 'potentialChange.assessNotice')
@@ -276,6 +311,15 @@ export default async function PotentialChangeDetailPage({
               </dl>
             </CardContent>
           </Card>
+
+          {gateState && activeGate ? (
+            <ApprovalPanel
+              potentialChangeId={change.id}
+              gateLabel={GATE_LABEL[activeGate]}
+              round={gateState.round}
+              seats={gateSeats}
+            />
+          ) : null}
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
 

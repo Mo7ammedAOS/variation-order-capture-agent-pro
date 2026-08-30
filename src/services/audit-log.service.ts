@@ -26,7 +26,8 @@ export type RecordType =
   | 'company_settings'
   | 'integration_event'
   | 'notification'
-  | 'role_permission';
+  | 'role_permission'
+  | 'approval';
 
 export type ActionType =
   | 'created'
@@ -41,6 +42,8 @@ export type ActionType =
   | 'notice_required'
   | 'notice_not_required'
   | 'notice_needs_information'
+  | 'approved'
+  | 'rejected'
   | 'completed'
   | 'blocked'
   | 'resolved'

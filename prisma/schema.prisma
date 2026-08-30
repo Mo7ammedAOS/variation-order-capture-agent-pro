@@ -262,6 +262,42 @@ enum IntegrationEventStatus {
 }
 
 /**
+ * The two points where the company commits to something outside itself.
+ *
+ * `notice_issue` is before the initial notice of variation reaches the client:
+ * it starts a contractual clock and states a position, so it is not one
+ * person's call. `final_variation` is after the price exists, and it commits
+ * to a number.
+ *
+ * Nothing else in the flow is gated. An approval on every stage is how a
+ * process becomes theatre and people start rubber-stamping.
+ */
+enum ApprovalGate {
+  notice_issue
+  final_variation
+}
+
+/**
+ * A gate has two SEATS rather than a list of approvers.
+ *
+ * "The project manager and the managing director" is two decisions, one
+ * operational and one commercial, and each seat is filled by whoever holds
+ * that authority. Requiring every project manager to approve would stall a
+ * project with two of them; requiring only one approval from a pool would let
+ * the same person answer for both sides.
+ */
+enum ApprovalSeat {
+  project_manager
+  managing_director
+}
+
+enum ApprovalDecision {
+  pending
+  approved
+  rejected
+}
+
+/**
  * Why a notification exists. Kept apart from the channel because the SAME
  * message goes out by three routes, and a person should not be chased three
  * times for three different reasons when it is one decision.
@@ -362,6 +398,8 @@ model User {
   uploadedDocuments    ProjectDocument[]
   activityLogs         ActivityLog[]
   notifications        NotificationLog[]
+  approvalsAssigned    Approval[]       @relation("ApprovalAssignedTo")
+  approvalsDecided     Approval[]       @relation("ApprovalDecidedBy")
 
   @@index([systemRole])
   @@index([active])
@@ -404,6 +442,7 @@ model Project {
   contacts         Contact[]
   documents        ProjectDocument[]
   potentialChanges PotentialChange[]
+  approvals        Approval[]
   tasks            Task[]
   bottlenecks      Bottleneck[]
   activityLogs     ActivityLog[]
@@ -627,6 +666,7 @@ model PotentialChange {
   reportedBy        User?                    @relation("PCReportedBy", fields: [reportedByUserId], references: [id], onDelete: SetNull)
   currentOwner      User?                    @relation("PCCurrentOwner", fields: [currentOwnerUserId], references: [id], onDelete: SetNull)
   requestedByContact Contact?                @relation("PCRequestedByContact", fields: [requestedByContactId], references: [id], onDelete: SetNull)
+  approvals         Approval[]
   tasks             Task[]
   bottlenecks       Bottleneck[]
   documents         ProjectDocument[]
@@ -887,4 +927,46 @@ model RolePermission {
 enum RoleScope {
   system
   project
+}
+
+/**
+ * One seat, at one gate, in one round.
+ *
+ * `round` is what makes a rejection recoverable. A rejected gate is not
+ * deleted and re-created — that would erase the fact that someone said no, and
+ * why. Resubmitting opens round 2 with fresh seats, and round 1 stays on the
+ * record permanently.
+ */
+model Approval {
+  id                String   @id @default(uuid()) @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  potentialChangeId String   @map("potential_change_id") @db.Uuid
+
+  gate     ApprovalGate
+  seat     ApprovalSeat
+  round    Int              @default(1)
+  decision ApprovalDecision @default(pending)
+
+  /// Who it was put to. Null when nobody holds that authority yet — visible,
+  /// rather than a gate that silently cannot be passed.
+  assignedToUserId String?   @map("assigned_to_user_id") @db.Uuid
+  decidedByUserId  String?   @map("decided_by_user_id") @db.Uuid
+  decidedAt        DateTime? @map("decided_at")
+  /// Required on a rejection. "No" without a reason cannot be acted on.
+  comment          String?
+
+  taskId String? @map("task_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  assignedTo      User?           @relation("ApprovalAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  decidedBy       User?           @relation("ApprovalDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([potentialChangeId, gate, seat, round])
+  @@index([potentialChangeId, gate])
+  @@index([assignedToUserId, decision])
+  @@map("approvals")
 }

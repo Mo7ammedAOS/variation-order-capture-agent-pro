@@ -5,6 +5,7 @@ import { requirePageUser } from '@/lib/auth/session';
 import { assessNotice, noticeAssessmentSchema } from '@/services/notice.service';
 import { changeStatus, statusChangeSchema } from '@/services/potential-change.service';
 import { isAppError } from '@/lib/errors';
+import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
 
 export interface AssessmentState {
   error?: string;
@@ -85,4 +86,57 @@ export async function submitStatusChange(
   revalidatePath('/variations');
   revalidatePath('/dashboard');
   return { ok: true };
+}
+
+export interface ApprovalState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * One seat, one decision, and it cannot be taken back.
+ *
+ * There is no "undo": an approval is a statement made on a date by a named
+ * person, and the file has to be able to show that it was made. A change of
+ * mind is a rejection at the next round, recorded as its own event, not an
+ * erasure of the first answer.
+ */
+export async function decideApprovalAction(
+  _prev: ApprovalState,
+  formData: FormData,
+): Promise<ApprovalState> {
+  const user = await requirePageUser();
+
+  const parsed = approvalDecisionSchema.safeParse({
+    approvalId: formData.get('approvalId'),
+    decision: formData.get('decision'),
+    comment: formData.get('comment') || undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Choose approve or reject' };
+  }
+
+  try {
+    const result = await recordApprovalDecision(user, parsed.data);
+    revalidatePath(`/variations/${formData.get('potentialChangeId')}`);
+    revalidatePath('/my-tasks');
+    revalidatePath('/notifications');
+
+    if (result.rejected) {
+      return { ok: 'Rejected. The change has gone back a stage with your reason.' };
+    }
+    if (result.complete) {
+      return {
+        ok:
+          result.gate === 'notice_issue'
+            ? 'Both approvals are in. The notice can be issued to the client.'
+            : 'Both approvals are in. The variation is approved.',
+      };
+    }
+    return { ok: 'Your approval is recorded. The other seat is still to decide.' };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
 }

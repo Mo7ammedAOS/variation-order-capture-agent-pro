@@ -11,6 +11,7 @@ import { recordAudit, diffChanges } from '@/services/audit-log.service';
 import { assertProjectAccess, scopeToUser } from '@/services/project-access.service';
 import { pickResponsibleMember } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
+import { openGate } from '@/services/approval.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 
 /**
@@ -407,10 +408,21 @@ export async function updatePotentialChange(
  *
  * `cancelled` is reachable from anywhere that is not already an end.
  */
+/**
+ * `cm_review` is deliberately NOT in this chain.
+ *
+ * Osman settled the approval flow on 2026-08-31: the QS prices it and it goes
+ * straight to the two-seat final gate. A separate commercial review stage
+ * needs a Commercial Manager or Contract Administrator, and this company has
+ * neither — a change reaching that stage would simply stop, permanently.
+ *
+ * The enum value stays, so the history of anything that ever sat there still
+ * reads, and so a company that does have a commercial manager can have the
+ * stage back by adding one line.
+ */
 const REVIEW_CHAIN: readonly PotentialChangeStatus[] = [
   'pm_scope_review',
   'qs_pricing',
-  'cm_review',
   'internal_approval',
 ];
 
@@ -427,11 +439,22 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
   // Parked, not answered. The evidence arrived, so ask the question again.
   if (current === 'needs_evidence') return ['notice_assessment', 'cancelled'];
 
-  // A notice has been raised; the change now needs its scope defined.
-  if (current === 'notice_required') return ['pm_scope_review', 'cancelled'];
+  // A notice is required, and two people have to agree before it is issued.
+  //
+  // Only `cancelled` is offered here on purpose. Leaving `pm_scope_review` in
+  // the dropdown would let anyone with `changeStatus` walk the change straight
+  // past a gate that exists precisely so one person cannot — a gate you can
+  // step around is not a gate. The approval itself is what advances it.
+  if (current === 'notice_required') return ['cancelled'];
 
   const position = REVIEW_CHAIN.indexOf(current);
   if (position === -1) return ['cancelled'];
+
+  // Same rule at the final gate: two seats decide, not a dropdown. Sending it
+  // BACK is still allowed, because rework is a decision a person makes.
+  if (current === 'internal_approval') {
+    return [...REVIEW_CHAIN.slice(0, position), 'cancelled'];
+  }
 
   const forward = REVIEW_CHAIN[position + 1] ?? 'included_scope';
   const rework = REVIEW_CHAIN.slice(0, position);
@@ -480,6 +503,21 @@ export async function changeStatus(
       where: { id },
       data: { currentStatus: status },
     });
+
+    // Reaching the final stage OPENS the gate rather than being the approval.
+    // Idempotent, so moving back to pricing and forward again reuses the round
+    // already in progress instead of asking two people twice.
+    if (status === 'internal_approval') {
+      await openGate(tx, {
+        potentialChangeId: id,
+        projectId: existing.projectId,
+        gate: 'final_variation',
+        pcNumber: existing.pcNumber,
+        title: existing.title,
+        dueDate: todayUtc(),
+        openedByUserId: user.id,
+      });
+    }
 
     await recordAudit({
       db: tx,

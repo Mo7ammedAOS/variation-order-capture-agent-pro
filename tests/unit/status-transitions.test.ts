@@ -18,12 +18,13 @@ import { allowedNextStatuses } from '@/services/potential-change.service';
  * silently rather than loudly.
  */
 
-const CHAIN: PotentialChangeStatus[] = [
-  'pm_scope_review',
-  'qs_pricing',
-  'cm_review',
-  'internal_approval',
-];
+/**
+ * `cm_review` left the chain on 2026-08-31 when Osman settled the approval
+ * flow: two gates, each needing a project manager AND a managing director, and
+ * no separate commercial review stage — this company has no Commercial
+ * Manager, so a change reaching that stage would have stopped there for good.
+ */
+const CHAIN: PotentialChangeStatus[] = ['pm_scope_review', 'qs_pricing', 'internal_approval'];
 
 describe('allowedNextStatuses', () => {
   it('never offers a way out of notice assessment', () => {
@@ -48,32 +49,38 @@ describe('allowedNextStatuses', () => {
     expect(allowedNextStatuses('needs_evidence')).toContain('notice_assessment');
   });
 
-  it('sends a change with a notice raised into scope review', () => {
-    expect(allowedNextStatuses('notice_required')).toEqual(['pm_scope_review', 'cancelled']);
+  it('offers no way past a notice awaiting its two approvals', () => {
+    // The approvals advance it, not a dropdown. Leaving `pm_scope_review` here
+    // would let anyone holding `changeStatus` walk the change straight past a
+    // gate that exists precisely so one person cannot — and a gate you can
+    // step around is not a gate.
+    expect(allowedNextStatuses('notice_required')).toEqual(['cancelled']);
   });
 
   it('advances exactly one stage along the chain', () => {
     expect(allowedNextStatuses('pm_scope_review')[0]).toBe('qs_pricing');
-    expect(allowedNextStatuses('qs_pricing')[0]).toBe('cm_review');
-    expect(allowedNextStatuses('cm_review')[0]).toBe('internal_approval');
-    expect(allowedNextStatuses('internal_approval')[0]).toBe('included_scope');
+    expect(allowedNextStatuses('qs_pricing')[0]).toBe('internal_approval');
+  });
+
+  it('will not carry a change past the final gate on its own', () => {
+    // Reaching `internal_approval` OPENS the two-seat gate. Only both
+    // approvals close it, so "included in scope" is never on offer here.
+    expect(allowedNextStatuses('internal_approval')).not.toContain('included_scope');
   });
 
   it('never allows a stage to be skipped', () => {
     // The whole point: nothing reaches "included in scope" without approval.
-    expect(allowedNextStatuses('pm_scope_review')).not.toContain('cm_review');
+    expect(allowedNextStatuses('pm_scope_review')).not.toContain('internal_approval');
     expect(allowedNextStatuses('pm_scope_review')).not.toContain('included_scope');
-    expect(allowedNextStatuses('qs_pricing')).not.toContain('internal_approval');
-    expect(allowedNextStatuses('cm_review')).not.toContain('included_scope');
+    expect(allowedNextStatuses('qs_pricing')).not.toContain('included_scope');
   });
 
   it('allows rework backwards to any earlier stage', () => {
-    // A CM who spots a pricing error sends it back. A strictly forward chain
-    // would leave "cancel" as the only correction, losing the change and its
-    // history to fix an arithmetic slip.
-    expect(allowedNextStatuses('cm_review')).toContain('qs_pricing');
-    expect(allowedNextStatuses('cm_review')).toContain('pm_scope_review');
-    expect(allowedNextStatuses('internal_approval')).toContain('cm_review');
+    // Someone who spots a pricing error sends it back. A strictly forward
+    // chain would leave "cancel" as the only correction, losing the change and
+    // its history to fix an arithmetic slip.
+    expect(allowedNextStatuses('qs_pricing')).toContain('pm_scope_review');
+    expect(allowedNextStatuses('internal_approval')).toContain('qs_pricing');
     expect(allowedNextStatuses('internal_approval')).toContain('pm_scope_review');
   });
 

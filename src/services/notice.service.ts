@@ -9,6 +9,7 @@ import { calculateNoticeCountdown, type NoticeCountdown } from '@/lib/risk';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit } from '@/services/audit-log.service';
 import { recordTaskNotifications } from '@/services/notification.service';
+import { openGate } from '@/services/approval.service';
 import { assertProjectAccess } from '@/services/project-access.service';
 
 /**
@@ -66,9 +67,12 @@ export async function assessNotice(
     };
 
     if (input.outcome === 'required') {
+      // The notice is not sent because one person decided it should be. Two
+      // seats have to agree before anything reaches the client, because a
+      // notice states a contractual position in the company's name.
       updates.currentStatus = 'notice_required';
-      updates.waitingFor = 'Notice drafting';
-      updates.nextAction = 'Draft the Notice of Potential Claim';
+      updates.waitingFor = 'Approval to issue the notice';
+      updates.nextAction = 'Project manager and managing director must approve issuing it';
     } else if (input.outcome === 'not_required') {
       // No notice needed does not mean no change. It goes into the commercial
       // chain at the top of it — scope first.
@@ -102,6 +106,18 @@ export async function assessNotice(
       where: { potentialChangeId, taskType: 'notice_assessment', status: { in: ['open', 'in_progress'] } },
       data: { status: 'completed', completedAt: new Date() },
     });
+
+    if (input.outcome === 'required') {
+      await openGate(tx, {
+        potentialChangeId,
+        projectId: change.projectId,
+        gate: 'notice_issue',
+        pcNumber: change.pcNumber,
+        title: change.title,
+        dueDate: nextDue,
+        openedByUserId: user.id,
+      });
+    }
 
     if (input.outcome === 'not_required') {
       // Scope review, raised for the PM. It used to raise QS pricing for the
