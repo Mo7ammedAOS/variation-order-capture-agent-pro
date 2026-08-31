@@ -129,7 +129,7 @@ export async function runDetectionSweep(): Promise<{ detected: number }> {
     where: {
       noticeStatus: 'not_assessed',
       nextActionDueDate: { lt: today },
-      currentStatus: { notIn: ['cancelled', 'included_scope'] },
+      currentStatus: { notIn: ['cancelled', 'included_scope', 'variation_approved'] },
     },
     select: {
       id: true, projectId: true, estimatedValue: true,

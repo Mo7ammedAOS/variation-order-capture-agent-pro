@@ -82,6 +82,11 @@ enum PotentialChangeStatus {
   qs_pricing
   cm_review
   internal_approval
+  /// Agreed. A variation the client owes money for.
+  variation_approved
+  /// NOT a variation: the QS found the work already covered by the contract.
+  /// A real and common outcome, and the opposite of the one above — which is
+  /// why they stopped sharing a status.
   included_scope
   cancelled
 }
@@ -302,6 +307,40 @@ enum ApprovalDecision {
  * message goes out by three routes, and a person should not be chased three
  * times for three different reasons when it is one decision.
  */
+/**
+ * Where a rate came from. The single most argued line on any variation
+ * account, so it is recorded per item rather than assumed.
+ */
+enum RateSource {
+  /// A rate already in the priced BOQ. Hardest to dispute.
+  contract_boq
+  /// Derived from a BOQ rate for similar work.
+  pro_rata
+  /// New work with no comparable rate. Has to be agreed, and usually is not
+  /// agreed quickly, which is why it is flagged rather than buried.
+  star_rate
+  /// A quotation from a subcontractor or supplier.
+  quotation
+  /// Time-related cost, e.g. prolongation.
+  daywork
+}
+
+enum CostCategory {
+  labour
+  material
+  plant
+  subcontractor
+  other
+}
+
+enum PricingStatus {
+  not_started
+  draft
+  /// Frozen. The figure the approvers see is the figure that was submitted.
+  submitted
+  approved
+}
+
 enum NotificationKind {
   task_assigned
   task_reminder
@@ -400,6 +439,7 @@ model User {
   notifications        NotificationLog[]
   approvalsAssigned    Approval[]       @relation("ApprovalAssignedTo")
   approvalsDecided     Approval[]       @relation("ApprovalDecidedBy")
+  pricingSubmitted     PotentialChange[] @relation("PricingSubmittedBy")
 
   @@index([systemRole])
   @@index([active])
@@ -443,6 +483,7 @@ model Project {
   documents        ProjectDocument[]
   potentialChanges PotentialChange[]
   approvals        Approval[]
+  pricingLineItems PricingLineItem[]
   tasks            Task[]
   bottlenecks      Bottleneck[]
   activityLogs     ActivityLog[]
@@ -666,7 +707,22 @@ model PotentialChange {
   reportedBy        User?                    @relation("PCReportedBy", fields: [reportedByUserId], references: [id], onDelete: SetNull)
   currentOwner      User?                    @relation("PCCurrentOwner", fields: [currentOwnerUserId], references: [id], onDelete: SetNull)
   requestedByContact Contact?                @relation("PCRequestedByContact", fields: [requestedByContactId], references: [id], onDelete: SetNull)
+  pricingStatus       PricingStatus @default(not_started) @map("pricing_status")
+  /// Percentages, held apart from the line items because they apply to the
+  /// whole build-up and are negotiated separately from any single rate.
+  prelimsPercent      Decimal?      @map("prelims_percent") @db.Decimal(6, 3)
+  overheadProfitPercent Decimal?    @map("overhead_profit_percent") @db.Decimal(6, 3)
+  /// The frozen figure. Set once, at submission, and never recomputed — the
+  /// number two directors approve must be the number that was put to them.
+  submittedValue      Decimal?      @map("submitted_value") @db.Decimal(14, 2)
+  submittedAt         DateTime?     @map("submitted_at")
+  submittedByUserId   String?       @map("submitted_by_user_id") @db.Uuid
+  pricingNotes        String?       @map("pricing_notes")
+
+  submittedBy User? @relation("PricingSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+
   approvals         Approval[]
+  pricingLineItems  PricingLineItem[]
   tasks             Task[]
   bottlenecks       Bottleneck[]
   documents         ProjectDocument[]
@@ -969,4 +1025,39 @@ model Approval {
   @@index([potentialChangeId, gate])
   @@index([assignedToUserId, decision])
   @@map("approvals")
+}
+
+/**
+ * One line of a variation build-up.
+ *
+ * `amount` is stored, and computed on the SERVER from quantity and rate. It is
+ * never taken from the browser and never worked out in a template: a total
+ * that is right on screen and different in the database is the kind of error
+ * that is only discovered in a payment dispute.
+ */
+model PricingLineItem {
+  id                String @id @default(uuid()) @db.Uuid
+  potentialChangeId String @map("potential_change_id") @db.Uuid
+  projectId         String @map("project_id") @db.Uuid
+
+  sequence     Int
+  description  String
+  quantity     Decimal      @db.Decimal(14, 3)
+  unit         String       @default("no")
+  rate         Decimal      @db.Decimal(14, 2)
+  amount       Decimal      @db.Decimal(14, 2)
+  rateSource   RateSource   @default(star_rate) @map("rate_source")
+  category     CostCategory @default(other)
+  /// The BOQ item this rate came from, where it came from one.
+  boqReference String?      @map("boq_reference")
+  notes        String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  potentialChange PotentialChange @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([potentialChangeId, sequence])
+  @@map("pricing_line_items")
 }

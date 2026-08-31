@@ -245,12 +245,22 @@ describe('ending a claim', () => {
   });
 
   // Cancelling an agreed variation would hide it from the account.
-  it('refuses to cancel something already agreed and included', async () => {
-    state.change = change({ currentStatus: 'included_scope' });
+  it('refuses to cancel a variation that has been agreed', async () => {
+    state.change = change({ currentStatus: 'variation_approved' });
 
     await expect(
       cancelPotentialChange(REPORTER, ID, { reason: 'Actually we should not have claimed it.' }),
     ).rejects.toThrow(/raise the reversal as its own change/i);
+  });
+
+  // "The QS found it already in the contract" and "the company chose not to
+  // claim" are different facts. Stacking one on the other makes the record lie.
+  it('refuses to cancel something already closed as not a variation', async () => {
+    state.change = change({ currentStatus: 'included_scope' });
+
+    await expect(
+      cancelPotentialChange(REPORTER, ID, { reason: 'Tidying up the register.' }),
+    ).rejects.toThrow(/already closed/i);
   });
 
   it('brings a cancelled change back at assessment, keeping its capture date', async () => {

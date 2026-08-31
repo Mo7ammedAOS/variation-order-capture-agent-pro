@@ -80,7 +80,7 @@ export default async function ProjectReportPage({
   const today = todayUtc();
 
   const open = changes.filter(
-    (change) => !['included_scope', 'cancelled'].includes(change.currentStatus),
+    (change) => !['included_scope', 'variation_approved', 'cancelled'].includes(change.currentStatus),
   );
   // Same predicate the dashboard uses, so the two cannot disagree.
   const overdue = open.filter((change) =>

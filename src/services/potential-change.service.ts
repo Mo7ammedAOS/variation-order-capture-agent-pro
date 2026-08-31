@@ -593,7 +593,21 @@ const REVIEW_CHAIN: readonly PotentialChangeStatus[] = [
   'internal_approval',
 ];
 
-const TERMINAL_STATUSES: readonly PotentialChangeStatus[] = ['included_scope', 'cancelled'];
+/**
+ * Three ways a change ends, and they mean different things.
+ *
+ *   variation_approved  agreed, and the client owes money for it
+ *   included_scope      the QS found it already covered by the contract
+ *   cancelled           the company decided not to pursue it
+ *
+ * They shared a status until 2026-08-31, which made a won claim and a lost one
+ * indistinguishable in the register.
+ */
+const TERMINAL_STATUSES: readonly PotentialChangeStatus[] = [
+  'variation_approved',
+  'included_scope',
+  'cancelled',
+];
 
 export function allowedNextStatuses(current: PotentialChangeStatus): PotentialChangeStatus[] {
   if (TERMINAL_STATUSES.includes(current)) return [];
@@ -623,7 +637,15 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
     return [...REVIEW_CHAIN.slice(0, position)];
   }
 
-  const forward = REVIEW_CHAIN[position + 1] ?? 'included_scope';
+  // Leaving QS pricing is done by SUBMITTING a price, or by recording that it
+  // is not a variation. Both are decisions with evidence behind them, and
+  // neither belongs in a dropdown — the same rule as the approval gates. Only
+  // rework backwards is offered here.
+  if (current === 'qs_pricing') {
+    return [...REVIEW_CHAIN.slice(0, position)];
+  }
+
+  const forward = REVIEW_CHAIN[position + 1] ?? 'variation_approved';
   const rework = REVIEW_CHAIN.slice(0, position);
 
   return [forward, ...rework];
@@ -633,7 +655,7 @@ export const statusChangeSchema = z.object({
   status: z.enum([
     'new_potential_change', 'notice_assessment', 'notice_required', 'needs_evidence',
     'pm_scope_review', 'qs_pricing', 'cm_review', 'internal_approval',
-    'included_scope', 'cancelled',
+    'variation_approved', 'included_scope', 'cancelled',
   ]),
   note: z.string().trim().max(2000).optional(),
 });
@@ -689,9 +711,14 @@ export async function cancelPotentialChange(
   if (existing.currentStatus === 'cancelled') {
     throw new ValidationError('This change is already cancelled.');
   }
+  if (existing.currentStatus === 'variation_approved') {
+    throw new ValidationError(
+      'This variation has been agreed. Cancelling it now would hide an agreed variation from the account — raise the reversal as its own change.',
+    );
+  }
   if (existing.currentStatus === 'included_scope') {
     throw new ValidationError(
-      'This change has been agreed and included. Cancelling it now would hide an agreed variation — raise the reversal as its own change.',
+      'This is already closed: the QS found the work covered by the contract. Cancelling it on top would say the company chose not to claim, which is a different thing and not what happened.',
     );
   }
 

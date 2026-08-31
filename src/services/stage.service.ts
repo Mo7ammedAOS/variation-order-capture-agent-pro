@@ -91,7 +91,11 @@ export async function enterStage(
   if (!stage) {
     // A terminal or gated stage. Clear the "waiting for" so a finished change
     // does not go on claiming it is waiting for something.
-    if (input.status === 'included_scope' || input.status === 'cancelled') {
+    if (
+      input.status === 'variation_approved' ||
+      input.status === 'included_scope' ||
+      input.status === 'cancelled'
+    ) {
       await db.potentialChange.update({
         where: { id: input.potentialChangeId },
         data: { waitingFor: null, nextAction: null, nextActionDueDate: null },

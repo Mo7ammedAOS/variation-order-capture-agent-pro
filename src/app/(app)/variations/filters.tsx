@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 const STATUSES = [
   'new_potential_change', 'notice_assessment', 'notice_required', 'needs_evidence',
   'pm_scope_review', 'qs_pricing', 'cm_review', 'internal_approval',
-  'included_scope', 'cancelled',
+  'variation_approved', 'included_scope', 'cancelled',
 ];
 
 /**

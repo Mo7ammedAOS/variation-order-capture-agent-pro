@@ -23,7 +23,7 @@ export const POST = withAuth(async (_request, { user }) => {
 
   const orphaned = await prisma.potentialChange.findMany({
     where: {
-      currentStatus: { notIn: ['included_scope', 'cancelled'] },
+      currentStatus: { notIn: ['included_scope', 'variation_approved', 'cancelled'] },
       tasks: { none: { status: { in: ['open', 'in_progress', 'blocked'] } } },
     },
     select: { id: true, projectId: true, pcNumber: true, title: true, currentStatus: true },

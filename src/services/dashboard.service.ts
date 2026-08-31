@@ -47,7 +47,7 @@ export async function getOverview(
 
   const openChange: Prisma.PotentialChangeWhereInput = {
     ...scope,
-    currentStatus: { notIn: ['cancelled', 'included_scope'] },
+    currentStatus: { notIn: ['cancelled', 'included_scope', 'variation_approved'] },
   };
 
   const [

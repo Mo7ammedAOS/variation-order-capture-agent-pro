@@ -58,7 +58,17 @@ describe('allowedNextStatuses', () => {
 
   it('advances exactly one stage along the chain', () => {
     expect(allowedNextStatuses('pm_scope_review')[0]).toBe('qs_pricing');
-    expect(allowedNextStatuses('qs_pricing')[0]).toBe('internal_approval');
+  });
+
+  /**
+   * Leaving QS pricing means SUBMITTING a price, or recording that the work is
+   * already in the contract. Both are decisions with evidence behind them, and
+   * neither belongs in a dropdown — the same rule as the approval gates.
+   */
+  it('will not let a change leave pricing without a price', () => {
+    expect(allowedNextStatuses('qs_pricing')).not.toContain('internal_approval');
+    expect(allowedNextStatuses('qs_pricing')).not.toContain('variation_approved');
+    expect(allowedNextStatuses('qs_pricing')).toContain('pm_scope_review');
   });
 
   it('will not carry a change past the final gate on its own', () => {

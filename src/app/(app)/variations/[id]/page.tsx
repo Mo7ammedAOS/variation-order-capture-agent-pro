@@ -25,6 +25,8 @@ import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
 import { EditPanel } from './edit-panel';
 import { CasePanel } from './case-panel';
+import { PricingPanel } from './pricing-panel';
+import { getPricing } from '@/services/pricing.service';
 import { StatusForm } from './status-form';
 
 export const dynamic = 'force-dynamic';
@@ -143,11 +145,21 @@ export default async function PotentialChangeDetailPage({
     hasCapability(user.systemRole, projectRoles, 'document.upload'),
   ]);
 
-  const mayCancel = await hasCapability(
-    user.systemRole,
-    projectRoles,
-    'potentialChange.cancel',
-  );
+  const [mayCancel, mayPrice] = await Promise.all([
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.cancel'),
+    hasCapability(user.systemRole, projectRoles, 'pricing.submit'),
+  ]);
+
+  /*
+    The build-up is shown from the moment a change reaches pricing and never
+    hidden again. An approved variation whose price is invisible is a number
+    nobody can check, and "what was this £40,000 for" is the first question
+    asked in every account meeting.
+  */
+  const pricingStages = ['qs_pricing', 'internal_approval', 'variation_approved'];
+  const pricing = pricingStages.includes(change.currentStatus)
+    ? await getPricing(user, change.id)
+    : null;
 
   const isReporter = change.reportedByUserId === user.id;
   const canEdit = mayEditAny || (isReporter && mayEditOwn);
@@ -351,6 +363,33 @@ export default async function PotentialChangeDetailPage({
           ) : null}
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+
+          {pricing ? (
+            <PricingPanel
+              potentialChangeId={change.id}
+              currency={change.project.currency ?? 'AED'}
+              canPrice={mayPrice && change.currentStatus === 'qs_pricing'}
+              pricingStatus={pricing.pricingStatus}
+              submittedValue={pricing.submittedValue?.toFixed(2) ?? null}
+              submittedAt={pricing.submittedAt ? formatDate(pricing.submittedAt) : null}
+              prelimsPercent={pricing.prelimsPercent?.toString() ?? ''}
+              overheadProfitPercent={pricing.overheadProfitPercent?.toString() ?? ''}
+              pricingNotes={pricing.pricingNotes ?? ''}
+              items={pricing.items.map((item) => ({
+                id: item.id,
+                sequence: item.sequence,
+                description: item.description,
+                quantity: item.quantity.toString(),
+                unit: item.unit,
+                rate: item.rate.toFixed(2),
+                amount: item.amount.toFixed(2),
+                rateSource: item.rateSource,
+                category: item.category,
+                boqReference: item.boqReference,
+              }))}
+              totals={pricing.totals}
+            />
+          ) : null}
 
           {mayCancel && change.currentStatus !== 'included_scope' ? (
             <CasePanel

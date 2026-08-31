@@ -319,13 +319,17 @@ export async function recordApprovalDecision(
         }
       }
     } else if (complete) {
-      movedTo = approval.gate === 'notice_issue' ? 'pm_scope_review' : 'included_scope';
+      movedTo = approval.gate === 'notice_issue' ? 'pm_scope_review' : 'variation_approved';
     }
 
     if (movedTo) {
       await tx.potentialChange.update({
         where: { id: approval.potentialChangeId },
-        data: { currentStatus: movedTo as never },
+        data: {
+          currentStatus: movedTo as never,
+          // The price is now agreed, so it stops being editable at all.
+          ...(movedTo === 'variation_approved' ? { pricingStatus: 'approved' as const } : {}),
+        },
       });
 
       // Then hand it over properly.
