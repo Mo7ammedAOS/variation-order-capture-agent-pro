@@ -67,6 +67,17 @@ one import and one credential rebind, not eight.
 D–G all report to `POST /api/integrations/notifications/delivery-status`. That
 callback is the **only** thing that may mark a notification `sent`.
 
+**Lane D also carries notices, and that raises the stakes on the callback.**
+A message with `kind: notice_issued` is addressed to the CLIENT, not to a
+colleague, and its `external_message_id` becomes the app's proof of service —
+the thing produced months later when somebody disputes that the notice was
+given. So lane D must return the real provider message id, never a generated
+one, and must report a failure as a failure. A lane that fabricates an id to
+make the callback tidy would be manufacturing evidence. Until the id arrives
+the notice stays `issued`, the bottleneck sweep raises
+`notice_drafted_not_sent`, and somebody is chased. That is the correct
+behaviour, not a bug to smooth over.
+
 ## Sticky notes are structural
 
 1. **Header** — client name, slug, app base URL, which credentials this copy
