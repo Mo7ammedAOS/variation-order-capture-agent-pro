@@ -12,8 +12,16 @@ cd "$(dirname "$0")/.."
 ENV_FILE=".env.production"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — see DEPLOYMENT_GUIDE.md"; exit 1; }
 
-echo "==> Building image"
-docker compose --env-file "$ENV_FILE" build
+echo "==> Building images"
+# BOTH, and the migrate one explicitly.
+#
+# A plain `docker compose build` skips services behind a profile, so `migrate`
+# kept its old image. A release then applied yesterday's migrations and shipped
+# today's code, and the app came up expecting a column that was never added.
+# The failure showed as a runtime Prisma error with nothing pointing at the
+# deploy. Building it by name is what stops that recurring.
+docker compose --env-file "$ENV_FILE" build app
+docker compose --env-file "$ENV_FILE" --profile tools build migrate
 
 echo "==> Applying migrations"
 # Runs against DIRECT_URL. `migrate deploy` never generates or resets; it only
