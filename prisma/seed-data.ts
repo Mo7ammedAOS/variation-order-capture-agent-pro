@@ -29,9 +29,9 @@ export interface SeedUser {
 }
 
 export const USERS: SeedUser[] = [
-  // Osman's own six addresses, so every notification this system sends can
-  // actually be read by someone testing it. Six real inboxes beats twelve
-  // fictional ones: an email to khalid@abcfitout.example proves nothing.
+  // Osman's own addresses, so every notification this system sends can actually
+  // be read by someone testing it. Real inboxes beat fictional ones: an email
+  // to khalid@abcfitout.example proves nothing.
   //
   // The separation that matters is intact: the QS prices, the MD approves, and
   // neither is the person who captured it. That is what makes a variation file
@@ -42,13 +42,18 @@ export const USERS: SeedUser[] = [
   // apart: a reply from this number matches whichever of the six has a question
   // outstanding. Fine for testing, wrong for a real deployment — give each
   // person their own number before anyone relies on it.
-  {
-    key: 'md', fullName: 'Mohammed', email: 'mohammed@osmanflow.com',
-    phone: '+971565951887', systemRole: 'managing_director',
-    // Administration is a FLAG, not a job. With no separate administrator in
-    // this cast it sits with the MD, which is also how a small firm runs.
-    canAdministerCompany: true,
-  },
+  { key: 'md', fullName: 'Mohammed', email: 'mohammed@osmanflow.com', phone: '+971565951887', systemRole: 'managing_director' },
+
+  // Administration is a FLAG, not a job — so a firm can put it on an office
+  // manager or a finance manager without pretending their role is something
+  // else. Aryia holds it; the MD approves variations and does not administer.
+  //
+  // ⚠️ Her address is the same one lane B watches for incoming email. While
+  // that is true, do NOT activate lane B: a notification the app sends her
+  // lands unread in the capture mailbox, gets read back as a new report from
+  // her, and — since she is on no project — parks in triage. A loop that fills
+  // the inbox with the system's own messages.
+  { key: 'admin', fullName: 'Aryia', email: 'sumunit2@gmail.com', phone: '+971565951887', systemRole: 'company_admin', canAdministerCompany: true },
   { key: 'qs1', fullName: 'Osman',       email: 'guided369@gmail.com',                    phone: '+971565951887', systemRole: 'standard_user' },
   { key: 'pm1', fullName: 'Abdelmoneim', email: 'osman.constructionsystems@hotmail.com',  phone: '+971565951887', systemRole: 'standard_user' },
   { key: 'pm2', fullName: 'Hashim',      email: 'mohammedosman2400@outlook.com',          phone: '+971565951887', systemRole: 'standard_user' },

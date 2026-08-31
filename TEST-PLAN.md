@@ -17,23 +17,35 @@ do not waste time hunting for it.
 
 | Who | Email | On which projects |
 |---|---|---|
-| **Mohammed** — managing director, and administrator | `mohammed@osmanflow.com` | none, and **sees all four**; also adds people and permissions |
+| **Aryia** — administrator | `sumunit2@gmail.com` | none; adds projects, people and permissions |
+| **Mohammed** — managing director | `mohammed@osmanflow.com` | none, and **sees all four** |
 | **Osman** — quantity surveyor | `guided369@gmail.com` | all four, prices them |
 | **Abdelmoneim** — project manager | `osman.constructionsystems@hotmail.com` | DXB-001, AUH-003 |
 | **Hashim** — project manager | `mohammedosman2400@outlook.com` | DXB-002, DXB-004 |
-| **Ahmed** — site engineer | `org3700@gmail.com` | DXB-001, DXB-002, DXB-004 — **three**, on purpose |
-| **Hassan** — site engineer | `mohammedossidahmed@gmail.com` | DXB-002, AUH-003 |
+| **Ahmed** — site engineer | `org3700@gmail.com` | DXB-001, DXB-002 |
+| **Hassan** — site engineer | `mohammedossidahmed@gmail.com` | AUH-003, DXB-004 |
 
 These are real inboxes, so every message the system sends can actually be read.
 An email to `khalid@abcfitout.example` proved nothing.
 
-**Ahmed is on three projects deliberately.** Two would be too easy, four would
-leave no project to prove a refusal with. Three lets you test both: he must be
-refused AUH-003, and reporting without naming a job must make the system ask him
-which of the three he meant.
+**Every PM and site engineer carries two projects.** Two is also exactly what
+proves the two rules that matter: the pair someone is *not* on must refuse them,
+and reporting without naming a job must make the system **ask** which of their
+two they meant.
 
-⚠️ **Phone numbers are placeholders.** "Which project did you mean?" goes out on
-email *and* WhatsApp. Until real numbers are set, only the email arrives.
+**The database starts empty.** No changes, no tasks, no contacts — the company,
+the people and the four projects, and nothing else. Everything you see, you
+made.
+
+⚠️ **All six share one phone number** (`+971565951887`) so the WhatsApp half of
+every message is visible while testing. WhatsApp therefore cannot tell them
+apart — a reply matches whoever has a question outstanding. Fine for testing,
+wrong for a real deployment.
+
+⚠️ **Aryia's address is the mailbox lane B watches.** Do not activate lane B
+while that is true: a notification sent to her lands unread in the capture
+mailbox, is read back as a new report from her, and parks in triage. The system
+would fill its own inbox with its own messages.
 
 ## 1 · Sign in
 
