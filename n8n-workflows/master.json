@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## VO Capture & Control — all-in-one workflow\n\n**Client:** `MASTER` (template — this copy runs nothing)\n**App:** `https://vo.osmanflow.com`\n\nOne file, one import, every lane. Node names carry their lane letter so a\nfailed execution names the lane before anything has to be opened.\n\n### Before this file is a client's workflow — the duplication checklist\n\n1. **Rebind every credential.** Gmail, Google Drive. Credentials do NOT travel\n   with an export; the fields look filled and are not.\n2. **Regenerate every webhook path.** Two clients sharing `vo/whatsapp` means\n   one contractor's site photos land in another contractor's register.\n3. **Set the environment on the n8n container** (`docker compose` env, not this\n   file — the repo is public and a secret in here is a published secret):\n   `VO_APP_URL`, `VO_WEBHOOK_SECRET`, `VO_OUTBOUND_SECRET`,\n   `VO_EVOLUTION_URL`, `VO_EVOLUTION_INSTANCE`, `VO_EVOLUTION_API_KEY`.\n4. **Point Evolution's webhook** at lane A's production URL, event\n   `MESSAGES_UPSERT` only.\n5. **Import deactivated. Test each lane. Then activate.**\n\n⚠️ Activation is all-or-nothing — that is the cost of one file per client.\nLane H routes failures by letter so the cost is bearable.",
+        "content": "## VO Capture & Control — all-in-one workflow\n\n**Client:** `MASTER` (template — this copy runs nothing)\n**App:** `https://vo.osmanflow.com`\n\nOne file, one import, every lane. Node names carry their lane letter so a\nfailed execution names the lane before anything has to be opened.\n\n### Before this file is a client's workflow — the duplication checklist\n\n1. **Rebind every credential.** Gmail, Google Drive. Credentials do NOT travel\n   with an export; the fields look filled and are not.\n2. **Regenerate every webhook path.** Two clients sharing `vo/whatsapp` means\n   one contractor's site photos land in another contractor's register.\n3. **Rebind the two Crypto credentials** — `VO · sign requests to the app` and\n   `VO · verify requests from the app`. Their `hmacSecret` must equal the app's\n   `N8N_WEBHOOK_SECRET` and `N8N_OUTBOUND_SECRET`. Wrong values here fail every\n   request with a message about a signature that says nothing about the cause.\n4. **Set the environment on the n8n container** (`docker compose` env, not this\n   file — the repo is public and a secret in here is a published secret):\n   `VO_APP_URL`, `VO_EVOLUTION_URL`, `VO_EVOLUTION_INSTANCE`,\n   `VO_EVOLUTION_API_KEY`, `VO_DRIVE_ROOT_FOLDER_ID`.\n5. **Point Evolution's webhook** at lane A's production URL, event\n   `MESSAGES_UPSERT` only.\n6. **Set this workflow as its own Error Workflow** in Settings, or lane H never\n   fires.\n7. **Import deactivated. Test each lane. Then activate.**\n\n⚠️ Activation is all-or-nothing — that is the cost of one file per client.\nLane H routes failures by letter so the cost is bearable.",
         "height": 700,
         "width": 620,
         "color": 4
@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## How a request is signed, and why it is fussy\n\nEvery call to the app carries `x-vo-timestamp` and `x-vo-signature`, an\nHMAC-SHA256 over the string `timestamp.rawBody` — the exact bytes, not the\nobject.\n\n**So the body is sent as `raw`, never as `json`.** If the HTTP node were left\non JSON body it would re-serialise the object, key order and spacing could\ndiffer by one byte from what was hashed, and every request would fail\nverification with a message about the signature that says nothing about the\ncause. The Code node builds the string; the Crypto node signs that string; the\nHTTP node sends that same string.\n\n**The secret is `$env.VO_WEBHOOK_SECRET`, never typed into a node.** A secret in\na parameter is a secret in the exported JSON, and this file lives in a public\nrepository.",
+        "content": "## How a request is signed, and why it is fussy\n\nEvery call to the app carries `x-vo-timestamp` and `x-vo-signature`, an\nHMAC-SHA256 over the string `timestamp.rawBody` — the exact bytes, not the\nobject.\n\n**So the body is sent as `raw`, never as `json`.** If the HTTP node were left\non JSON body it would re-serialise the object, key order and spacing could\ndiffer by one byte from what was hashed, and every request would fail\nverification with a message about the signature that says nothing about the\ncause. The Code node builds the string; the Crypto node signs that string; the\nHTTP node sends that same string.\n\n**The key lives in a Crypto credential, never in a node parameter.** Crypto v2\nhas no `secret` field at all — an earlier draft set one and n8n silently ignored\nit, so every Sign node rendered with an empty box and would have signed with\nnothing. Two credentials, because the two directions use different keys:\n`VO · sign requests to the app` for outbound, `VO · verify requests from the\napp` for what the app sends here.\n\n**The Code nodes run once for ALL items, so `$json` is undefined in them.** They\nread `$input.first().json`. `$json` there is not a style preference — it is a\nnode that throws the moment a real message arrives.",
         "height": 400,
         "width": 620,
         "color": 3
@@ -69,7 +69,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Evolution speaks Baileys. The app speaks its own contract. This is the only\n// node that knows both, on purpose: when Evolution changes shape, one node\n// changes.\nconst body = $json.body ?? $json;\nconst data = body.data ?? {};\nconst key = data.key ?? {};\n\n// Our own outgoing messages come back through the same event.\nif (key.fromMe) return [];\n\nconst m = data.message ?? {};\nconst text = m.conversation ?? m.extendedTextMessage?.text ?? '';\nconst caption = m.imageMessage?.caption ?? m.videoMessage?.caption\n  ?? m.documentMessage?.caption ?? '';\n\nlet type = 'text';\nif (m.imageMessage) type = 'image';\nelse if (m.audioMessage) type = 'audio';\nelse if (m.videoMessage) type = 'video';\nelse if (m.documentMessage) type = 'document';\n\n// Nothing to read and nothing to look at. Not an error, just not a change.\nif (!text && !caption && type === 'text') return [];\n\nconst jid = String(key.remoteJid ?? '');\n// Groups end @g.us and carry the real sender in `participant`. A group message\n// signed by the group would resolve to no user at all.\nconst sender = jid.endsWith('@g.us') ? String(key.participant ?? '') : jid;\n\nconst payload = {\n  idempotency_key: 'evolution:' + (key.id ?? ''),\n  received_at: new Date((Number(data.messageTimestamp) || Date.now() / 1000) * 1000).toISOString(),\n  sender: {\n    phone: '+' + sender.split('@')[0].split(':')[0],\n    display_name: data.pushName || undefined,\n  },\n  message: {\n    type,\n    text: text || undefined,\n    caption: caption || undefined,\n    media: [],\n  },\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// Evolution speaks Baileys. The app speaks its own contract. This is the only\n// node that knows both, on purpose: when Evolution changes shape, one node\n// changes.\nconst input = $input.first().json;\nconst body = input.body ?? input;\nconst data = body.data ?? {};\nconst key = data.key ?? {};\n\n// Our own outgoing messages come back through the same event.\nif (key.fromMe) return [];\n\nconst m = data.message ?? {};\nconst text = m.conversation ?? m.extendedTextMessage?.text ?? '';\nconst caption = m.imageMessage?.caption ?? m.videoMessage?.caption\n  ?? m.documentMessage?.caption ?? '';\n\nlet type = 'text';\nif (m.imageMessage) type = 'image';\nelse if (m.audioMessage) type = 'audio';\nelse if (m.videoMessage) type = 'video';\nelse if (m.documentMessage) type = 'document';\n\n// Nothing to read and nothing to look at. Not an error, just not a change.\nif (!text && !caption && type === 'text') return [];\n\nconst jid = String(key.remoteJid ?? '');\n// Groups end @g.us and carry the real sender in `participant`. A group message\n// signed by the group would resolve to no user at all.\nconst sender = jid.endsWith('@g.us') ? String(key.participant ?? '') : jid;\n\nconst payload = {\n  idempotency_key: 'evolution:' + (key.id ?? ''),\n  received_at: new Date((Number(data.messageTimestamp) || Date.now() / 1000) * 1000).toISOString(),\n  sender: {\n    phone: '+' + sender.split('@')[0].split(':')[0],\n    display_name: data.pushName || undefined,\n  },\n  message: {\n    type,\n    text: text || undefined,\n    caption: caption || undefined,\n    media: [],\n  },\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n004-a2",
       "name": "A2 · Shape Message",
@@ -83,10 +83,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n005-a3",
@@ -96,7 +96,13 @@
       "position": [
         140,
         -300
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -138,7 +144,10 @@
       "position": [
         360,
         -300
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -174,7 +183,7 @@
       "id": "n008-b1",
       "name": "B1 · Gmail Trigger",
       "type": "n8n-nodes-base.gmailTrigger",
-      "typeVersion": 1.2,
+      "typeVersion": 1.4,
       "position": [
         -300,
         120
@@ -188,7 +197,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const h = ($json.payload?.headers ?? []).reduce((acc, x) => {\n  acc[String(x.name).toLowerCase()] = x.value; return acc;\n}, {});\n\nconst from = String(h.from ?? '');\nconst match = from.match(/^\\s*(?:\\\"?([^\\\"<]*?)\\\"?\\s*)?<?([^\\s<>]+@[^\\s<>]+)>?\\s*$/);\n\nconst payload = {\n  idempotency_key: 'gmail:' + ($json.id ?? ''),\n  received_at: new Date(Number($json.internalDate) || Date.now()).toISOString(),\n  from: { address: (match?.[2] ?? from).toLowerCase(), name: match?.[1] || undefined },\n  to: String(h.to ?? '').split(',').map((s) => s.trim()).filter(Boolean),\n  cc: String(h.cc ?? '').split(',').map((s) => s.trim()).filter(Boolean),\n  subject: h.subject ?? '',\n  body_text: $json.snippet ?? '',\n  attachments: [],\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// With `simple: false` the Gmail Trigger already parses the message: from, to,\n// subject, text, date. It does NOT return the raw Gmail API envelope, so\n// reading payload.headers here — which is what the API returns — would find\n// nothing and every captured email would arrive with an empty sender.\nconst m = $input.first().json;\n\n// `from` arrives as `Name <address@host>` or bare. Take the address either way.\nconst raw = String(m.from ?? '');\nconst match = raw.match(/<([^>]+)>/);\nconst address = (match ? match[1] : raw).trim().toLowerCase();\nconst name = match ? raw.slice(0, raw.indexOf('<')).replace(/[\"']/g, '').trim() : '';\n\nconst list = (v) => (Array.isArray(v) ? v : String(v ?? '').split(','))\n  .map((x) => String(x).trim())\n  .filter(Boolean);\n\nconst payload = {\n  idempotency_key: 'gmail:' + (m.id ?? m.messageId ?? ''),\n  received_at: new Date(m.date ?? Date.now()).toISOString(),\n  from: { address, name: name || undefined },\n  to: list(m.to),\n  cc: list(m.cc),\n  subject: m.subject ?? '',\n  body_text: m.text ?? m.textAsHtml ?? '',\n  attachments: [],\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n009-b2",
       "name": "B2 · Shape Email",
@@ -202,10 +211,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n010-b3",
@@ -215,7 +224,13 @@
       "position": [
         140,
         120
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -257,7 +272,10 @@
       "position": [
         360,
         120
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -282,7 +300,8 @@
         "folderToWatch": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $env.VO_DRIVE_ROOT_FOLDER_ID }}"
+          "value": "={{ $env.VO_DRIVE_ROOT_FOLDER_ID }}",
+          "cachedResultName": "VO Capture & Control"
         },
         "options": {},
         "pollTimes": {
@@ -310,7 +329,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// The project code comes from the folder name, which is where the app puts it\n// (`DXB-001 — Dubai Office Fit-Out`). If it cannot be read, send it anyway and\n// let the app reject it: a 4xx that names the file beats a document filed\n// against a project somebody guessed at.\nconst name = $json.name ?? '';\nconst parentName = $json.parentFolderName ?? $json.parents?.[0]?.name ?? '';\nconst code = (parentName.match(/^[A-Z]{2,4}-\\d{3}/) ?? name.match(/^[A-Z]{2,4}-\\d{3}/) ?? [''])[0];\n\nconst payload = {\n  idempotency_key: 'drive:' + ($json.id ?? ''),\n  project_code: code,\n  document_name: name,\n  document_type: 'other',\n  external_file_id: $json.id,\n  source_url: $json.webViewLink || undefined,\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// The project code comes from the folder name, which is where the app puts it\n// (`DXB-001 — Dubai Office Fit-Out`). If it cannot be read, send it anyway and\n// let the app reject it: a 4xx that names the file beats a document filed\n// against a project somebody guessed at.\nconst f = $input.first().json;\nconst name = f.name ?? '';\nconst parentName = f.parentFolderName ?? f.parents?.[0]?.name ?? '';\nconst code = (parentName.match(/^[A-Z]{2,4}-\\d{3}/) ?? name.match(/^[A-Z]{2,4}-\\d{3}/) ?? [''])[0];\n\nconst payload = {\n  idempotency_key: 'drive:' + (f.id ?? ''),\n  project_code: code,\n  document_name: name,\n  document_type: 'other',\n  external_file_id: f.id,\n  source_url: f.webViewLink || undefined,\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n014-c2",
       "name": "C2 · Shape Document",
@@ -324,10 +343,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n015-c3",
@@ -337,7 +356,13 @@
       "position": [
         140,
         340
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -379,7 +404,10 @@
       "position": [
         360,
         340
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -420,10 +448,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
-        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.rawBody.toString() }}",
+        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
         "dataPropertyName": "expected",
-        "secret": "={{ $env.VO_OUTBOUND_SECRET }}",
         "encoding": "hex"
       },
       "id": "n019-d2",
@@ -433,7 +461,13 @@
       "position": [
         -80,
         620
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "CKfBPU87ot93FtYq",
+          "name": "VO · verify requests from the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -462,7 +496,7 @@
       "id": "n020-d3",
       "name": "D3 · Signature Valid?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "typeVersion": 2.3,
       "position": [
         140,
         620
@@ -486,6 +520,7 @@
         "sendTo": "={{ $json.body.to }}",
         "subject": "={{ $json.body.subject }}",
         "message": "={{ $json.body.body }}",
+        "emailType": "text",
         "options": {
           "appendAttribution": false
         }
@@ -493,7 +528,7 @@
       "id": "n022-d4",
       "name": "D4 · Send Email",
       "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
+      "typeVersion": 2.2,
       "position": [
         360,
         620
@@ -508,7 +543,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// The app treats its own outbound request as 'queued', never 'sent'. This\n// call is the only thing that can move a notification to delivered, and the\n// only evidence that a message actually left the building.\nconst src = $('D3 · Signature Valid?').item.json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'sent',\n  external_message_id: $json.id ?? undefined,\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// The app treats its own outbound request as 'queued', never 'sent'. This\n// call is the only thing that can move a notification to delivered, and the\n// only evidence that a message actually left the building.\nconst src = $('D3 · Signature Valid?').first().json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'sent',\n  external_message_id: $input.first().json.id ?? undefined,\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n023-d7",
       "name": "D7 · Build Delivery Report",
@@ -522,10 +557,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n024-d8",
@@ -535,7 +570,13 @@
       "position": [
         800,
         620
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -577,11 +618,14 @@
       "position": [
         1020,
         620
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
-        "jsCode": "// A failed send is recorded as failed, with the reason. Silence here would\n// leave a notification pending for ever and nobody would know it never went.\nconst src = $('D3 · Signature Valid?').item.json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'failed',\n  failure_reason: String($json.error?.message ?? 'Gmail send failed').slice(0, 400),\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// A failed send is recorded as failed, with the reason. Silence here would\n// leave a notification pending for ever and nobody would know it never went.\nconst src = $('D3 · Signature Valid?').first().json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'failed',\n  failure_reason: String($input.first().json.error?.message ?? 'Gmail send failed').slice(0, 400),\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n026-d6",
       "name": "D6 · Email Failed",
@@ -631,10 +675,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
-        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.rawBody.toString() }}",
+        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
         "dataPropertyName": "expected",
-        "secret": "={{ $env.VO_OUTBOUND_SECRET }}",
         "encoding": "hex"
       },
       "id": "n029-e2",
@@ -644,7 +688,13 @@
       "position": [
         -80,
         1060
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "CKfBPU87ot93FtYq",
+          "name": "VO · verify requests from the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -673,7 +723,7 @@
       "id": "n030-e3",
       "name": "E3 · Signature Valid?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "typeVersion": 2.3,
       "position": [
         140,
         1060
@@ -727,7 +777,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// The app treats its own outbound request as 'queued', never 'sent'. This\n// call is the only thing that can move a notification to delivered, and the\n// only evidence that a message actually left the building.\nconst src = $('E3 · Signature Valid?').item.json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'sent',\n  external_message_id: $json.key?.id ?? undefined,\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// The app treats its own outbound request as 'queued', never 'sent'. This\n// call is the only thing that can move a notification to delivered, and the\n// only evidence that a message actually left the building.\nconst src = $('E3 · Signature Valid?').first().json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'sent',\n  external_message_id: $input.first().json.key?.id ?? undefined,\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n033-e7",
       "name": "E7 · Build Delivery Report",
@@ -741,10 +791,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n034-e8",
@@ -754,7 +804,13 @@
       "position": [
         800,
         1060
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -796,11 +852,14 @@
       "position": [
         1020,
         1060
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
-        "jsCode": "const src = $('E3 · Signature Valid?').item.json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'failed',\n  failure_reason: String($json.error?.message ?? 'Evolution send failed').slice(0, 400),\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "const src = $('E3 · Signature Valid?').first().json.body;\nconst payload = {\n  idempotency_key: 'delivery:' + src.notification_id,\n  notification_id: src.notification_id,\n  status: 'failed',\n  failure_reason: String($input.first().json.error?.message ?? 'Evolution send failed').slice(0, 400),\n};\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
       },
       "id": "n036-e6",
       "name": "E6 · WhatsApp Failed",
@@ -865,10 +924,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n040-s1b",
@@ -878,7 +937,13 @@
       "position": [
         140,
         1500
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -920,7 +985,10 @@
       "position": [
         360,
         1500
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -959,10 +1027,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n044-s2b",
@@ -972,7 +1040,13 @@
       "position": [
         140,
         1700
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -1014,7 +1088,10 @@
       "position": [
         360,
         1700
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -1054,10 +1131,10 @@
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": false,
         "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.VO_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "n048-s3b",
@@ -1067,7 +1144,13 @@
       "position": [
         140,
         1900
-      ]
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
     },
     {
       "parameters": {
@@ -1109,7 +1192,10 @@
       "position": [
         360,
         1900
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -1140,7 +1226,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const node = $json.execution?.lastNodeExecuted ?? '';\nconst lane = (node.match(/^([A-Z])\\d/) ?? [])[1] ?? '?';\n\nconst LANES = {\n  A: 'WhatsApp capture', B: 'Email capture', C: 'Document watch',\n  D: 'Email out', E: 'WhatsApp out', S: 'Scheduled jobs',\n  F: 'Client follow-up', G: 'Weekly report',\n};\n\nreturn [{ json: {\n  lane,\n  lane_name: LANES[lane] ?? 'Unknown lane',\n  node,\n  message: $json.execution?.error?.message ?? 'No message',\n  workflow: $json.workflow?.name ?? '',\n  execution_url: $json.execution?.url ?? '',\n  at: new Date().toISOString(),\n} }];"
+        "jsCode": "const e = $input.first().json;\nconst node = e.execution?.lastNodeExecuted ?? '';\nconst lane = (node.match(/^([A-Z])\\d/) ?? [])[1] ?? '?';\n\nconst LANES = {\n  A: 'WhatsApp capture', B: 'Email capture', C: 'Document watch',\n  D: 'Email out', E: 'WhatsApp out', S: 'Scheduled jobs',\n  F: 'Client follow-up', G: 'Weekly report',\n};\n\nreturn [{ json: {\n  lane,\n  lane_name: LANES[lane] ?? 'Unknown lane',\n  node,\n  message: e.execution?.error?.message ?? 'No message',\n  workflow: e.workflow?.name ?? '',\n  execution_url: e.execution?.url ?? '',\n  at: new Date().toISOString(),\n} }];"
       },
       "id": "n052-h2",
       "name": "H2 · Name The Lane",
