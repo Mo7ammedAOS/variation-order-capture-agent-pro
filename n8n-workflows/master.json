@@ -142,7 +142,7 @@
     },
     {
       "parameters": {
-        "content": "### Lane B · Email in\n**Trigger:** Gmail, unread in the VO mailbox.\n**Calls:** `POST /api/integrations/email/incoming-email`\n**Idempotency:** the Gmail message id.\n\n⚠️ **Credential not bound in MASTER.** The mailbox has not been chosen yet.\nSwap this node for IMAP if the client is not on Google.\n\n**This lane must never:** mark a mail read before the app has accepted it. A\nmail marked read on a failed POST is a change nobody ever sees again.",
+        "content": "### Lane B · Email in\n**Trigger:** Gmail, unread in the VO mailbox.\n**Calls:** `POST /api/integrations/email/incoming-email`\n**Idempotency:** the Gmail message id.\n\n**Bound to the `Gmail account` credential.** The mailbox has not been chosen yet.\nSwap this node for IMAP if the client is not on Google.\n\n**This lane must never:** mark a mail read before the app has accepted it. A\nmail marked read on a failed POST is a change nobody ever sees again.",
         "height": 280,
         "width": 520,
         "color": 5
@@ -178,7 +178,13 @@
       "position": [
         -300,
         120
-      ]
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nYohZIRCus2816jl",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
@@ -294,7 +300,13 @@
       "position": [
         -300,
         340
-      ]
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "H3pANIGlx4tZ8vU4",
+          "name": "Personal Drive"
+        }
+      }
     },
     {
       "parameters": {
@@ -371,7 +383,7 @@
     },
     {
       "parameters": {
-        "content": "### Lane D · Email out\n**Trigger:** the app posts a queued notification here.\n**Sends:** Gmail.\n**Then:** reports back to `/api/integrations/notifications/delivery-status`.\n\n**The callback is the point.** The app marks a row `queued` when it hands the\nmessage over, never `sent`. Only D9 can move it to delivered. Without that,\nthe app would claim a notice was delivered on the strength of its own outbound\nrequest — which is exactly the claim that loses an argument later.\n\n⚠️ **Credential not bound in MASTER.**",
+        "content": "### Lane D · Email out\n**Trigger:** the app posts a queued notification here.\n**Sends:** Gmail.\n**Then:** reports back to `/api/integrations/notifications/delivery-status`.\n\n**The callback is the point.** The app marks a row `queued` when it hands the\nmessage over, never `sent`. Only D9 can move it to delivered. Without that,\nthe app would claim a notice was delivered on the strength of its own outbound\nrequest — which is exactly the claim that loses an argument later.\n\n**Bound to the `Gmail account` credential.**",
         "height": 320,
         "width": 520,
         "color": 6
@@ -486,7 +498,13 @@
         360,
         620
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nYohZIRCus2816jl",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
