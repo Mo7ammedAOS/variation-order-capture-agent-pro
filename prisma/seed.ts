@@ -101,6 +101,39 @@ async function main() {
   }
   console.log(`  users      ${USERS.length}`);
 
+  // ── permissions ──────────────────────────────────────────────────────────
+  //
+  // The permission matrix lives in a TABLE an admin edits, and a missing row is
+  // a DENIAL — never a quiet fall back to the code defaults. That is the right
+  // rule (an admin who revokes something means it), and it means an empty table
+  // is a locked building: nobody can do anything, including the administrator
+  // who would fix it.
+  //
+  // The rows were installed by a migration, which will not run again. So the
+  // seed installs them too, and a wiped database comes back working instead of
+  // sealed shut.
+  const permissionCount = await prisma.rolePermission.count();
+  if (permissionCount === 0) {
+    const { DEFAULT_SYSTEM_ROLE_CAPABILITIES, DEFAULT_PROJECT_ROLE_CAPABILITIES } =
+      await import('../src/lib/rbac');
+
+    const rows: { scope: 'system' | 'project'; role: string; capability: string }[] = [];
+    for (const [role, caps] of Object.entries(DEFAULT_SYSTEM_ROLE_CAPABILITIES)) {
+      for (const capability of caps) rows.push({ scope: 'system', role, capability });
+    }
+    for (const [role, caps] of Object.entries(DEFAULT_PROJECT_ROLE_CAPABILITIES)) {
+      for (const capability of caps) rows.push({ scope: 'project', role, capability });
+    }
+
+    await prisma.rolePermission.createMany({
+      data: rows.map((row) => ({ ...row, granted: true })),
+      skipDuplicates: true,
+    });
+    console.log(`  perms      ${rows.length} restored to the shipped baseline`);
+  } else {
+    console.log(`  perms      ${permissionCount} already set — left alone`);
+  }
+
   // ── projects, rules, members ─────────────────────────────────────────────
   const projectIds = new Map<string, string>();
 
