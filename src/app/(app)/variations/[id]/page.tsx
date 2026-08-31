@@ -27,7 +27,7 @@ import { EditPanel } from './edit-panel';
 import { CasePanel } from './case-panel';
 import { PricingPanel } from './pricing-panel';
 import { getPricing } from '@/services/pricing.service';
-import { StatusForm } from './status-form';
+import { StatusForm, type BlockedReason } from './status-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -184,6 +184,24 @@ export default async function PotentialChangeDetailPage({
       (task.status === 'open' || task.status === 'in_progress'),
   );
   const nextStatuses = allowedNextStatuses(change.currentStatus);
+
+  /*
+    When there is nothing to choose, say what is actually holding the change
+    up. The panel used to answer that with "this change has reached the end of
+    its lifecycle" — for a change that was alive and waiting on two approvals.
+  */
+  const blockedBy: BlockedReason =
+    nextStatuses.length > 0
+      ? null
+      : change.currentStatus === 'notice_assessment'
+        ? 'assessment'
+        : change.currentStatus === 'notice_required'
+          ? 'notice_gate'
+          : change.currentStatus === 'qs_pricing'
+            ? 'pricing'
+            : change.currentStatus === 'internal_approval'
+              ? 'final_gate'
+              : 'ended';
 
   // How long the change sat before anyone said so. Evidence in its own right:
   // a change raised three weeks after it happened tells you something about the
@@ -467,6 +485,7 @@ export default async function PotentialChangeDetailPage({
               potentialChangeId={change.id}
               currentStatus={change.currentStatus}
               options={nextStatuses}
+              blockedBy={blockedBy}
             />
           ) : null}
 

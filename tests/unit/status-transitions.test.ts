@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PotentialChangeStatus } from '@prisma/client';
 import { allowedNextStatuses } from '@/services/potential-change.service';
+import { isRework, statusLabel } from '@/lib/status-labels';
 
 /**
  * The lifecycle guard, as pure logic so it runs without a database.
@@ -129,5 +130,30 @@ describe('allowedNextStatuses', () => {
     for (const status of CHAIN) {
       expect(allowedNextStatuses(status)).not.toContain('notice_assessment');
     }
+  });
+});
+
+describe('the words people actually read', () => {
+  it('never shows a raw enum name', () => {
+    // "pm scope review" is the machine's word with the underscores taken out.
+    // It reads as an unfinished screen and teaches people the app is talking
+    // to itself.
+    expect(statusLabel('pm_scope_review')).toBe('Scope review');
+    expect(statusLabel('qs_pricing')).toBe('Pricing');
+    expect(statusLabel('variation_approved')).toBe('Variation approved');
+    expect(statusLabel('included_scope')).toBe('Already in the contract');
+  });
+
+  it('knows which way along the chain a move goes', () => {
+    expect(isRework('qs_pricing', 'pm_scope_review')).toBe(true);
+    expect(isRework('internal_approval', 'qs_pricing')).toBe(true);
+    expect(isRework('pm_scope_review', 'qs_pricing')).toBe(false);
+  });
+
+  it('does not call a move to a closing status rework', () => {
+    // Cancelled and approved sit outside the chain; treating them as backwards
+    // would demand a rework reason for finishing something.
+    expect(isRework('qs_pricing', 'cancelled')).toBe(false);
+    expect(isRework('internal_approval', 'variation_approved')).toBe(false);
   });
 });

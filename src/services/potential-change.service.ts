@@ -14,6 +14,7 @@ import { loadRecipients, recordTaskNotifications } from '@/services/notification
 import { openGate } from '@/services/approval.service';
 import { enterStage } from '@/services/stage.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
+import { isRework } from '@/lib/status-labels';
 
 /**
  * The Potential Change register — the heart of the system.
@@ -840,6 +841,16 @@ export async function changeStatus(
 
   if (status === existing.currentStatus) {
     throw new ValidationError(`This change is already at ${humaniseStatus(status)}`);
+  }
+
+  // Rework without a reason is the same failure as a rejection without one:
+  // the person it lands on has to guess what was wrong, and usually guesses
+  // wrong. Enforced here and not only in the form, because `required` in a
+  // browser is a courtesy, not a rule.
+  if (isRework(existing.currentStatus, status) && (note?.trim().length ?? 0) < 5) {
+    throw new ValidationError(
+      'Say what needs fixing. Whoever gets this back has to know what to change.',
+    );
   }
 
   const allowed = allowedNextStatuses(existing.currentStatus);
