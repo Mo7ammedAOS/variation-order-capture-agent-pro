@@ -876,7 +876,7 @@
     },
     {
       "parameters": {
-        "content": "### Lane S · The schedules\nEverything this system does on a clock lives here, so it can be seen, paused\nand proved from one screen.\n\n| When | Job |\n|---|---|\n| 07:00 daily | `reminder_sweep` — who is late, who gets chased, who gets escalated |\n| Every 30 min, 07–19 | `notification_dispatch` — messages a lane could not take earlier |\n| 06:00 daily | `bottleneck_sweep` — what is blocked and how much is waiting on it |\n\n**What did NOT move here: deciding who is owed what.** That stays in the app,\nwhere the escalation ladder and the dedupe key are tested. As n8n nodes it\nwould be a diagram nobody can run twice safely, and a retried execution would\nchase the same project manager twice. A system that double-chases gets muted.\n\n**`If Execution Is Missed` is set to run the most recent missed execution.**\nA deploy at 07:00 must not cost a day of chasing.\n\n**Safe to fire twice.** Each job reads current state and works out what is owed\nnow; the dedupe key covers task, kind, day, channel and recipient.",
+        "content": "### Lane S · The schedules\nEverything this system does on a clock lives here, so it can be seen, paused\nand proved from one screen.\n\n| When | Job |\n|---|---|\n| Hourly, 07-19 | `reminder_sweep` — who is late, who gets chased, who gets escalated |\n| Every 30 min, 07–19 | `notification_dispatch` — messages a lane could not take earlier |\n| 06:00 daily | `bottleneck_sweep` — what is blocked and how much is waiting on it |\n\n**What did NOT move here: deciding who is owed what.** That stays in the app,\nwhere the escalation ladder and the dedupe key are tested. As n8n nodes it\nwould be a diagram nobody can run twice safely, and a retried execution would\nchase the same project manager twice. A system that double-chases gets muted.\n\n**The chase runs hourly, not once.** This instance's Schedule Trigger is 1.3,\nwhich has no \"If Execution Is Missed\" setting, so a single daily fire landing\nduring a deploy would cost a whole day of chasing with no sign of it. Thirteen\nruns a day, of which twelve write nothing.\n\n**Safe to fire twice.** Each job reads current state and works out what is owed\nnow; the dedupe key covers task, kind, day, channel and recipient.",
         "height": 480,
         "width": 520,
         "color": 7
@@ -895,18 +895,16 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
-              "triggerAtHour": 7,
-              "triggerAtMinute": 0
+              "field": "cronExpression",
+              "expression": "0 0 7-19 * * *"
             }
           ]
-        },
-        "misfirePolicy": "coalesce"
+        }
       },
-      "id": "605ef6cb-02b3-5cb5-b67d-68339ce69f5a",
-      "name": "S1 · Daily 07:00 · Chase",
+      "id": "04db46da-9e08-5830-8407-276521d28263",
+      "name": "S1 · Hourly 07-19 · Chase",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.4,
+      "typeVersion": 1.3,
       "position": [
         -300,
         1500
@@ -1003,13 +1001,12 @@
               "minutesInterval": 30
             }
           ]
-        },
-        "misfirePolicy": "coalesce"
+        }
       },
       "id": "567d0e50-455d-527c-9f1f-f86934169675",
       "name": "S2 · Every 30 min · Dispatch",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.4,
+      "typeVersion": 1.3,
       "position": [
         -300,
         1700
@@ -1107,13 +1104,12 @@
               "triggerAtMinute": 0
             }
           ]
-        },
-        "misfirePolicy": "coalesce"
+        }
       },
       "id": "619a021b-6a7f-55b7-9a82-dc02f82537aa",
       "name": "S3 · Daily 06:00 · Bottlenecks",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.4,
+      "typeVersion": 1.3,
       "position": [
         -300,
         1900
@@ -1540,7 +1536,7 @@
         ]
       ]
     },
-    "S1 · Daily 07:00 · Chase": {
+    "S1 · Hourly 07-19 · Chase": {
       "main": [
         [
           {
