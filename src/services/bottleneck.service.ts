@@ -169,5 +169,63 @@ export async function runDetectionSweep(): Promise<{ detected: number }> {
     detected += 1;
   }
 
+  // Approved, issued, and still sitting in the outbox. Either the courier lane
+  // is not wired or the send keeps failing. Either way nobody has been told,
+  // and the notice period is running.
+  const draftedNotSent = await prisma.notice.findMany({
+    where: { status: 'issued', issuedAt: { lt: today } },
+    select: {
+      id: true, projectId: true, potentialChangeId: true, issuedAt: true,
+      potentialChange: { select: { estimatedValue: true } },
+    },
+  });
+
+  for (const notice of draftedNotSent) {
+    await detectBottleneck({
+      projectId: notice.projectId,
+      potentialChangeId: notice.potentialChangeId,
+      bottleneckType: 'notice_drafted_not_sent',
+      blockedByRole: 'contract_administrator',
+      blockerReason: 'The notice was approved but has not left the building',
+      since: notice.issuedAt ?? today,
+      valueAtRisk: notice.potentialChange.estimatedValue
+        ? Number(notice.potentialChange.estimatedValue)
+        : null,
+    });
+    detected += 1;
+  }
+
+  // Marked sent with nothing to point at. A notice you cannot prove you served
+  // is, in an argument, a notice you did not serve — so this is raised even
+  // though the app's own state says the job is done.
+  const sentWithoutProof = await prisma.notice.findMany({
+    where: {
+      status: { in: ['sent', 'acknowledged'] },
+      OR: [{ externalMessageId: null }, { documentId: null }],
+    },
+    select: {
+      id: true, projectId: true, potentialChangeId: true, sentAt: true,
+      externalMessageId: true, documentId: true,
+      potentialChange: { select: { estimatedValue: true } },
+    },
+  });
+
+  for (const notice of sentWithoutProof) {
+    await detectBottleneck({
+      projectId: notice.projectId,
+      potentialChangeId: notice.potentialChangeId,
+      bottleneckType: 'notice_sent_no_proof',
+      blockedByRole: 'contract_administrator',
+      blockerReason: notice.externalMessageId
+        ? 'The notice was served but no copy is filed in the project folder'
+        : 'The notice was served but the courier returned no message id',
+      since: notice.sentAt ?? today,
+      valueAtRisk: notice.potentialChange.estimatedValue
+        ? Number(notice.potentialChange.estimatedValue)
+        : null,
+    });
+    detected += 1;
+  }
+
   return { detected };
 }

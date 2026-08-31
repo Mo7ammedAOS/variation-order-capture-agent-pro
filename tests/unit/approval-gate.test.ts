@@ -22,6 +22,9 @@ const state = {
   approvalUpdates: [] as Record<string, unknown>[],
   nextStageOwner: 'suresh' as string | null,
   tasksCreated: [] as Record<string, unknown>[],
+  noticeDraft: null as Record<string, unknown> | null,
+  noticeUpdates: [] as Record<string, unknown>[],
+  messagesCreated: [] as Record<string, unknown>[],
 };
 
 vi.mock('server-only', () => ({}));
@@ -68,6 +71,19 @@ const prismaMock = {
       return args;
     },
   },
+  notice: {
+    findFirst: async () => state.noticeDraft,
+    update: async (args: Record<string, unknown>) => {
+      state.noticeUpdates.push(args);
+      return { id: 'notice-1', reference: 'NOT-DXB-001-0001' };
+    },
+  },
+  notificationLog: {
+    create: async (args: Record<string, unknown>) => {
+      state.messagesCreated.push(args);
+      return { id: 'msg-1' };
+    },
+  },
   rolePermission: { findMany: async () => [] },
   user: { findFirst: async () => null },
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaMock),
@@ -112,6 +128,19 @@ describe('the two-seat approval gate', () => {
     state.approvalUpdates = [];
     state.nextStageOwner = 'suresh';
     state.tasksCreated = [];
+    state.noticeDraft = {
+      id: 'notice-1',
+      projectId: 'proj-1',
+      potentialChangeId: 'pc-1',
+      reference: 'NOT-DXB-001-0001',
+      version: 1,
+      status: 'draft',
+      subject: 'Notice of a potential variation',
+      body: 'The body of the notice.',
+      recipientEmail: 'consultant@example.com',
+    };
+    state.noticeUpdates = [];
+    state.messagesCreated = [];
   });
 
   it('does not move the change on a single approval', async () => {
@@ -181,9 +210,11 @@ describe('the two-seat approval gate', () => {
 
     expect(result.rejected).toBe(true);
     expect(result.movedTo).toBe('notice_assessment');
-    expect(state.pcUpdates[0]).toMatchObject({
-      data: { currentStatus: 'notice_assessment' },
-    });
+    // Found rather than indexed: superseding the rejected draft also writes to
+    // the change, and it writes first.
+    expect(
+      state.pcUpdates.map((u) => (u.data as Record<string, unknown>).currentStatus),
+    ).toContain('notice_assessment');
   });
 
   it('sends a rejected final approval back to pricing', async () => {
@@ -267,5 +298,97 @@ describe('the two-seat approval gate', () => {
   it('accepts an approval with no comment, because yes needs no explanation', () => {
     const result = approvalDecisionSchema.safeParse({ approvalId: ID, decision: 'approved' });
     expect(result.success).toBe(true);
+  });
+});
+
+/**
+ * The notice only becomes real when both seats agree, and even then it is only
+ * QUEUED. These are the two ends of the gap that lost this project real
+ * entitlement before the system existed: a notice everyone assumed had gone,
+ * and a rejected draft that was quietly edited into the one that did.
+ */
+describe('what the notice gate does to the notice', () => {
+  beforeEach(() => {
+    state.approval = approval();
+    state.siblings = [];
+    state.alreadyDecidedByUser = null;
+    state.canFill = true;
+    state.pcUpdates = [];
+    state.taskUpdates = [];
+    state.approvalUpdates = [];
+    state.nextStageOwner = 'suresh';
+    state.tasksCreated = [];
+    state.noticeDraft = {
+      id: 'notice-1',
+      projectId: 'proj-1',
+      potentialChangeId: 'pc-1',
+      reference: 'NOT-DXB-001-0001',
+      version: 1,
+      status: 'draft',
+      subject: 'Notice of a potential variation',
+      body: 'The body of the notice.',
+      recipientEmail: 'consultant@example.com',
+    };
+    state.noticeUpdates = [];
+    state.messagesCreated = [];
+  });
+
+  it('does not touch the notice on a single approval', async () => {
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'pending', taskId: 'task-2' },
+    ];
+
+    await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(state.noticeUpdates).toHaveLength(0);
+    expect(state.messagesCreated).toHaveLength(0);
+  });
+
+  it('issues and queues, but never marks it sent, when both seats agree', async () => {
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'approved', taskId: 'task-2' },
+    ];
+
+    const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(result.noticeToFileId).toBe('notice-1');
+
+    const issued = state.noticeUpdates.at(0)?.data as Record<string, unknown>;
+    expect(issued.status).toBe('issued');
+    expect(issued.notificationId).toBe('msg-1');
+
+    // The message exists and is PENDING. Asking for it to be sent is not
+    // evidence that it was, and only the courier callback may change that.
+    const message = state.messagesCreated.at(0)?.data as Record<string, unknown>;
+    expect(message.status).toBe('pending');
+    expect(message.recipient).toBe('consultant@example.com');
+    expect(message.kind).toBe('notice_issued');
+    // Addressed outside the company, so it must not land in a staff bell.
+    expect(message.userId).toBeUndefined();
+  });
+
+  it('supersedes the rejected draft rather than editing it', async () => {
+    state.siblings = [
+      { id: ID, decision: 'rejected', taskId: 'task-1' },
+      { id: 'other', decision: 'pending', taskId: 'task-2' },
+    ];
+
+    await recordApprovalDecision(USER, {
+      approvalId: ID,
+      decision: 'rejected',
+      comment: 'The clause reference is wrong.',
+    });
+
+    const update = state.noticeUpdates.at(0)?.data as Record<string, unknown>;
+    expect(update.status).toBe('superseded');
+    expect(state.messagesCreated).toHaveLength(0);
+
+    // And the change is owed a notice again, so the redraft is version 2.
+    const pcUpdate = state.pcUpdates.find(
+      (u) => (u.data as Record<string, unknown>).noticeStatus === 'required',
+    );
+    expect(pcUpdate).toBeTruthy();
   });
 });

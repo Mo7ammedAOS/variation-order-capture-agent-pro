@@ -14,6 +14,7 @@ import { toDateInputValue, formatDate, formatDateTime, daysSince } from '@/lib/d
 import { humanise } from '@/services/dashboard.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
+import { getCurrentNotice } from '@/services/notice-document.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
@@ -25,6 +26,7 @@ import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
+import { NoticePanel, type NoticeView } from './notice-panel';
 import { EditPanel } from './edit-panel';
 import { CasePanel } from './case-panel';
 import { PricingPanel } from './pricing-panel';
@@ -156,6 +158,47 @@ export default async function PotentialChangeDetailPage({
     hasCapability(user.systemRole, projectRoles, 'potentialChange.cancel'),
     hasCapability(user.systemRole, projectRoles, 'pricing.submit'),
   ]);
+
+  /*
+    The notice itself.
+
+    Read for every change that has one, at every stage — not only while it is
+    a draft. Once served it is the single most important thing on this page:
+    what was said, when it left, and what proves it. Hiding it after issue
+    would mean the file cannot answer the question it exists to answer.
+  */
+  const noticeRecord = await getCurrentNotice(change.id);
+  const [mayDraftNotice, mayAcknowledgeNotice] = await Promise.all([
+    hasCapability(user.systemRole, projectRoles, 'notice.draft'),
+    hasCapability(user.systemRole, projectRoles, 'notice.acknowledge'),
+  ]);
+
+  const notice: NoticeView | null = noticeRecord
+    ? {
+        id: noticeRecord.id,
+        reference: noticeRecord.reference,
+        version: noticeRecord.version,
+        status: noticeRecord.status,
+        subject: noticeRecord.subject,
+        body: noticeRecord.body,
+        recipientName: noticeRecord.recipientName,
+        recipientEmail: noticeRecord.recipientEmail,
+        draftedByName: noticeRecord.draftedBy?.fullName ?? null,
+        issuedByName: noticeRecord.issuedBy?.fullName ?? null,
+        issuedAt: noticeRecord.issuedAt ? formatDate(noticeRecord.issuedAt) : null,
+        sentAt: noticeRecord.sentAt ? formatDate(noticeRecord.sentAt) : null,
+        externalMessageId: noticeRecord.externalMessageId,
+        acknowledgedAt: noticeRecord.acknowledgedAt
+          ? formatDate(noticeRecord.acknowledgedAt)
+          : null,
+        acknowledgedByName: noticeRecord.acknowledgedBy?.fullName ?? null,
+        documentId: noticeRecord.document?.id ?? null,
+        deliveryStatus: noticeRecord.notification?.status ?? null,
+        deliveryFailureReason: noticeRecord.notification?.failureReason ?? null,
+        canDraft: mayDraftNotice,
+        canAcknowledge: mayAcknowledgeNotice,
+      }
+    : null;
 
   /*
     The build-up is shown from the moment a change reaches pricing and never
@@ -377,6 +420,8 @@ export default async function PotentialChangeDetailPage({
               </dl>
             </CardContent>
           </Card>
+
+          {notice ? <NoticePanel potentialChangeId={change.id} notice={notice} /> : null}
 
           {gateState && activeGate ? (
             <ApprovalPanel

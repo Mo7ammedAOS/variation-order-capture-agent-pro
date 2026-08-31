@@ -46,6 +46,8 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   'potentialChange.create': 'Raise a change',
   'potentialChange.update': 'Edit a change',
   'potentialChange.assessNotice': 'Assess the notice',
+  'notice.draft': 'Write the notice',
+  'notice.acknowledge': 'Record the acknowledgement',
   'potentialChange.changeStatus': 'Move the status',
   'task.assign': 'Assign tasks',
   'task.complete': 'Complete tasks',

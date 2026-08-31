@@ -11,6 +11,7 @@ import { recordAudit } from '@/services/audit-log.service';
 import { recordTaskNotifications } from '@/services/notification.service';
 import { openGate } from '@/services/approval.service';
 import { assertProjectAccess } from '@/services/project-access.service';
+import { draftNotice, markNoticeDelivered } from '@/services/notice-document.service';
 
 /**
  * Notice control.
@@ -73,6 +74,9 @@ export async function assessNotice(
       updates.currentStatus = 'notice_required';
       updates.waitingFor = 'Approval to issue the notice';
       updates.nextAction = 'Project manager and managing director must approve issuing it';
+      // The draft is written below, before the gate opens, so the two seats
+      // approve a page of text rather than an intention.
+      updates.noticeStatus = 'drafted';
     } else if (input.outcome === 'not_required') {
       // No notice needed does not mean no change. It goes into the commercial
       // chain at the top of it — scope first.
@@ -108,6 +112,12 @@ export async function assessNotice(
     });
 
     if (input.outcome === 'required') {
+      await draftNotice(tx, {
+        potentialChangeId,
+        projectId: change.projectId,
+        actorUserId: user.id,
+      });
+
       await openGate(tx, {
         potentialChangeId,
         projectId: change.projectId,
@@ -270,7 +280,7 @@ export async function recordDeliveryResult(input: {
     }
   }
 
-  return prisma.notificationLog.update({
+  const updated = await prisma.notificationLog.update({
     where: { id: input.notificationId },
     data: {
       status: input.status,
@@ -279,4 +289,14 @@ export async function recordDeliveryResult(input: {
       sentAt: input.status === 'sent' || input.status === 'delivered' ? new Date() : null,
     },
   });
+
+  // If this message was carrying a notice, the callback is the proof of
+  // service. Most callbacks are for routine reminders and match no notice.
+  await markNoticeDelivered({
+    notificationId: input.notificationId,
+    externalMessageId: input.externalMessageId ?? null,
+    succeeded: input.status === 'sent' || input.status === 'delivered',
+  });
+
+  return updated;
 }

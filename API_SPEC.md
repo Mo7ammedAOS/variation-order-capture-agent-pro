@@ -127,6 +127,14 @@ Signed, so it is not a free liveness probe for anyone scanning. Returns
 | GET/POST | `/api/potential-changes` | Filters: `projectId, status, riskLevel, ownerUserId, trade, q, noticeDueWithinDays` |
 | GET/PATCH | `/api/potential-changes/[id]` | Editing `eventDate` recalculates the notice deadline |
 | POST | `/api/potential-changes/[id]/notice-assessment` | `{ outcome, notes }`. Needs `potentialChange.assessNotice` |
+
+The notice document has **no REST route**. It is reached only through the two
+server actions on the change page — `saveNoticeDraftAction` and
+`acknowledgeNoticeAction` — and issued only as a side effect of the second
+approval on the `notice_issue` gate. There is deliberately no "send the notice"
+endpoint: nothing may serve a notice except two people agreeing, and an
+endpoint that could do it would eventually be called by something that is not
+a person.
 | PATCH | `/api/potential-changes/[id]/status` | `{ status, note? }`. Needs `potentialChange.changeStatus`. Illegal transitions return **400** with the reason — notably, a change in `notice_assessment` cannot be moved at all, because its outcome decides where it goes |
 | GET | `/api/potential-changes/[id]/similar` | Suggestions, scoped to that project |
 | GET/POST | `/api/tasks`, PATCH `/api/tasks/[id]` | |

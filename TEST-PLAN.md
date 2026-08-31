@@ -190,7 +190,6 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 
 | | |
 |---|---|
-| **The notice itself** | Two approvals record "issue the notice" and **nothing leaves the building**. No letter, no client recipient, no record of what was served. The largest gap in the product. |
 | **Variation orders, invoices, payments** | The lifecycle stops at `variation_approved`. No VO number, no billing, no *approved-but-unbilled* figure. |
 | **Document register** | No upload panel. The Documents tab is read-only, and revisions do not supersede. |
 | **Document intelligence** | Nothing reads a PDF. No drawing versions, no "not in scope" detection, no document search. |
@@ -205,6 +204,7 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 | **Notifications** | The in-app bell works. Email and WhatsApp are recorded and wait on a mailbox decision. |
 | **Capture inbox** | `/inbox`, for messages that could not be placed. Section 11. |
 | **WhatsApp and email capture** | The n8n lanes exist and are built. Not activated. |
+| **The notice** | Drafted, approved, filed as a PDF, queued to the client, and only "served" when the courier says so. Section 12. |
 
 ---
 
@@ -250,6 +250,44 @@ Then the refusals that matter:
       real change away.
 - [ ] Reply **`9`** → nothing happens; 9 is not on the list
 - [ ] Answer the same question twice → **one** change, not two
+
+---
+
+## 12 · The notice, which is what the product is for
+
+**As Osman**, take a change through the notice assessment and mark it
+**Notice required**.
+
+- [ ] A **draft notice appears immediately**, referenced `NOT-<project>-0001`
+- [ ] It quotes the contract clause from the project's contract rules, the
+      event date, and the notice period
+- [ ] Read it properly. It should say it is a **notice only**, quantify
+      nothing, and reserve time only if you flagged a time impact
+- [ ] Edit a line and save it
+
+Then approve it, as both seats.
+
+- [ ] The wording goes **read-only** and says it is fixed at approval
+- [ ] It shows as **queued, not yet served** — not "sent"
+- [ ] Within a minute a **PDF appears** in the project's `08 Notices` folder in
+      Drive, named after the reference, and the panel links to it
+- [ ] Open that link. It streams through the app, not a Drive URL
+
+Now reject one instead, on a different change.
+
+- [ ] The draft is marked superseded, not edited
+- [ ] Re-assessing produces **version 2**, and version 1 is still on file
+
+The two things to try to break:
+
+- [ ] Approve a notice on a project with **no notice recipient email** set.
+      It should approve, say plainly that there is nowhere to send it, and turn
+      up in bottlenecks as *drafted, not sent*
+- [ ] Try to record an acknowledgement dated **tomorrow**. It should refuse
+
+What you cannot test yet: an actual email leaving. That waits on the lane B
+mailbox decision, because the capture mailbox and the admin's address are
+currently the same account.
 
 ---
 

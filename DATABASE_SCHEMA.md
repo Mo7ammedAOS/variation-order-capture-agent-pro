@@ -11,7 +11,7 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 |---|---|
 | `company_settings` | One row per deployment (`singleton` unique). Branding, timezone, workweek, RAG threshold |
 | `users` | Profile. `id` = the Supabase `auth.users` UUID |
-| `projects` | Project register, contract value, and the PC counter |
+| `projects` | Project register, contract value, and the PC and notice counters |
 | `project_members` | Who may do what on which project. **The grant** |
 | `project_contract_rules` | The contractual clock and approval thresholds |
 | `contacts` | Authority register — was this person allowed to ask? |
@@ -22,6 +22,7 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 | `activity_logs` | Append-only audit |
 | `integration_events` | Inbound event log + idempotency |
 | `notification_logs` | Delivery state machine |
+| `notices` | The notice document: draft, issued, served, acknowledged, superseded |
 | `document_chunks` | pgvector chunks (Phase 2 RAG) |
 | `potential_change_embeddings` | pgvector, for duplicate detection |
 
@@ -98,6 +99,25 @@ filter columns (`noticeDueDate`, `currentStatus`, `riskLevel`,
 
 HNSW rather than IVFFlat: it needs no training pass, so it behaves correctly on
 a table that starts empty and fills up — which is exactly a new deployment.
+
+**`notices`, and `projects.notice_sequence`** — added 2026-09-01 with stage 5.
+
+A separate table rather than four columns on `potential_changes`, because a
+rejected notice is redrafted and the rejected round has to survive intact.
+Columns would be overwritten by the redraft, and the file would lose its own
+history at the exact moment somebody is arguing about it. `@@unique
+(potential_change_id, version)` makes the rounds explicit.
+
+Its own counter, separate from `pc_sequence`, for two reasons. A notice
+reference gets quoted in correspondence and read back months later, so it must
+not move when a change is renumbered; and one shared counter would imply that
+PC-0042 produced notice 0042, when most changes never produce a notice at all.
+
+`external_message_id` is the load-bearing column: it is what the courier
+returned, and therefore the only proof the notice actually left. `notices` with
+a status of `sent` and a null message id are raised as `notice_sent_no_proof`,
+because a notice you cannot prove you served is, in an argument, a notice you
+did not serve.
 
 ## Deliberately absent in Phase 1
 

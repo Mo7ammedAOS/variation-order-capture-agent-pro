@@ -201,7 +201,8 @@ equal, which silently discarded every `.default()` and handed services
 ## What is left, 2026-09-01
 
 Stages 1 to 3 are done: the build, the deployment, and the decision spine
-(two approval gates, QS pricing, reporter edits, cancel, the chase).
+(two approval gates, QS pricing, reporter edits, cancel, the chase). Stage 5,
+the notice, is done as of 2026-09-01.
 
 **Stage 4 — n8n becomes the nervous system.** In progress.
 `n8n-workflows/master.json` is built and validated: lanes A, B, C (capture in),
@@ -209,9 +210,32 @@ D, E (notify out), S (the schedules), H (errors). Not yet imported or bound.
 The app side is done — `/api/integrations/n8n/run-job`, the capture inbox, and
 `needs_triage` as a real event status.
 
-**Stage 5 — the notice.** The largest gap. Two approvals record "issue the
-notice" and nothing leaves the building: no document, no client recipient, no
-service record. The app tracks a deadline it cannot meet.
+**Stage 5 — the notice.** Built, 2026-09-01. The chain runs end to end:
+
+| Step | What happens | What proves it |
+|---|---|---|
+| Assessed "required" | The system drafts the notice immediately, from the change and the contract rules | `notices` row, version 1, status `draft` |
+| Before approval | Anyone holding `notice.draft` edits the wording | Audit `notice / updated`, old and new body |
+| Two seats approve | The text FREEZES, a message is queued to the client | status `issued`, `notification_id` set, message `pending` |
+| After the transaction | A PDF is filed in `08 Notices/<REF>.pdf` | `document_id` set, openable through the access-checked proxy |
+| Courier reports back | Only now is it served | status `sent`, `external_message_id` recorded |
+| A human sees the reply | Acknowledgement recorded with a date and their reference | status `acknowledged` |
+| Rejected instead | The draft is superseded whole; a redraft opens version 2 | the rejected round is never edited or deleted |
+
+Three deliberate limits:
+
+- **No Arabic.** The PDF writer uses the base-14 WinAnsi fonts, so a
+  non-Latin character prints as `?`. An Arabic notice needs an embedded font.
+- **Acknowledgement is never inferred.** A reply landing in the capture
+  mailbox is not an acknowledgement, and no classifier gets to decide that it
+  is.
+- **A notice with no recipient email is still approvable.** The panel says so
+  in words rather than blocking the gate, because the missing thing is a
+  project setting, not a decision. `notice_drafted_not_sent` catches it.
+
+The three notice bottleneck types that have existed since the first migration
+now have detection behind them: required-not-drafted (only reachable after a
+rejection), drafted-not-sent, and sent-without-proof.
 
 **Stage 6 — the money end.** `variation-order`, `invoice` and `payment` are
 `export {}` and the tables do not exist. The lifecycle stops at

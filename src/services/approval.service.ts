@@ -10,6 +10,7 @@ import { assertProjectAccess, getProjectRoles } from '@/services/project-access.
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { enterStage } from '@/services/stage.service';
+import { issueNotice, supersedeDraft } from '@/services/notice-document.service';
 import type { Capability } from '@/lib/rbac';
 
 /**
@@ -231,6 +232,13 @@ export interface DecisionResult {
   complete: boolean;
   rejected: boolean;
   movedTo: string | null;
+  /**
+   * Set when this decision issued a notice. The caller files its PDF AFTER the
+   * transaction has committed — a Drive round trip inside a Prisma interactive
+   * transaction times out at five seconds, and that already cost this project
+   * a duplicated folder tree once.
+   */
+  noticeToFileId?: string;
 }
 
 export async function recordApprovalDecision(
@@ -302,11 +310,23 @@ export async function recordApprovalDecision(
     const complete = !rejected && siblings.every((row) => row.decision === 'approved');
 
     let movedTo: string | null = null;
+    let noticeToFileId: string | undefined;
 
     if (rejected) {
       // Back a stage, never cancelled. A rejection is usually "not like this",
       // and cancelling would throw away the entitlement with the change.
       movedTo = approval.gate === 'notice_issue' ? 'notice_assessment' : 'qs_pricing';
+
+      if (approval.gate === 'notice_issue') {
+        // The rejected wording is retired whole, and the change goes back to
+        // needing a notice. Editing the rejected draft in place would leave a
+        // file that cannot explain why it says what it says.
+        await supersedeDraft(tx, {
+          potentialChangeId: approval.potentialChangeId,
+          projectId: approval.projectId,
+          actorUserId: user.id,
+        });
+      }
 
       // The other seat is no longer being asked: close its task rather than
       // leave someone chased daily for a decision that no longer matters.
@@ -320,6 +340,17 @@ export async function recordApprovalDecision(
       }
     } else if (complete) {
       movedTo = approval.gate === 'notice_issue' ? 'pm_scope_review' : 'variation_approved';
+
+      if (approval.gate === 'notice_issue') {
+        // Freeze the text and queue the message. It is not sent here, and it
+        // does not become "sent" until the courier reports back.
+        const issued = await issueNotice(tx, {
+          potentialChangeId: approval.potentialChangeId,
+          projectId: approval.projectId,
+          actorUserId: user.id,
+        });
+        noticeToFileId = issued?.id;
+      }
     }
 
     if (movedTo) {
@@ -368,6 +399,6 @@ export async function recordApprovalDecision(
       },
     });
 
-    return { gate: approval.gate, complete, rejected, movedTo };
+    return { gate: approval.gate, complete, rejected, movedTo, noticeToFileId };
   });
 }

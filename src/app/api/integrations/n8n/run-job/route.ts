@@ -6,6 +6,7 @@ import { scheduledJobSchema } from '@/app/api/integrations/schemas';
 import { runReminderSweep } from '@/services/reminder.service';
 import { runDetectionSweep } from '@/services/bottleneck.service';
 import { dispatchPendingNotifications } from '@/services/notification.service';
+import { fileUnfiledNotices } from '@/services/notice-document.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,11 +72,21 @@ async function runJob(job: 'reminder_sweep' | 'bottleneck_sweep' | 'notification
       // bottleneck page only ever showed what a person entered by hand.
       return runDetectionSweep();
 
-    case 'notification_dispatch':
+    case 'notification_dispatch': {
       // The sweep already dispatches what it writes. This exists for the rows
       // it could not hand over at the time — a lane that was down, or not yet
       // configured — which would otherwise sit pending until the next task
       // happened to come due.
-      return dispatchPendingNotifications();
+      const dispatched = await dispatchPendingNotifications();
+
+      // Same idea, one shelf along: a notice whose PDF never reached Drive
+      // because storage was down or the Google token had expired. The notice
+      // was validly issued either way, so this retries the filing rather than
+      // holding up the issue. Folded into this job instead of becoming a
+      // fourth schedule, so lane S does not have to change.
+      const filed = await fileUnfiledNotices();
+
+      return { ...dispatched, noticesFiled: filed.filed, noticesUnfilable: filed.failed };
+    }
   }
 }

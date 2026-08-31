@@ -31,6 +31,13 @@ export const EVIDENCE_TYPES: DocumentType[] = [
 ];
 import { isAppError } from '@/lib/errors';
 import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
+import {
+  acknowledgeNotice,
+  acknowledgementSchema,
+  fileNoticeDocument,
+  noticeDraftSchema,
+  updateNoticeDraft,
+} from '@/services/notice-document.service';
 
 export interface AssessmentState {
   error?: string;
@@ -152,10 +159,23 @@ export async function decideApprovalAction(
       return { ok: 'Rejected. The change has gone back a stage with your reason.' };
     }
     if (result.complete) {
+      if (result.noticeToFileId) {
+        // Deliberately after the transaction, and deliberately tolerant. The
+        // notice IS issued and the message IS queued — both are committed. All
+        // this does is put a PDF copy in the project folder, and a Drive
+        // outage must not undo a decision two directors have made. If it
+        // fails, the dispatch job retries it and the bottleneck sweep raises
+        // `notice_sent_no_proof` until it lands.
+        try {
+          await fileNoticeDocument(result.noticeToFileId);
+        } catch {
+          // Swallowed on purpose. Reported by the sweep, not by this button.
+        }
+      }
       return {
         ok:
           result.gate === 'notice_issue'
-            ? 'Both approvals are in. The notice can be issued to the client.'
+            ? 'Both approvals are in. The notice is issued and queued to the client.'
             : 'Both approvals are in. The variation is approved.',
       };
     }
@@ -338,6 +358,77 @@ export async function cancelChangeAction(
           ? `Cancelled. Open tasks closed and ${approvalsWithdrawn} pending approval${approvalsWithdrawn === 1 ? '' : 's'} withdrawn. The record stays.`
           : 'Cancelled. Open tasks closed, and the record stays on the file.',
     };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+}
+
+export interface NoticeState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * Editing the words before the two seats read them.
+ *
+ * The system writes the first draft; a person who knows the job fixes it. That
+ * order is the point: an empty box gets an empty notice on the day everyone is
+ * busy, and a generated one that nobody may touch gets sent with the wrong
+ * clause reference.
+ */
+export async function saveNoticeDraftAction(
+  _prev: NoticeState,
+  formData: FormData,
+): Promise<NoticeState> {
+  const user = await requirePageUser();
+
+  const parsed = noticeDraftSchema.safeParse({
+    noticeId: formData.get('noticeId'),
+    subject: formData.get('subject'),
+    body: formData.get('body'),
+    recipientName: formData.get('recipientName') || null,
+    recipientEmail: formData.get('recipientEmail') || null,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Check the notice wording' };
+  }
+
+  try {
+    await updateNoticeDraft(user, parsed.data);
+    revalidatePath(`/variations/${formData.get('potentialChangeId')}`);
+    return { ok: 'Draft saved. It goes to the two approvers as it now reads.' };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * Recording that the client acknowledged it. A person does this, having seen
+ * the acknowledgement — never inferred from a reply landing in the mailbox.
+ */
+export async function acknowledgeNoticeAction(
+  _prev: NoticeState,
+  formData: FormData,
+): Promise<NoticeState> {
+  const user = await requirePageUser();
+
+  const parsed = acknowledgementSchema.safeParse({
+    noticeId: formData.get('noticeId'),
+    acknowledgedOn: formData.get('acknowledgedOn'),
+    reference: formData.get('reference') || undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Give the date it was acknowledged' };
+  }
+
+  try {
+    await acknowledgeNotice(user, parsed.data);
+    revalidatePath(`/variations/${formData.get('potentialChangeId')}`);
+    return { ok: 'Acknowledgement recorded.' };
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

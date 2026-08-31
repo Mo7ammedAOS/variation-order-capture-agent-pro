@@ -118,6 +118,18 @@ leak wearing the costume of a feature.
 to send does not make it sent. Until the callback lands it is `pending`; on
 failure `failed` with a reason. A notice is not served because we asked.
 
+**The notice is drafted before it is approved, and frozen when it is.** The
+system writes the first draft the moment a notice is judged required, so the
+two seats approve a page of words rather than an intention; the moment they
+agree, the text goes read-only and a PDF of it is filed. Approving an intention
+and then generating the letter afterwards would put two signatures under
+something nobody read. See `notice-document.service.ts`.
+
+The PDF is written by `lib/pdf.ts` — about a hundred lines, no dependency —
+because the one document in this system that may end up in front of a tribunal
+should have nothing between the text and the bytes. The cost of that choice is
+real and stated: base-14 WinAnsi fonts only, so **no Arabic**.
+
 ## Reusability per client
 
 Nothing is hardcoded to ABC Fit-Out. A new deployment is a new database, a new

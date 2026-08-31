@@ -101,6 +101,25 @@ enum NoticeStatus {
   acknowledged
 }
 
+/// The state of one notice DOCUMENT.
+///
+/// Not the same question as `PotentialChange.noticeStatus`, which answers
+/// "does this change need a notice at all". This answers "where has this
+/// particular piece of paper got to", and the two are deliberately separate:
+/// a change can need a notice long before one exists, and a superseded draft
+/// still has to be readable years later.
+enum NoticeIssueStatus {
+  draft
+  /// Both seats approved and it has been handed to the courier. NOT proof it
+  /// left the building.
+  issued
+  /// The courier reported back with a message id. This is the proof.
+  sent
+  acknowledged
+  /// A rejected round, kept whole. Never edited, never deleted.
+  superseded
+}
+
 enum RiskLevel {
   green
   amber
@@ -351,6 +370,10 @@ enum NotificationKind {
   task_escalation
   /// "Which project did you mean?" — answered by replying, not in the app.
   capture_question
+  /// A notice of variation, addressed OUTSIDE the company. The only kind whose
+  /// recipient is not one of our users, and the only one whose delivery result
+  /// is evidence rather than convenience.
+  notice_issued
 }
 
 enum NotificationChannel {
@@ -447,6 +470,9 @@ model User {
   approvalsAssigned    Approval[]       @relation("ApprovalAssignedTo")
   approvalsDecided     Approval[]       @relation("ApprovalDecidedBy")
   pricingSubmitted     PotentialChange[] @relation("PricingSubmittedBy")
+  noticesDrafted       Notice[]         @relation("NoticeDraftedBy")
+  noticesIssued        Notice[]         @relation("NoticeIssuedBy")
+  noticesAcknowledged  Notice[]         @relation("NoticeAcknowledgedBy")
 
   @@index([systemRole])
   @@index([active])
@@ -475,6 +501,11 @@ model Project {
   /// Monotonic counter behind the PC number. Incremented atomically inside the
   /// create transaction — MAX(seq)+1 races under concurrent capture.
   pcSequence    Int     @default(0) @map("pc_sequence")
+  /// The same idea for notices, and a SEPARATE series on purpose. A notice
+  /// reference gets quoted in correspondence and read back months later, so it
+  /// must not move because a change was renumbered, and it must not imply that
+  /// PC-0042 produced notice 0042 when most changes never produce one at all.
+  noticeSequence Int    @default(0) @map("notice_sequence")
   /// Google Drive folder for this project. Ids are authoritative; folder names
   /// are cosmetic, so renaming in Drive never breaks the app.
   driveFolderId String? @map("drive_folder_id")
@@ -495,6 +526,7 @@ model Project {
   bottlenecks      Bottleneck[]
   activityLogs     ActivityLog[]
   documentChunks   DocumentChunk[]
+  notices          Notice[]
 
   @@index([projectStatus])
   @@index([clientName])
@@ -635,6 +667,7 @@ model ProjectDocument {
   potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: SetNull)
   uploadedBy      User?            @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
   chunks          DocumentChunk[]
+  noticeRecord    Notice?
 
   @@index([projectId, documentType])
   @@index([potentialChangeId])
@@ -735,6 +768,7 @@ model PotentialChange {
   documents         ProjectDocument[]
   embedding         PotentialChangeEmbedding?
   notifications     NotificationLog[]
+  notices           Notice[]
 
   @@unique([projectId, pcNumber])
   @@index([projectId, currentStatus])
@@ -936,12 +970,84 @@ model NotificationLog {
   potentialChange PotentialChange? @relation(fields: [potentialChangeId], references: [id], onDelete: SetNull)
   task            Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notice          Notice?
 
   @@index([status, requestedAt])
   @@index([potentialChangeId])
   @@index([userId, readAt])
   @@index([taskId])
   @@map("notification_logs")
+}
+
+/// The notice itself.
+///
+/// ── Why this is a table and not four columns on the change ────────────────
+/// A rejected notice is redrafted, and the round that was rejected has to
+/// survive intact — it is what explains, later, why the notice that went out
+/// says what it says. Columns on the change would be overwritten by the
+/// redraft, and the file would lose its own history at the exact point
+/// somebody is arguing about it.
+///
+/// ── The text is frozen at issue, not rendered at read ─────────────────────
+/// `subject` and `body` hold the words that were approved. Regenerating them
+/// from the template on each read would silently rewrite a served notice every
+/// time the template, the rates or the change description moved. What was sent
+/// is what was sent.
+model Notice {
+  id                String @id @default(uuid()) @db.Uuid
+  projectId         String @map("project_id") @db.Uuid
+  potentialChangeId String @map("potential_change_id") @db.Uuid
+
+  /// NOT-{PROJECT_CODE}-{sequence:0000}. Its own series, because a notice
+  /// reference is quoted in correspondence and must not move when a change is
+  /// renumbered.
+  reference String
+  /// 1, then 2 after a rejection. Together with the change, unique.
+  version   Int               @default(1)
+  status    NoticeIssueStatus @default(draft)
+
+  subject String
+  body    String
+
+  recipientName    String? @map("recipient_name")
+  recipientCompany String? @map("recipient_company")
+  recipientEmail   String? @map("recipient_email")
+  clauseReference  String? @map("clause_reference")
+
+  draftedByUserId String?   @map("drafted_by_user_id") @db.Uuid
+  draftedAt       DateTime  @default(now()) @map("drafted_at")
+  issuedByUserId  String?   @map("issued_by_user_id") @db.Uuid
+  issuedAt        DateTime? @map("issued_at")
+  sentAt          DateTime? @map("sent_at")
+  /// The courier's own id for the message. Without one there is no proof of
+  /// service, which is why `notice_sent_no_proof` is a bottleneck type.
+  externalMessageId String? @map("external_message_id")
+
+  acknowledgedAt           DateTime? @map("acknowledged_at")
+  acknowledgedByUserId     String?   @map("acknowledged_by_user_id") @db.Uuid
+  acknowledgementReference String?   @map("acknowledgement_reference")
+
+  /// The PDF filed in `08 Notices`. Null until issue: a draft is not a record.
+  documentId     String? @unique @map("document_id") @db.Uuid
+  /// The outbound message carrying it. The delivery callback finds the notice
+  /// through this.
+  notificationId String? @unique @map("notification_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange  @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  document        ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  notification    NotificationLog? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  draftedBy       User?            @relation("NoticeDraftedBy", fields: [draftedByUserId], references: [id], onDelete: SetNull)
+  issuedBy        User?            @relation("NoticeIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy  User?            @relation("NoticeAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([potentialChangeId, version])
+  @@unique([projectId, reference])
+  @@index([projectId, status])
+  @@map("notices")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

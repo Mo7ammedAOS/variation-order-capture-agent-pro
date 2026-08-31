@@ -9,6 +9,7 @@ import { assertProjectAccess, scopeToUser } from '@/services/project-access.serv
 import {
   getStorageProvider,
   PC_FOLDER_TREE,
+  NOTICE_PARENT_FOLDER,
   PC_PARENT_FOLDER,
   PROJECT_FOLDER_TREE,
 } from '@/integrations/storage';
@@ -192,6 +193,57 @@ export async function ensurePotentialChangeFolders(potentialChangeId: string): P
 
   const evidenceFolderId = await storage.ensureFolder('Evidence', folderId);
   return { folderId, evidenceFolderId };
+}
+
+/**
+ * The `08 Notices` folder, and a notice PDF filed into it.
+ *
+ * A notice does NOT go in the change's Evidence folder. Evidence is what we
+ * were sent; a notice is what we served, and the two are read for opposite
+ * reasons. Anyone assembling a claim opens `08 Notices` and expects to find
+ * every notice on the job in one place, in reference order, without opening
+ * forty change folders.
+ *
+ * Drive work happens outside any transaction, for the reason spelled out on
+ * `ensureProjectFolders`.
+ */
+export async function storeNoticeDocument(input: {
+  projectId: string;
+  potentialChangeId: string;
+  reference: string;
+  content: Buffer;
+  uploadedByUserId: string | null;
+}) {
+  const storage = getStorageProvider();
+  const projectFolderId = await ensureProjectFolders(input.projectId);
+  const noticesFolderId = await storage.ensureFolder(NOTICE_PARENT_FOLDER, projectFolderId);
+
+  const fileName = `${input.reference}.pdf`;
+  const stored = await storage.upload({
+    folderId: noticesFolderId,
+    name: fileName,
+    mimeType: 'application/pdf',
+    content: input.content,
+  });
+
+  return prisma.projectDocument.create({
+    data: {
+      projectId: input.projectId,
+      potentialChangeId: input.potentialChangeId,
+      documentType: 'notice',
+      documentName: fileName,
+      documentNumber: input.reference,
+      issueDate: new Date(),
+      driveFileId: stored.fileId,
+      storagePath: stored.storagePath,
+      sourceUrl: stored.sourceUrl,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      uploadedByUserId: input.uploadedByUserId,
+      // The app produced this file, not a person and not an inbox.
+      sourceChannel: 'other',
+    },
+  });
 }
 
 export const documentRegisterSchema = z.object({

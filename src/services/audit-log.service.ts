@@ -27,7 +27,8 @@ export type RecordType =
   | 'integration_event'
   | 'notification'
   | 'role_permission'
-  | 'approval';
+  | 'approval'
+  | 'notice';
 
 export type ActionType =
   | 'created'
@@ -52,7 +53,12 @@ export type ActionType =
   | 'deactivated'
   | 'received'
   | 'ai_suggested'
-  | 'permissions_reset';
+  | 'permissions_reset'
+  | 'drafted'
+  | 'issued'
+  | 'sent'
+  | 'acknowledged'
+  | 'superseded';
 
 export interface AuditInput {
   db?: Db;

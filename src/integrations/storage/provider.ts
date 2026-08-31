@@ -44,6 +44,7 @@ export const PROJECT_FOLDER_TREE = [
 
 export const PC_FOLDER_TREE = ['Evidence', 'Drafts'] as const;
 export const PC_PARENT_FOLDER = '07 Potential Changes';
+export const NOTICE_PARENT_FOLDER = '08 Notices';
 
 export interface StorageProvider {
   readonly name: string;
