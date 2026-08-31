@@ -117,15 +117,20 @@ describeDb('potential change status transitions', () => {
     const { ForbiddenError } = await import('@/lib/errors');
     const id = await newChange('qs_pricing');
 
-    await expect(changeStatus(engineer, id, 'cm_review')).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(changeStatus(engineer, id, 'pm_scope_review')).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 
   it('moves a change through a permitted transition and audits who did it', async () => {
     const { changeStatus } = await import('@/services/potential-change.service');
     const id = await newChange('qs_pricing');
 
-    const updated = await changeStatus(director, id, 'cm_review', 'Pricing complete');
-    expect(updated.currentStatus).toBe('cm_review');
+    // The only move available from pricing is BACKWARDS. Forward happens when
+    // the QS submits a price or says it is not a variation — a decision with
+    // evidence behind it, never a word picked from a dropdown.
+    const updated = await changeStatus(director, id, 'pm_scope_review', 'Scope is wrong, re-issue');
+    expect(updated.currentStatus).toBe('pm_scope_review');
 
     const entry = await prisma.activityLog.findFirst({
       where: { recordType: 'potential_change', recordId: id, actionType: 'status_changed' },
@@ -134,8 +139,8 @@ describeDb('potential change status transitions', () => {
 
     expect(entry?.userId).toBe(director.id);
     expect(entry?.oldValueJson).toMatchObject({ currentStatus: 'qs_pricing' });
-    expect(entry?.newValueJson).toMatchObject({ currentStatus: 'cm_review' });
-    expect(entry?.metadataJson).toMatchObject({ note: 'Pricing complete' });
+    expect(entry?.newValueJson).toMatchObject({ currentStatus: 'pm_scope_review' });
+    expect(entry?.metadataJson).toMatchObject({ note: 'Scope is wrong, re-issue' });
   });
 
   it('REFUSES to skip a stage, which is how approval gets bypassed', async () => {
@@ -149,21 +154,27 @@ describeDb('potential change status transitions', () => {
     await expect(changeStatus(director, id, 'included_scope')).rejects.toBeInstanceOf(
       ValidationError,
     );
-    await expect(changeStatus(director, id, 'cm_review')).rejects.toBeInstanceOf(ValidationError);
+    await expect(changeStatus(director, id, 'variation_approved')).rejects.toBeInstanceOf(
+      ValidationError,
+    );
 
     const after = await prisma.potentialChange.findUniqueOrThrow({ where: { id } });
     expect(after.currentStatus).toBe('pm_scope_review');
   });
 
-  it('allows rework backwards, so a pricing error does not need a cancellation', async () => {
+  it('allows rework backwards, and demands a reason for it', async () => {
     const { changeStatus } = await import('@/services/potential-change.service');
+    const { ValidationError } = await import('@/lib/errors');
     const id = await newChange('qs_pricing');
 
-    const forward = await changeStatus(director, id, 'cm_review', 'Priced');
-    expect(forward.currentStatus).toBe('cm_review');
+    // Rework without a reason is the same failure as a rejection without one:
+    // whoever gets it back has to guess what was wrong, and usually guesses.
+    await expect(changeStatus(director, id, 'pm_scope_review')).rejects.toBeInstanceOf(
+      ValidationError,
+    );
 
-    const back = await changeStatus(director, id, 'qs_pricing', 'Rates look wrong, re-price');
-    expect(back.currentStatus).toBe('qs_pricing');
+    const back = await changeStatus(director, id, 'pm_scope_review', 'Scope missed the ceiling');
+    expect(back.currentStatus).toBe('pm_scope_review');
   });
 
   it('refuses a move to the status it is already in', async () => {

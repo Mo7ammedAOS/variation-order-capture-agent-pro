@@ -1,5 +1,5 @@
 import 'server-only';
-import type { SourceType } from '@prisma/client';
+import type { IntegrationEventStatus, IntegrationSource, SourceType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { todayUtc } from '@/lib/dates';
 import { calculateNoticeDueDate } from '@/lib/dates';
@@ -10,6 +10,10 @@ import { pickResponsibleMember } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 import { getAiProvider } from '@/integrations/claude';
+import type { AuthenticatedUser } from '@/lib/auth/provider';
+import { NotFoundError, ValidationError } from '@/lib/errors';
+import { assertCapability, assertProjectAccess } from '@/services/project-access.service';
+import { closeEvent, listUnprocessedEvents } from '@/services/integration.service';
 
 /**
  * Capture from an external channel.
@@ -34,7 +38,7 @@ export type CaptureOutcome =
   | { kind: 'created'; potentialChangeId: string; pcNumber: string; projectId: string }
   | { kind: 'needs_triage'; reason: string; candidateProjectIds: string[] };
 
-export async function captureFromChannel(input: {
+export interface CaptureInput {
   channel: Extract<SourceType, 'whatsapp' | 'email'>;
   senderIdentifier: string;
   senderName?: string | null;
@@ -42,7 +46,9 @@ export async function captureFromChannel(input: {
   externalMessageId: string;
   eventDate?: Date;
   projectCodeHint?: string | null;
-}): Promise<CaptureOutcome> {
+}
+
+export async function captureFromChannel(input: CaptureInput): Promise<CaptureOutcome> {
   const sender = await prisma.user.findFirst({
     where: {
       active: true,
@@ -97,13 +103,38 @@ export async function captureFromChannel(input: {
   if (!target) {
     return { kind: 'needs_triage', reason: 'No candidate project', candidateProjectIds: [] };
   }
+  return createChangeFromCapture({
+    projectId: target.projectId,
+    reporterId: sender.id,
+    reporterName: sender.fullName,
+    input,
+  });
+}
 
+/**
+ * Turns a captured message into a Potential Change on a NAMED project.
+ *
+ * Split out of `captureFromChannel` because there are two ways a project gets
+ * chosen and only one of them is automatic. The channel path picks the project
+ * when the sender is on exactly one; the triage path has a human pick it. Both
+ * must then create the change identically — same PC number allocation, same
+ * notice clock, same owner by capability, same audit trail — or a change filed
+ * by hand would quietly differ from one filed by WhatsApp, and only the second
+ * would have a notice deadline.
+ */
+export async function createChangeFromCapture(args: {
+  projectId: string;
+  reporterId: string;
+  reporterName: string;
+  input: CaptureInput;
+}): Promise<CaptureOutcome> {
+  const { projectId, reporterId, reporterName, input } = args;
   // AI reads the message and proposes structure. It does not decide anything:
   // the change is created either way, and the extraction only fills fields in.
   const extraction = await getAiProvider().extractPotentialChange({
     text: input.text,
     sourceType: input.channel,
-    senderName: input.senderName ?? sender.fullName,
+    senderName: input.senderName ?? reporterName,
   });
 
   const eventDate = input.eventDate ?? todayUtc();
@@ -114,7 +145,7 @@ export async function captureFromChannel(input: {
   // deliberately created unowned so it surfaces as a bottleneck instead of
   // sitting on someone who cannot act on it.
   const noticeOwner = await pickResponsibleMember(
-    target.projectId,
+    projectId,
     'potentialChange.assessNotice',
     NOTICE_ASSESSMENT_PREFERENCE,
   );
@@ -122,7 +153,7 @@ export async function captureFromChannel(input: {
 
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
-      where: { id: target.projectId },
+      where: { id: projectId },
       include: { contractRules: true },
     });
     if (!project) {
@@ -131,7 +162,7 @@ export async function captureFromChannel(input: {
 
     const [bumped] = await tx.$queryRaw<{ pc_sequence: number }[]>`
       UPDATE projects SET pc_sequence = pc_sequence + 1
-      WHERE id = ${target.projectId}::uuid
+      WHERE id = ${projectId}::uuid
       RETURNING pc_sequence
     `;
     if (!bumped) {
@@ -149,17 +180,17 @@ export async function captureFromChannel(input: {
 
     const change = await tx.potentialChange.create({
       data: {
-        projectId: target.projectId,
+        projectId: projectId,
         pcNumber,
         title: extraction.extractedData.suggestedTitle,
         description: input.text,
         eventDate,
         sourceType: input.channel,
         sourceMessageId: input.externalMessageId,
-        sourceSenderName: input.senderName ?? sender.fullName,
+        sourceSenderName: input.senderName ?? reporterName,
         sourceSenderPhoneOrEmail: input.senderIdentifier,
         sourceSenderAuthorityStatus: 'unknown',
-        reportedByUserId: sender.id,
+        reportedByUserId: reporterId,
         trade: extraction.extractedData.affectedTrade[0] ?? null,
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
@@ -175,7 +206,7 @@ export async function captureFromChannel(input: {
 
     const assessmentTask = await tx.task.create({
       data: {
-        projectId: target.projectId,
+        projectId: projectId,
         potentialChangeId: change.id,
         taskType: 'notice_assessment',
         title: `Notice assessment — ${pcNumber}`,
@@ -196,8 +227,8 @@ export async function captureFromChannel(input: {
 
     await recordAudit({
       db: tx,
-      projectId: target.projectId,
-      userId: sender.id,
+      projectId: projectId,
+      userId: reporterId,
       recordType: 'potential_change',
       recordId: change.id,
       actionType: 'created',
@@ -214,7 +245,7 @@ export async function captureFromChannel(input: {
     // can see what the model thought and disagree with it.
     await recordAudit({
       db: tx,
-      projectId: target.projectId,
+      projectId: projectId,
       userId: null,
       recordType: 'potential_change',
       recordId: change.id,
@@ -232,7 +263,193 @@ export async function captureFromChannel(input: {
       kind: 'created' as const,
       potentialChangeId: change.id,
       pcNumber,
-      projectId: target.projectId,
+      projectId: projectId,
     };
   });
+}
+
+/* ─── Triage: the messages the system refused to guess about ─────────────── */
+
+export interface TriageItem {
+  eventId: string;
+  source: IntegrationSource;
+  receivedAt: Date;
+  status: IntegrationEventStatus;
+  reason: string;
+  senderName: string | null;
+  senderIdentifier: string | null;
+  text: string;
+  /** Projects the ORIGINAL sender is on. Empty when they are on none. */
+  candidateProjectIds: string[];
+  errorMessage: string | null;
+}
+
+/**
+ * The inbox of captured messages waiting on a person.
+ *
+ * Scoped after the fact rather than in the query, because an event that could
+ * not be placed on a project has no project to scope BY — that is the whole
+ * reason it is here. So the list is drawn for people who can see everything
+ * (the capability check in the page), and the act of filing one is what gets
+ * checked against a specific project.
+ */
+export async function listTriageQueue(limit = 50): Promise<TriageItem[]> {
+  const events = await listUnprocessedEvents(limit);
+
+  return events.map((event) => {
+    const payload = asRecord(event.payloadJson);
+    const result = asRecord(event.resultJson);
+    const sender = asRecord(payload.sender);
+    const from = asRecord(payload.from);
+    const message = asRecord(payload.message);
+
+    return {
+      eventId: event.id,
+      source: event.source,
+      receivedAt: event.receivedAt,
+      status: event.status,
+      reason: str(result.reason) ?? event.errorMessage ?? 'Waiting to be filed',
+      senderName: str(sender.display_name) ?? str(from.name) ?? null,
+      senderIdentifier: str(sender.phone) ?? str(from.address) ?? null,
+      text:
+        str(message.text) ??
+        str(message.caption) ??
+        str(payload.body_text) ??
+        str(payload.subject) ??
+        '[no text]',
+      candidateProjectIds: Array.isArray(result.candidateProjectIds)
+        ? (result.candidateProjectIds as string[])
+        : [],
+      errorMessage: event.errorMessage,
+    };
+  });
+}
+
+/**
+ * Files a parked message against a project a human has chosen.
+ *
+ * Authority is checked against THAT project, not against the inbox. Being able
+ * to see the queue is not the same as being able to put work on a job you have
+ * nothing to do with, and the two are separate checks on purpose.
+ *
+ * The change is attributed to the ORIGINAL SENDER where they are a known user,
+ * not to whoever filed it. The site engineer who saw the wall come down is the
+ * person who reported it; the coordinator who moved it out of the inbox did
+ * clerical work. Recording the clerk as the reporter would put their name on a
+ * claim they know nothing about, and it is the reporter who gets asked to
+ * explain it six months later.
+ */
+export async function fileTriagedEvent(
+  user: AuthenticatedUser,
+  input: { eventId: string; projectId: string },
+): Promise<{ potentialChangeId: string; pcNumber: string }> {
+  await assertProjectAccess(user, input.projectId, 'potentialChange.create');
+
+  const event = await prisma.integrationEvent.findUnique({ where: { id: input.eventId } });
+  if (!event) throw new NotFoundError('That captured message no longer exists');
+
+  if (event.status === 'processed' || event.status === 'ignored') {
+    throw new ValidationError('That message has already been dealt with');
+  }
+
+  const payload = asRecord(event.payloadJson);
+  const sender = asRecord(payload.sender);
+  const from = asRecord(payload.from);
+  const message = asRecord(payload.message);
+
+  const channel = event.source === 'whatsapp' ? 'whatsapp' : 'email';
+  const senderIdentifier = str(sender.phone) ?? str(from.address) ?? '';
+  const senderName = str(sender.display_name) ?? str(from.name) ?? null;
+
+  const text =
+    str(message.text) ??
+    str(message.caption) ??
+    str(payload.body_text) ??
+    str(payload.subject) ??
+    '[media only]';
+
+  // Falls back to the person filing it only when the sender is not a user we
+  // hold — an outside email, say. Attribution never silently becomes "nobody".
+  const originalSender = senderIdentifier
+    ? await prisma.user.findFirst({
+        where:
+          channel === 'whatsapp'
+            ? { phone: senderIdentifier, active: true }
+            : { email: senderIdentifier.toLowerCase(), active: true },
+        select: { id: true, fullName: true },
+      })
+    : null;
+
+  const outcome = await createChangeFromCapture({
+    projectId: input.projectId,
+    reporterId: originalSender?.id ?? user.id,
+    reporterName: originalSender?.fullName ?? senderName ?? user.fullName,
+    input: {
+      channel,
+      senderIdentifier: senderIdentifier || user.email,
+      senderName,
+      text,
+      externalMessageId: event.externalId,
+      eventDate: event.receivedAt,
+      projectCodeHint: null,
+    },
+  });
+
+  if (outcome.kind !== 'created') {
+    throw new ValidationError(`Could not file it: ${outcome.reason}`);
+  }
+
+  await closeEvent(event.id, 'processed', {
+    filedByUserId: user.id,
+    filedAt: new Date().toISOString(),
+    projectId: input.projectId,
+    pcNumber: outcome.pcNumber,
+    attributedToUserId: originalSender?.id ?? user.id,
+  });
+
+  return { potentialChangeId: outcome.potentialChangeId, pcNumber: outcome.pcNumber };
+}
+
+/**
+ * Discards a captured message that is not a change at all.
+ *
+ * The event row stays, with the reason and who decided. Deleting it would make
+ * "why did nothing happen when I sent that?" unanswerable, and that question
+ * gets asked about the one message that mattered.
+ */
+export async function dismissTriagedEvent(
+  user: AuthenticatedUser,
+  input: { eventId: string; reason: string },
+): Promise<void> {
+  await assertCapability(user, 'potentialChange.create');
+
+  const reason = input.reason.trim();
+  if (reason.length < 5) {
+    throw new ValidationError('Say why this is not a change. Somebody sent it for a reason.');
+  }
+
+  const event = await prisma.integrationEvent.findUnique({
+    where: { id: input.eventId },
+    select: { id: true, status: true },
+  });
+  if (!event) throw new NotFoundError('That captured message no longer exists');
+  if (event.status === 'processed' || event.status === 'ignored') {
+    throw new ValidationError('That message has already been dealt with');
+  }
+
+  await closeEvent(event.id, 'ignored', {
+    dismissedByUserId: user.id,
+    dismissedAt: new Date().toISOString(),
+    reason,
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function str(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
 }

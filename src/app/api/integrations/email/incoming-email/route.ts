@@ -34,6 +34,9 @@ export async function POST(request: Request) {
           eventDate: payload.received_at,
           projectCodeHint: payload.project_code ?? null,
         }),
+      // A parked message is not a processed one. Without this the triage inbox
+      // is empty while messages quietly pile up inside result_json.
+      (outcome) => (outcome.kind === 'needs_triage' ? 'needs_triage' : 'processed'),
     );
 
     return NextResponse.json(

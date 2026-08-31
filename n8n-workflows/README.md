@@ -1,57 +1,84 @@
-# n8n Workflow Exports
+# n8n workflows
 
-Committed exports of the n8n workflow this product depends on.
+One file per client. `master.json` is the template; a client deployment is a
+copy of it with the credentials, webhook paths and environment rebound.
 
-**This directory is the source of truth for workflow definitions, not the n8n
-instance.** The instance is where they run; this is where they are versioned.
-
-## Nothing is here yet
-
-Phase 1 built the *contract* — the five inbound routes — and no workflow. See
-`N8N_WORKFLOW_MAP.md`.
-
-Placeholder JSON is deliberately **not** created. An empty or fabricated export
-looks importable and is not, which is worse than an absent one.
-
-## Packaging: one file per client
-
-```text
+```
 n8n-workflows/
-├── master.json        ← the template. CLIENT_SLUG=MASTER
-└── abc-fitout.json    ← a deployment. Copy of master, credentials rebound
+├── README.md
+├── master.json        ← the template. Client slug MASTER
+└── <client-slug>.json ← a deployment. Copy of master, rebound
 ```
 
-One file, one import, one workflow, all eight lanes (A–H) inside it, separated
-by sticky notes. Node names carry the lane letter: `A: Webhook`,
-`C: Download Media`, `F: Send Email`.
+## What is in master.json
 
-## Export procedure
+44 nodes and 10 sticky notes. Validated against the live instance: 0 errors,
+0 warnings, 37 connections, 64 expressions checked.
 
-1. Build and verify on the instance (Build Checklist in CLAUDE.md).
-2. Export — `n8n_get_workflow` with `mode: "full"`, or Download in the UI.
-3. **Scrub it.** Not optional. See below.
-4. Save as `<client-slug>.json`.
-5. Commit alongside the `/workflows/*.md` SOP change that motivated it.
+| Lane | Direction | Does | App endpoint |
+|---|---|---|---|
+| **A** | in | Evolution posts a WhatsApp message | `/api/integrations/whatsapp/incoming-message` |
+| **B** | in | Gmail, unread in the VO mailbox | `/api/integrations/email/incoming-email` |
+| **C** | in | A file lands in a project's Drive folder | `/api/integrations/documents/uploaded` |
+| **D** | out | Sends an email, reports delivery back | `/api/integrations/notifications/delivery-status` |
+| **E** | out | Sends a WhatsApp via Evolution, reports back | same |
+| **S** | clock | The three schedules | `/api/integrations/n8n/run-job` |
+| **H** | — | Error trigger, names the lane that failed | — |
+| ~~F~~ | out | Client follow-up — **not built** | needs the notice, stage 5 |
+| ~~G~~ | out | Weekly report — **not built** | needs the report, stage 6 |
 
-## Scrubbing rules
+Node names carry their lane letter, so a failed execution names the lane before
+anything has to be opened. That is what makes one file per client bearable: the
+execution list mixes eight lanes together, and lane H reads the letter back.
 
-Before any export is committed, remove or blank:
+## Signing, and why the body is sent raw
 
-```text
-credentials[].id and credentials[].name   → the receiving instance rebinds these
-webhookId                                  → regenerated per instance
-Any hardcoded URL containing a client domain
-Any hardcoded email address, phone number, or WhatsApp ID
-Any token, key, or bearer string in a parameter
-pinData                                    → may contain real client messages
-Any node notes containing client names or commercial values
+Every call to the app carries `x-vo-timestamp` and `x-vo-signature`: an
+HMAC-SHA256 over `timestamp.rawBody` — the exact bytes, not the object.
+
+So every HTTP node sends **`contentType: raw`**, never `json`. On JSON body the
+node re-serialises the object; key order or spacing can differ by one byte from
+what was hashed, and every request then fails verification with an error about
+the signature that says nothing about the cause. The Code node builds the
+string, the Crypto node signs that string, the HTTP node sends that same string.
+
+Lanes D and E do it in reverse — they recompute the HMAC over the raw body and
+compare — so the app is the only thing that can make this workflow send a
+message to anyone.
+
+## No secret is in this file
+
+Every secret is read from the n8n container's environment, never typed into a
+node. **This repository is public**; a secret in a parameter is a published
+secret.
+
+```
+VO_APP_URL                 https://vo.osmanflow.com
+VO_WEBHOOK_SECRET          must equal the app's N8N_WEBHOOK_SECRET
+VO_OUTBOUND_SECRET         must equal the app's N8N_OUTBOUND_SECRET
+VO_EVOLUTION_URL           http://evolution-api:8080 over the shared Docker network
+VO_EVOLUTION_INSTANCE      a VO-only instance — see the warning below
+VO_EVOLUTION_API_KEY       Evolution's AUTHENTICATION_API_KEY
+VO_DRIVE_ROOT_FOLDER_ID    the Drive folder lane C watches
 ```
 
-A committed export must import into a fresh client instance and reveal nothing
-about any other client.
+⚠️ **Use a separate Evolution instance from the Sales OS outreach number.**
+Cold outreach on Baileys carries a real ban risk and a ban is permanent. Sharing
+one number means the day outreach gets it banned is the day the product stops
+telling anyone their notice deadline is tomorrow.
 
-## Per-client deployment
+## Duplication checklist — before this is a client's workflow
 
-`master.json` is the template. Deploying for a client means copying it, working
-the duplication checklist in `N8N_WORKFLOW_MAP.md`, and importing it
-**deactivated** into that client's own n8n workspace.
+1. **Rebind every credential.** Gmail, Google Drive. Credentials do not travel
+   with an export; the fields look filled and are not.
+2. **Regenerate every webhook path.** Two clients sharing `vo/whatsapp` means
+   one contractor's site photos land in another's register.
+3. **Set the six environment variables** on the n8n container.
+4. **Point Evolution's webhook** at lane A's production URL, `MESSAGES_UPSERT`
+   only.
+5. **Set the workflow as its own Error Workflow** in Settings, or lane H never
+   fires.
+6. **Import deactivated. Test each lane. Then activate.**
+
+Activation is all-or-nothing — the cost of one file per client, accepted so that
+duplicating a deployment is one import and one credential rebind, not eight.

@@ -1,5 +1,5 @@
 import 'server-only';
-import type { IntegrationSource, Prisma } from '@prisma/client';
+import type { IntegrationEventStatus, IntegrationSource, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -38,6 +38,16 @@ export async function processOnce<T>(
   externalId: string,
   payload: unknown,
   process: () => Promise<T>,
+  /**
+   * What the event's status becomes when `process` succeeds.
+   *
+   * Succeeding is not the same as finishing. A capture that deliberately
+   * refuses to guess which project a message belongs to has done its job
+   * correctly and produced nothing — and marking that `processed`, as this did
+   * until now, hides it in the same bucket as the ones that became real
+   * records. The caller knows the difference; the boundary does not.
+   */
+  statusFor: (result: T) => IntegrationEventStatus = () => 'processed',
 ): Promise<IdempotentResult<T>> {
   const existing = await findExistingEvent(source, externalId);
   if (existing) {
@@ -78,7 +88,7 @@ export async function processOnce<T>(
     const result = await process();
     await prisma.integrationEvent.update({
       where: { id: event.id },
-      data: { status: 'processed', processedAt: new Date(), resultJson: toJson(result) },
+      data: { status: statusFor(result), processedAt: new Date(), resultJson: toJson(result) },
     });
     return { duplicate: false, eventId: event.id, result };
   } catch (error) {
@@ -99,9 +109,48 @@ export async function processOnce<T>(
 /** Events received but not yet turned into a record — the triage queue. */
 export async function listUnprocessedEvents(limit = 50) {
   return prisma.integrationEvent.findMany({
-    where: { status: { in: ['received', 'failed'] } },
+    where: { status: { in: ['received', 'needs_triage', 'failed'] } },
     orderBy: { receivedAt: 'desc' },
     take: limit,
+  });
+}
+
+/** How many captured messages are sitting on a human. Drives the inbox badge. */
+export async function countAwaitingTriage(): Promise<number> {
+  return prisma.integrationEvent.count({
+    where: { status: { in: ['received', 'needs_triage', 'failed'] } },
+  });
+}
+
+/**
+ * Closes an event once a human has dealt with it.
+ *
+ * `resultJson` is merged rather than replaced, so the original triage reason
+ * survives next to the outcome. Why a message needed a human is worth keeping:
+ * a month of them is the list of what capture cannot yet do by itself.
+ */
+export async function closeEvent(
+  eventId: string,
+  status: Extract<IntegrationEventStatus, 'processed' | 'ignored'>,
+  outcome: Record<string, unknown>,
+): Promise<void> {
+  const existing = await prisma.integrationEvent.findUnique({
+    where: { id: eventId },
+    select: { resultJson: true },
+  });
+
+  const previous =
+    existing?.resultJson && typeof existing.resultJson === 'object'
+      ? (existing.resultJson as Record<string, unknown>)
+      : {};
+
+  await prisma.integrationEvent.update({
+    where: { id: eventId },
+    data: {
+      status,
+      processedAt: new Date(),
+      resultJson: toJson({ ...previous, triage: outcome }),
+    },
   });
 }
 

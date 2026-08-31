@@ -3,7 +3,17 @@ import { DEFAULT_TIMEZONE } from '@/lib/dates';
 import { runReminderSweep } from '@/services/reminder.service';
 
 /**
- * The clock that makes the chase happen.
+ * The clock that makes the chase happen — now the FALLBACK one.
+ *
+ * ── n8n owns the schedule ──────────────────────────────────────────────────
+ * Lane S of `n8n-workflows/master.json` calls
+ * POST /api/integrations/n8n/run-job, which runs the same sweep. That is the
+ * clock you can see, pause and prove; this one is a timer inside a container
+ * that nobody can observe. Set ENABLE_SCHEDULER=false once lane S is active.
+ *
+ * Leaving both on is harmless — the dedupe key means the second run of a day
+ * writes nothing — but two clocks with one owner is a thing nobody remembers a
+ * year later, so pick one.
  *
  * ── Why a plain interval and not a queue ───────────────────────────────────
  * Because the database already holds the state. The sweep reads every open

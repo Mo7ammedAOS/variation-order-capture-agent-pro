@@ -262,6 +262,10 @@ enum IntegrationSource {
 enum IntegrationEventStatus {
   received
   processed
+  /// Placed nowhere on purpose. The sender is unknown, or is on several active
+  /// projects, and guessing which one is worse than waiting: a change filed
+  /// against the wrong project looks handled. Waits in the triage inbox.
+  needs_triage
   failed
   ignored
 }

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   AlertOctagon, FileWarning, FolderKanban, LayoutDashboard,
-  Building2, ListChecks, Plus, Settings, ShieldCheck,
+  Building2, Inbox, ListChecks, Plus, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +18,7 @@ const LINKS = [
   { href: '/my-tasks', label: 'My Tasks', icon: ListChecks },
   { href: '/variations', label: 'Potential Changes', icon: FileWarning },
   { href: '/bottlenecks', label: 'Bottlenecks', icon: AlertOctagon },
+  { href: '/inbox', label: 'Capture Inbox', icon: Inbox },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/settings/company', label: 'Company', icon: Building2 },
   { href: '/settings/users', label: 'Users', icon: Settings },

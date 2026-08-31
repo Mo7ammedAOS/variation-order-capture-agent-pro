@@ -1,22 +1,37 @@
 # n8n Workflow Map
 
-## Phase 1: nothing runs on n8n
+## Where this stands, 2026-09-01
 
-```text
-Workflows created ......... 0
-Credentials touched ....... 0
-Activations ............... 0
-Runtime calls from the app  0
-```
+`n8n-workflows/master.json` exists: **44 nodes, 10 sticky notes, seven lanes,
+validated against the live instance** (0 errors, 0 warnings, 64 expressions
+checked). It has not been imported, bound to a credential, or activated.
 
-Every n8n variable in `.env` is blank and the app still runs, migrates, seeds,
-tests and builds. That is the spec's own rule: *"Do not use n8n for Phase 1 core
-logic."*
+Phase 1 built the contract — five inbound routes, HMAC-verified and idempotent.
+This file is the courier that finally uses them.
 
-What Phase 1 built is the **contract** — the five inbound routes (HMAC-verified,
-idempotent, tested against mock payloads) and an outbound client wired to blank
-URLs. `n8n-workflows/` holds no fabricated JSON: an export that looks importable
-and is not is worse than none.
+### The clock moved out of the app
+
+The reminder sweep used to run on a `setInterval` inside the web container. It
+worked and it was invisible: you could not see whether it had run, pause it for
+a day, or tell a missed deploy from a broken sweep.
+
+`POST /api/integrations/n8n/run-job` now accepts three job names, and lane S
+holds the schedules. **What did not move is deciding who is owed what** — the
+escalation ladder and the dedupe key stay in `reminder.service.ts`, where they
+are tested. Expressed as n8n nodes they would be a diagram nobody can run twice
+safely, and a retried execution would chase the same project manager again.
+
+Set `ENABLE_SCHEDULER=false` on the app the moment lane S is active. Both
+running is harmless — the dedupe key absorbs it — but two clocks with one
+owner is a thing nobody remembers a year later.
+
+### Lanes F and G are deliberately absent
+
+Client follow-up and the weekly report both need an app endpoint that does not
+exist yet. F chases a client for a response to a notice, and the app cannot yet
+issue a notice. Building them now would put nodes wired to URLs that 404 into
+the file — passing validation, looking finished, failing the first day anyone
+relied on them.
 
 ## Packaging: one all-in-one JSON per client
 

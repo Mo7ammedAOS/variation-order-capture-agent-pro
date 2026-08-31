@@ -198,24 +198,41 @@ equal, which silently discarded every `.default()` and handed services
 - **No 2FA.**
 - **The repo is public**, by your decision.
 
-## Phase 2
+## What is left, 2026-09-01
 
-```text
-Priority
-  1  Run migrations + seed; get the integration tests green
-  2  Deploy to the VPS, verify on a phone
-  3  Build master.json — the eight lanes, sticky notes, deactivated
-  4  Connect WhatsApp and email capture for real
-  5  Notice PDF generation and the send path (D/E lanes)
-  6  Real Claude adapter behind the existing envelope
-Then
-  7  Variation Orders, invoices, payments tables + services
-  8  QS pricing, procurement and subcontractor quotations, EOT
-  9  Reminder and escalation workers on BullMQ
- 10  Document RAG over drawings and specs
- 11  Arabic translation
- 12  Unassigned Capture Inbox UI for triaged events
-```
+Stages 1 to 3 are done: the build, the deployment, and the decision spine
+(two approval gates, QS pricing, reporter edits, cancel, the chase).
 
-`potential_changes` already carries `estimated_value` and the status enum has
-room, so 7 and 8 are additive — no migration of existing rows.
+**Stage 4 — n8n becomes the nervous system.** In progress.
+`n8n-workflows/master.json` is built and validated: lanes A, B, C (capture in),
+D, E (notify out), S (the schedules), H (errors). Not yet imported or bound.
+The app side is done — `/api/integrations/n8n/run-job`, the capture inbox, and
+`needs_triage` as a real event status.
+
+**Stage 5 — the notice.** The largest gap. Two approvals record "issue the
+notice" and nothing leaves the building: no document, no client recipient, no
+service record. The app tracks a deadline it cannot meet.
+
+**Stage 6 — the money end.** `variation-order`, `invoice` and `payment` are
+`export {}` and the tables do not exist. The lifecycle stops at
+`variation_approved`, so approved-but-unbilled — the number that justifies the
+product — cannot be produced.
+
+**Stage 7 — AI for real.** The Claude adapter throws by design. No extraction,
+no scope check against contract or BOQ, no transcription. Duplicate detection
+already works on local MiniLM.
+
+**Stage 8** — procurement and subcontractor quotations, EOT.
+**Stage 9** — document RAG over drawings and specs.
+**Stage 10** — ready for a second client: Redis rate limiting, 2FA, Arabic.
+**Stage 11** — first real contractor.
+
+### Corrections to the old plan
+
+- *"Reminder and escalation workers on BullMQ"* is dead. Reminders and
+  escalation were built in the app, and the schedule now belongs to n8n. Seven
+  of the eight `src/workers/*` stubs should never be written.
+- The Unassigned Capture Inbox moved from stage 8 to stage 4. Capture parks
+  what it cannot place, and without a screen those messages fall into a hole.
+- Contract rules, contacts, team and project creation now have forms. The
+  "API-only" limitation above is out of date.

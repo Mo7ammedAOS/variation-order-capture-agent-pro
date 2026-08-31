@@ -1,0 +1,15 @@
+-- A captured message that could not be placed on a project is NOT "processed".
+--
+-- It was, until now: `processOnce` marked the event processed because the
+-- capture function returned without throwing, and the "needs triage" outcome
+-- was buried inside result_json. So a message the system deliberately refused
+-- to guess about looked, in every query and every count, exactly like one that
+-- had become a Potential Change. Nobody would ever have found it.
+--
+-- Its own status, so the triage inbox is a WHERE clause rather than a JSON
+-- scan, and so the count of things waiting on a human is a real number.
+--
+-- ALTER TYPE ... ADD VALUE cannot be used in the same transaction that adds it,
+-- which is why this is its own migration and nothing here references the new
+-- value.
+ALTER TYPE "IntegrationEventStatus" ADD VALUE IF NOT EXISTS 'needs_triage';

@@ -77,7 +77,19 @@ export const deliveryStatusSchema = z.object({
   failure_reason: z.string().optional(),
 });
 
+/**
+ * The jobs n8n is allowed to start.
+ *
+ * A closed list, not a free string. This endpoint runs work with no signed-in
+ * user behind it, so the set of things it can be persuaded to do has to be
+ * finite and readable in one glance.
+ */
+export const scheduledJobSchema = z.object({
+  job: z.enum(['reminder_sweep', 'bottleneck_sweep', 'notification_dispatch']),
+});
+
 export type WhatsappIncoming = z.infer<typeof whatsappIncomingSchema>;
 export type EmailIncoming = z.infer<typeof emailIncomingSchema>;
 export type DocumentUploaded = z.infer<typeof documentUploadedSchema>;
 export type DeliveryStatusUpdate = z.infer<typeof deliveryStatusSchema>;
+export type ScheduledJob = z.infer<typeof scheduledJobSchema>['job'];
