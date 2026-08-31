@@ -217,7 +217,7 @@ export function ReportChangeForm({
               name="evidence"
               type="file"
               multiple
-              accept="image/*,application/pdf,audio/*"
+              accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf,.rvt,.ifc,.dwf"
               capture="environment"
               className="py-1.5"
             />

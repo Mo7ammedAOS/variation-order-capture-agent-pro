@@ -129,9 +129,25 @@ export function EditPanel({
               name="evidence"
               type="file"
               multiple
-              accept="image/*,application/pdf"
+              accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf,.rvt,.ifc,.dwf"
               className="h-auto py-2"
             />
+            <Label htmlFor="documentType" className="text-xs text-muted-foreground">
+              What are these? Photographs are recognised automatically.
+            </Label>
+            <select
+              id="documentType"
+              name="documentType"
+              defaultValue="drawing"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="drawing">Drawing</option>
+              <option value="rfi">RFI</option>
+              <option value="instruction">Site instruction</option>
+              <option value="correspondence">Email or letter</option>
+              <option value="quotation">Quotation</option>
+              <option value="other">Something else</option>
+            </select>
             <div className="flex items-center gap-3">
               <Submit label="Add to the file" busy="Uploading…" />
             </div>

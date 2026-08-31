@@ -14,7 +14,21 @@ import {
   statusChangeSchema,
   updatePotentialChange,
 } from '@/services/potential-change.service';
+import type { DocumentType } from '@prisma/client';
 import { uploadDocument } from '@/services/document.service';
+
+/**
+ * What a file attached to a change is allowed to be.
+ *
+ * Contract, BOQ and specification are absent on purpose: those are the library
+ * the system reasons FROM, they are the administrator's job, and they belong to
+ * the project rather than to one change. Letting a site engineer attach a BOQ
+ * here would put an unreviewed price list into the register.
+ */
+export const EVIDENCE_TYPES: DocumentType[] = [
+  'drawing', 'rfi', 'instruction', 'correspondence', 'quotation',
+  'site_photo', 'voice_note', 'other',
+];
 import { isAppError } from '@/lib/errors';
 import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
 
@@ -249,12 +263,22 @@ export async function addEvidenceAction(
 
   if (files.length === 0) return { error: 'Choose at least one photograph or file' };
 
+  // What the person says the files are. An image is still filed as a site photo
+  // whatever the box says, because a phone photo on site is not an RFI and
+  // labelling it one helps nobody.
+  const declared = String(formData.get('documentType') ?? '');
+  const documentType = EVIDENCE_TYPES.includes(declared as DocumentType)
+    ? (declared as DocumentType)
+    : undefined;
+
   let failed = 0;
   for (const file of files) {
     try {
+      const isImage = (file.type || '').startsWith('image/');
       await uploadDocument(user, {
         projectId,
         potentialChangeId: id,
+        documentType: isImage ? 'site_photo' : documentType,
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
         content: Buffer.from(await file.arrayBuffer()),

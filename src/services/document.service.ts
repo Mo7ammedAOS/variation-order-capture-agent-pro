@@ -40,14 +40,32 @@ const ALLOWED_MIME_TYPES = new Set([
   'text/csv',
 ]);
 
-function assertAcceptableFile(mimeType: string, sizeBytes: number) {
+/**
+ * CAD files, allowed by EXTENSION rather than type.
+ *
+ * Browsers report `.dwg` as `application/octet-stream`, or as nothing at all —
+ * there is no reliable MIME type for it. Trusting octet-stream on its own would
+ * accept literally any file, so the extension has to carry it. The bytes are
+ * never executed, only stored and served back as a download.
+ */
+const ALLOWED_EXTENSIONS = ['.dwg', '.dxf', '.rvt', '.ifc', '.dwf'];
+
+function assertAcceptableFile(mimeType: string, sizeBytes: number, fileName = '') {
   if (sizeBytes > MAX_UPLOAD_BYTES) {
     throw new ValidationError(`File is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
   }
+
+  const lower = fileName.toLowerCase();
   const allowed =
     ALLOWED_MIME_TYPES.has(mimeType) ||
-    ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
-  if (!allowed) throw new ValidationError(`Files of type ${mimeType} are not accepted`);
+    ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix)) ||
+    ALLOWED_EXTENSIONS.some((extension) => lower.endsWith(extension));
+
+  if (!allowed) {
+    throw new ValidationError(
+      `${fileName || 'That file'} is a type we do not accept (${mimeType || 'unknown'})`,
+    );
+  }
 }
 
 /**
@@ -227,7 +245,7 @@ export async function uploadDocument(
   },
 ) {
   await assertProjectAccess(user, input.projectId, 'document.upload');
-  assertAcceptableFile(input.mimeType, input.content.byteLength);
+  assertAcceptableFile(input.mimeType, input.content.byteLength, input.fileName);
 
   const storage = getStorageProvider();
 
@@ -249,7 +267,7 @@ export async function uploadDocument(
       data: {
         projectId: input.projectId,
         potentialChangeId: input.potentialChangeId ?? null,
-        documentType: input.documentType ?? inferDocumentType(input.mimeType),
+        documentType: input.documentType ?? inferDocumentType(input.mimeType, input.fileName),
         documentName: input.fileName,
         driveFileId: stored.fileId,
         storagePath: stored.storagePath,
@@ -326,10 +344,25 @@ export async function listDocuments(
   });
 }
 
-function inferDocumentType(mimeType: string): DocumentType {
+/**
+ * A guess, used only when nobody said what the file is.
+ *
+ * A PDF used to become a `drawing`, confidently and often wrongly: an RFI, a
+ * client instruction and a quotation are all PDFs, and all three entered the
+ * register labelled as drawings. A wrong label in a commercial register is
+ * worse than no label, because it is searched and filtered on.
+ *
+ * So a PDF is now `other` unless someone says otherwise, and the upload forms
+ * ask. An image from a phone on site really is a site photo, and that one is
+ * safe to assume.
+ */
+function inferDocumentType(mimeType: string, fileName = ''): DocumentType {
   if (mimeType.startsWith('image/')) return 'site_photo';
   if (mimeType.startsWith('audio/')) return 'voice_note';
-  if (mimeType === 'application/pdf') return 'drawing';
+
+  const lower = fileName.toLowerCase();
+  if (['.dwg', '.dxf', '.rvt', '.ifc', '.dwf'].some((e) => lower.endsWith(e))) return 'drawing';
+
   return 'other';
 }
 
