@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  AlertTriangle, ClipboardList, Copy, FileText, History, MapPin, Paperclip, ShieldAlert, User,
+  AlertTriangle, ClipboardList, Copy, FileSearch, FileText, History, MapPin, Paperclip,
+  ShieldAlert, User,
 } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
+import { findScopeMatches } from '@/services/document-index.service';
 import { prisma } from '@/lib/prisma';
 import { toDateInputValue, formatDate, formatDateTime, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
@@ -66,7 +68,7 @@ export default async function PotentialChangeDetailPage({
     throw error;
   }
 
-  const [projectRoles, activity, similar] = await Promise.all([
+  const [projectRoles, activity, similar, scopeMatches] = await Promise.all([
     getProjectRoles(user, change.projectId),
     prisma.activityLog.findMany({
       where: { recordType: 'potential_change', recordId: id },
@@ -76,6 +78,11 @@ export default async function PotentialChangeDetailPage({
     }),
     // Suggestions only. Never merges, never closes, never decides.
     findSimilarChanges(user, id).catch(() => []),
+    // Against the project's OWN contract, BOQ and scope. Evidence for a human,
+    // never a verdict: a model that closes claims eventually closes a real one.
+    findScopeMatches(change.projectId, `${change.title}\n${change.description ?? ''}`).catch(
+      () => [],
+    ),
   ]);
 
   // Asked of the same source the service consults, so the page can never offer
@@ -583,6 +590,48 @@ export default async function PotentialChangeDetailPage({
                           {Math.round(match.similarity * 100)}%
                         </Badge>
                       </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {scopeMatches.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileSearch aria-hidden className="size-4" />
+                  Check this against the contract
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <p className="text-sm text-muted-foreground">
+                  The closest wording in this project&rsquo;s own contract, BOQ and scope. It may
+                  mean the work is already included, or that a rate for it already exists.
+                  <strong> Read it before pricing.</strong> Nothing here decides anything.
+                </p>
+                <ul className="flex flex-col gap-3">
+                  {scopeMatches.map((match) => (
+                    <li
+                      key={`${match.documentId}-${match.chunkIndex}`}
+                      className="rounded-lg border border-border/70 p-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <a
+                          href={`/api/documents/${match.documentId}/content`}
+                          className="text-sm font-medium text-primary hover:underline"
+                        >
+                          {match.documentName}
+                        </a>
+                        <Badge variant="secondary">{humanise(match.documentType)}</Badge>
+                        <span className="ms-auto text-xs tabular text-muted-foreground">
+                          {Math.round(match.similarity * 100)}% match
+                        </span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                        {match.excerpt}
+                      </p>
                     </li>
                   ))}
                 </ul>

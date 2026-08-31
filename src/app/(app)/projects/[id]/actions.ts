@@ -11,6 +11,10 @@ import {
 import { contactSchema, createContact } from '@/services/contact.service';
 import { isAppError } from '@/lib/errors';
 import { contractRuleUpdateSchema, updateContractRules } from '@/services/project.service';
+import type { DocumentType } from '@prisma/client';
+import { uploadDocument } from '@/services/document.service';
+import { indexDocument } from '@/services/document-index.service';
+import { assertProjectAccess } from '@/services/project-access.service';
 
 export interface ContractRulesState {
   error?: string;
@@ -189,4 +193,74 @@ export async function createContactAction(
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
   return { ok: `${parsed.data.fullName} added` };
+}
+
+export interface LibraryFormState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * Uploads a commercial document and makes it searchable by meaning.
+ *
+ * Gated on `document.manageRegister`, not the looser `document.upload` that
+ * covers site photos. These are the documents the system will REASON from — a
+ * wrong BOQ in here does not just sit in a list, it starts telling people their
+ * change is already in scope.
+ *
+ * Indexing runs after the upload and is allowed to fail on its own. A scanned
+ * contract with no text layer is still a document worth keeping and serving; it
+ * is simply not searchable, and the panel says so instead of implying it was
+ * read.
+ */
+export async function uploadLibraryDocumentAction(
+  _prev: LibraryFormState,
+  formData: FormData,
+): Promise<LibraryFormState> {
+  const user = await requirePageUser();
+  const projectId = String(formData.get('projectId') ?? '');
+  const documentType = String(formData.get('documentType') ?? 'contract') as DocumentType;
+  const file = formData.get('file');
+
+  if (!(file instanceof File) || file.size === 0) return { error: 'Choose a file' };
+
+  try {
+    await assertProjectAccess(user, projectId, 'document.manageRegister');
+
+    const document = await uploadDocument(user, {
+      projectId,
+      documentType,
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      content: Buffer.from(await file.arrayBuffer()),
+    });
+
+    const result = await indexDocument(document.id).catch((error) => ({
+      chunks: 0,
+      skipped: error instanceof Error ? error.message : 'Could not read the file',
+    }));
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return {
+      ok:
+        result.chunks > 0
+          ? `${file.name} uploaded and indexed — ${result.chunks} searchable sections.`
+          : `${file.name} uploaded, but NOT searchable: ${result.skipped ?? 'no readable text'}.`,
+    };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+}
+
+/** Re-reads a document that was uploaded before indexing existed, or failed. */
+export async function reindexDocumentAction(formData: FormData): Promise<void> {
+  const user = await requirePageUser();
+  const projectId = String(formData.get('projectId') ?? '');
+  const documentId = String(formData.get('documentId') ?? '');
+
+  await assertProjectAccess(user, projectId, 'document.manageRegister');
+  await indexDocument(documentId);
+  revalidatePath(`/projects/${projectId}`);
 }

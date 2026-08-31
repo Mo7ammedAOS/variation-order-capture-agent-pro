@@ -121,7 +121,10 @@ export async function ensurePotentialChangeFolders(potentialChangeId: string): P
 
   const change = await prisma.potentialChange.findUnique({
     where: { id: potentialChangeId },
-    select: { id: true, projectId: true, pcNumber: true, driveFolderId: true },
+    select: {
+      id: true, projectId: true, pcNumber: true, driveFolderId: true, eventDate: true,
+      project: { select: { projectCode: true } },
+    },
   });
   if (!change) throw new NotFoundError('Potential Change not found');
 
@@ -129,8 +132,29 @@ export async function ensurePotentialChangeFolders(potentialChangeId: string): P
 
   let folderId = change.driveFolderId;
   if (!folderId) {
+    // Osman's structure: month, then a folder per DAY that had a variation.
+    //
+    //   07 Potential Changes/
+    //     August/
+    //       DXB-001-01092026/     <- everything raised that day
+    //
+    // Both created on demand and never in advance. A year of empty month
+    // folders on a job with three variations is noise, and noise is what makes
+    // people stop opening the folder at all.
+    //
+    // The day is the EVENT date, not today. A change reported on Monday about
+    // something that happened on Friday belongs in Friday's folder — that is
+    // the date the notice clock runs from, and the date anyone will look under.
     const changesFolder = await storage.ensureFolder(PC_PARENT_FOLDER, projectFolderId);
-    folderId = await storage.ensureFolder(change.pcNumber, changesFolder);
+    const monthFolder = await storage.ensureFolder(
+      monthFolderName(change.eventDate),
+      changesFolder,
+    );
+    const dayFolder = await storage.ensureFolder(
+      dayFolderName(change.project.projectCode, change.eventDate),
+      monthFolder,
+    );
+    folderId = await storage.ensureFolder(change.pcNumber, dayFolder);
     for (const child of PC_FOLDER_TREE) {
       await storage.ensureFolder(child, folderId);
     }
@@ -307,4 +331,34 @@ function inferDocumentType(mimeType: string): DocumentType {
   if (mimeType.startsWith('audio/')) return 'voice_note';
   if (mimeType === 'application/pdf') return 'drawing';
   return 'other';
+}
+
+
+/* ─── Folder names ───────────────────────────────────────────────────────── */
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** `August`. Osman's choice, and it is what people say out loud. */
+export function monthFolderName(date: Date): string {
+  return MONTHS[date.getUTCMonth()] ?? 'Unknown';
+}
+
+/**
+ * `DXB-001-01092026` — project code, then the date with no separators.
+ *
+ * DDMMYYYY, Osman's convention, matching how dates are written on site here.
+ * Two consequences worth knowing rather than discovering: Drive sorts these
+ * alphabetically, so within a month the 1st sorts before the 2nd but the 10th
+ * lands before the 2nd as well; and `01092026` reads as January to anything
+ * expecting American order. The folder name is a label — every date the system
+ * REASONS about is a real date column, and every date it displays goes through
+ * formatDate as `01 Sep 2026`.
+ */
+export function dayFolderName(projectCode: string, date: Date): string {
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${projectCode}-${dd}${mm}${date.getUTCFullYear()}`;
 }

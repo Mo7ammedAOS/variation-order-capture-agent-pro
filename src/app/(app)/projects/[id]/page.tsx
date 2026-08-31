@@ -10,6 +10,10 @@ import { listMembers } from '@/services/project-member.service';
 import { listAssignableUsers } from '@/services/user.service';
 import { listPotentialChanges } from '@/services/potential-change.service';
 import { listDocuments } from '@/services/document.service';
+import { indexStatus } from '@/services/document-index.service';
+import { assertProjectAccess } from '@/services/project-access.service';
+import { LibraryForm } from './library-form';
+import { reindexDocumentAction } from './actions';
 import { listTasks } from '@/services/task.service';
 import { prisma } from '@/lib/prisma';
 import { isAppError } from '@/lib/errors';
@@ -491,8 +495,57 @@ async function TeamTab({ user, projectId }: { user: User; projectId: string }) {
 }
 
 async function DocumentsTab({ user, projectId }: { user: User; projectId: string }) {
-  const documents = await listDocuments(user, { projectId });
-  if (documents.length === 0) return <Empty message="No documents registered." />;
+  const [documents, canManage, index] = await Promise.all([
+    listDocuments(user, { projectId }),
+    assertProjectAccess(user, projectId, 'document.manageRegister')
+      .then(() => true)
+      .catch(() => false),
+    indexStatus(projectId),
+  ]);
+
+  const library = (
+    <>
+      {canManage ? <LibraryForm projectId={projectId} /> : null}
+      {index.documents.length > 0 ? (
+        <Card className="flex flex-col gap-3 p-5">
+          <h3 className="text-sm font-semibold">
+            What the system can read — {index.totalChunks} searchable sections
+          </h3>
+          <ul className="flex flex-col gap-2 text-sm">
+            {index.documents.map((document) => (
+              <li key={document.id} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{document.name}</span>
+                <span className="text-xs text-muted-foreground">{humanise(document.type)}</span>
+                {document.indexed ? (
+                  <span className="text-xs text-emerald-700">{document.chunks} sections</span>
+                ) : (
+                  <span className="text-xs text-amber-700">not readable — no text found</span>
+                )}
+                {canManage && !document.indexed ? (
+                  <form action={reindexDocumentAction}>
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <input type="hidden" name="documentId" value={document.id} />
+                    <button type="submit" className="text-xs text-primary hover:underline">
+                      try again
+                    </button>
+                  </form>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+    </>
+  );
+
+  if (documents.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        {library}
+        <Empty message="No documents registered." />
+      </div>
+    );
+  }
 
   return (
     <Card className="overflow-hidden">
