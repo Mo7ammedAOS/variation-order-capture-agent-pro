@@ -37,20 +37,23 @@ export const USERS: SeedUser[] = [
   // neither is the person who captured it. That is what makes a variation file
   // defensible when the client's QS challenges it.
   //
-  // ⚠️ PHONE NUMBERS ARE PLACEHOLDERS. "Which project did you mean?" goes out on
-  // email AND WhatsApp; until these are real, only the email half arrives.
+  // ⚠️ ONE NUMBER FOR ALL SIX, on Osman's instruction, so the WhatsApp half of
+  // every message can be seen while testing. It means WhatsApp cannot tell them
+  // apart: a reply from this number matches whichever of the six has a question
+  // outstanding. Fine for testing, wrong for a real deployment — give each
+  // person their own number before anyone relies on it.
   {
     key: 'md', fullName: 'Mohammed', email: 'mohammed@osmanflow.com',
-    phone: '+971500000001', systemRole: 'managing_director',
+    phone: '+971565951887', systemRole: 'managing_director',
     // Administration is a FLAG, not a job. With no separate administrator in
     // this cast it sits with the MD, which is also how a small firm runs.
     canAdministerCompany: true,
   },
-  { key: 'qs1', fullName: 'Osman',       email: 'guided369@gmail.com',                    phone: '+971500000002', systemRole: 'standard_user' },
-  { key: 'pm1', fullName: 'Abdelmoneim', email: 'osman.constructionsystems@hotmail.com',  phone: '+971500000003', systemRole: 'standard_user' },
-  { key: 'pm2', fullName: 'Hashim',      email: 'mohammedosman2400@outlook.com',          phone: '+971500000004', systemRole: 'standard_user' },
-  { key: 'se1', fullName: 'Ahmed',       email: 'org3700@gmail.com',                      phone: '+971500000005', systemRole: 'standard_user' },
-  { key: 'se2', fullName: 'Hassan',      email: 'mohammedossidahmed@gmail.com',           phone: '+971500000006', systemRole: 'standard_user' },
+  { key: 'qs1', fullName: 'Osman',       email: 'guided369@gmail.com',                    phone: '+971565951887', systemRole: 'standard_user' },
+  { key: 'pm1', fullName: 'Abdelmoneim', email: 'osman.constructionsystems@hotmail.com',  phone: '+971565951887', systemRole: 'standard_user' },
+  { key: 'pm2', fullName: 'Hashim',      email: 'mohammedosman2400@outlook.com',          phone: '+971565951887', systemRole: 'standard_user' },
+  { key: 'se1', fullName: 'Ahmed',       email: 'org3700@gmail.com',                      phone: '+971565951887', systemRole: 'standard_user' },
+  { key: 'se2', fullName: 'Hassan',      email: 'mohammedossidahmed@gmail.com',           phone: '+971565951887', systemRole: 'standard_user' },
 ];
 
 export interface SeedProject {
@@ -70,12 +73,13 @@ export const PROJECTS: SeedProject[] = [
     Membership is arranged so the access rule is PROVABLE by signing in, not
     only by reading a test:
 
-      Ahmed  (se1) is on THREE: DXB-001, DXB-002, DXB-004
-                   -> AUH-003 must still 403 for him, and reporting without
-                      naming a job must make the system ASK him which of the
-                      three he meant. Three is the point: two is too easy and
-                      four leaves no project to prove the 403 with.
-      Hassan (se2) is on DXB-002 and AUH-003 only
+      Everyone below carries TWO projects, on Osman's instruction. Two is also
+      exactly what is needed to prove the two rules that matter: the pair he is
+      NOT on must refuse him, and reporting without naming a job must make the
+      system ASK which of his two he meant.
+
+      Ahmed  (se1) is on DXB-001 and DXB-002   -> AUH-003 and DXB-004 must 403
+      Hassan (se2) is on AUH-003 and DXB-004   -> DXB-001 and DXB-002 must 403
       Abdelmoneim (pm1) runs DXB-001 and AUH-003   -> a PM across two sites
       Hashim (pm2) runs DXB-002 and DXB-004
       Osman  (qs1) prices ALL FOUR                 -> one QS, as Osman set it
@@ -97,7 +101,7 @@ export const PROJECTS: SeedProject[] = [
     contractNumber: 'ABC/2026/002', value: 7_200_000, noticePeriodDays: 21,
     members: [
       { userKey: 'pm2', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
-      { userKey: 'se2', role: 'site_engineer' }, { userKey: 'se1', role: 'site_engineer' },
+      { userKey: 'se1', role: 'site_engineer' },
     ],
   },
   {
@@ -115,7 +119,7 @@ export const PROJECTS: SeedProject[] = [
     contractNumber: 'ABC/2026/004', value: 24_300_000, noticePeriodDays: 14,
     members: [
       { userKey: 'pm2', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
-      { userKey: 'se1', role: 'site_engineer' },
+      { userKey: 'se2', role: 'site_engineer' },
     ],
   },
 ];

@@ -163,221 +163,238 @@ async function main() {
   }
   console.log(`  projects   ${PROJECTS.length}`);
 
-  // ── contacts ─────────────────────────────────────────────────────────────
-  for (const contact of CONTACTS) {
-    const projectId = projectIds.get(contact.projectCode);
-    if (!projectId) continue;
+  // ── sample content ───────────────────────────────────────────────────────
+  //
+  // Everything below is EXAMPLE DATA: invented client contacts, twenty
+  // variations that never happened, tasks nobody was really given. It is off by
+  // default.
+  //
+  // A brand-new deployment wants the configuration — the company, the people,
+  // the projects, who is on what — and nothing else. Fictional changes in a
+  // commercial register are worse than an empty one: they train people to
+  // ignore what is on the screen, and the first real variation arrives into a
+  // list they have already learned to scroll past.
+  //
+  //     npm run db:seed                        configuration only
+  //     SEED_SAMPLE_CONTENT=true npm run db:seed   plus the examples
+  if (process.env.SEED_SAMPLE_CONTENT === 'true') {
+    // ── contacts ─────────────────────────────────────────────────────────────
+    for (const contact of CONTACTS) {
+      const projectId = projectIds.get(contact.projectCode);
+      if (!projectId) continue;
 
-    const exists = await prisma.contact.findFirst({
-      where: { projectId, fullName: contact.fullName },
-    });
-    const data = {
-      projectId,
-      fullName: contact.fullName,
-      companyName: contact.companyName,
-      jobTitle: contact.jobTitle,
-      contactType: contact.contactType,
-      authorityVerified: contact.verified,
-      canRequestChange: contact.canRequest,
-      canIssueTechnicalInstruction: contact.canInstruct,
-      canInstructWork: contact.canInstruct,
-      canApproveCost: contact.canApproveCost,
-      canApproveTime: contact.canApproveCost,
-      canSignFinalVo: contact.canSign,
-    };
-    if (exists) await prisma.contact.update({ where: { id: exists.id }, data });
-    else await prisma.contact.create({ data });
-  }
-  console.log(`  contacts   ${CONTACTS.length}`);
+      const exists = await prisma.contact.findFirst({
+        where: { projectId, fullName: contact.fullName },
+      });
+      const data = {
+        projectId,
+        fullName: contact.fullName,
+        companyName: contact.companyName,
+        jobTitle: contact.jobTitle,
+        contactType: contact.contactType,
+        authorityVerified: contact.verified,
+        canRequestChange: contact.canRequest,
+        canIssueTechnicalInstruction: contact.canInstruct,
+        canInstructWork: contact.canInstruct,
+        canApproveCost: contact.canApproveCost,
+        canApproveTime: contact.canApproveCost,
+        canSignFinalVo: contact.canSign,
+      };
+      if (exists) await prisma.contact.update({ where: { id: exists.id }, data });
+      else await prisma.contact.create({ data });
+    }
+    console.log(`  contacts   ${CONTACTS.length}`);
 
-  // ── documents ────────────────────────────────────────────────────────────
-  let documentCount = 0;
-  for (const project of PROJECTS.slice(0, 3)) {
-    const projectId = projectIds.get(project.code);
-    if (!projectId) continue;
+    // ── documents ────────────────────────────────────────────────────────────
+    let documentCount = 0;
+    for (const project of PROJECTS.slice(0, 3)) {
+      const projectId = projectIds.get(project.code);
+      if (!projectId) continue;
 
-    for (const template of DOCUMENT_TEMPLATES) {
-      const name = `${project.code} — ${template.name}`;
-      const exists = await prisma.projectDocument.findFirst({ where: { projectId, documentName: name } });
-      if (exists) { documentCount += 1; continue; }
+      for (const template of DOCUMENT_TEMPLATES) {
+        const name = `${project.code} — ${template.name}`;
+        const exists = await prisma.projectDocument.findFirst({ where: { projectId, documentName: name } });
+        if (exists) { documentCount += 1; continue; }
 
-      await prisma.projectDocument.create({
+        await prisma.projectDocument.create({
+          data: {
+            projectId,
+            documentType: template.type,
+            documentName: name,
+            documentNumber: template.number,
+            revisionNumber: template.revision,
+            issueDate: daysAgo(120),
+            // Registered by reference. No bytes are invented — a seeded file that
+            // 404s on click is worse than an honest link-only record.
+            sourceUrl: `https://drive.example.com/${project.code}/${template.number ?? 'doc'}`,
+            uploadedByUserId: userIds.get('md') ?? null,
+            sourceChannel: 'document_upload',
+          },
+        });
+        documentCount += 1;
+      }
+    }
+    console.log(`  documents  ${documentCount}`);
+
+    // ── potential changes, tasks ─────────────────────────────────────────────
+    let changeCount = 0;
+    let taskCount = 0;
+
+    for (const change of CHANGES) {
+      const projectId = projectIds.get(change.projectCode);
+      const project = PROJECTS.find((p) => p.code === change.projectCode);
+      if (!projectId || !project) continue;
+
+      const existing = await prisma.potentialChange.findFirst({
+        where: { projectId, title: change.title },
+      });
+      if (existing) { changeCount += 1; continue; }
+
+      const [bumped] = await prisma.$queryRaw<{ pc_sequence: number }[]>`
+        UPDATE projects SET pc_sequence = pc_sequence + 1
+        WHERE id = ${projectId}::uuid RETURNING pc_sequence
+      `;
+      const sequence = bumped?.pc_sequence ?? 1;
+      const pcNumber = `PC-${project.code}-${String(sequence).padStart(4, '0')}`;
+
+      const eventDate = daysAgo(change.daysAgo);
+      const noticeDueDate = addDays(eventDate, project.noticePeriodDays);
+      const daysRemaining = Math.round((noticeDueDate.getTime() - Date.now()) / 86_400_000);
+      const riskLevel = daysRemaining < 0 ? 'red' : daysRemaining <= 7 ? 'amber' : 'green';
+
+      const cm = project.members.find((m) => m.role === 'commercial_manager');
+      const pm = project.members.find((m) => m.role === 'project_manager');
+      const qs = project.members.find((m) => m.role === 'quantity_surveyor');
+      const se = project.members.find((m) => m.role === 'site_engineer');
+
+      const ownerKey = cm?.userKey ?? pm?.userKey;
+      const ownerId = ownerKey ? (userIds.get(ownerKey) ?? null) : null;
+
+      // A spread of stages, so the dashboards and the bottleneck sweep have
+      // something realistic to work with rather than twenty identical rows.
+      const assessed = change.daysAgo > 20;
+      const contact = CONTACTS.find((c) => c.projectCode === change.projectCode);
+      const contactRecord = contact
+        ? await prisma.contact.findFirst({ where: { projectId, fullName: contact.fullName } })
+        : null;
+
+      const created = await prisma.potentialChange.create({
         data: {
           projectId,
-          documentType: template.type,
-          documentName: name,
-          documentNumber: template.number,
-          revisionNumber: template.revision,
-          issueDate: daysAgo(120),
-          // Registered by reference. No bytes are invented — a seeded file that
-          // 404s on click is worse than an honest link-only record.
-          sourceUrl: `https://drive.example.com/${project.code}/${template.number ?? 'doc'}`,
-          uploadedByUserId: userIds.get('md') ?? null,
-          sourceChannel: 'document_upload',
+          pcNumber,
+          title: change.title,
+          description: change.description,
+          eventDate,
+          captureDate: addDays(eventDate, 1),
+          location: change.location,
+          trade: change.trade,
+          workStatus: change.workStarted ? 'in_progress' : 'not_started',
+          estimatedValue: change.estimatedValue,
+          potentialTimeImpact: change.timeImpact,
+          sourceType: change.source,
+          sourceSenderName: contact?.fullName ?? null,
+          sourceSenderAuthorityStatus: contact?.verified ? 'authorised' : 'unknown',
+          requestedByContactId: contactRecord?.id ?? null,
+          reportedByUserId: se ? (userIds.get(se.userKey) ?? null) : ownerId,
+          currentStatus: assessed ? 'qs_pricing' : 'notice_assessment',
+          currentOwnerUserId: assessed && qs ? (userIds.get(qs.userKey) ?? ownerId) : ownerId,
+          waitingFor: assessed ? 'QS pricing' : 'Notice assessment',
+          nextAction: assessed
+            ? 'Price the change'
+            : 'Assess whether a contractual notice is required',
+          nextActionDueDate: addDays(eventDate, assessed ? 10 : 3),
+          noticeDueDate,
+          noticeStatus: assessed ? 'not_required' : 'not_assessed',
+          noticeRequired: false,
+          noticeAssessedAt: assessed ? addDays(eventDate, 2) : null,
+          noticeAssessedByUserId: assessed && ownerId ? ownerId : null,
+          riskLevel,
         },
       });
-      documentCount += 1;
-    }
-  }
-  console.log(`  documents  ${documentCount}`);
+      changeCount += 1;
 
-  // ── potential changes, tasks ─────────────────────────────────────────────
-  let changeCount = 0;
-  let taskCount = 0;
-
-  for (const change of CHANGES) {
-    const projectId = projectIds.get(change.projectCode);
-    const project = PROJECTS.find((p) => p.code === change.projectCode);
-    if (!projectId || !project) continue;
-
-    const existing = await prisma.potentialChange.findFirst({
-      where: { projectId, title: change.title },
-    });
-    if (existing) { changeCount += 1; continue; }
-
-    const [bumped] = await prisma.$queryRaw<{ pc_sequence: number }[]>`
-      UPDATE projects SET pc_sequence = pc_sequence + 1
-      WHERE id = ${projectId}::uuid RETURNING pc_sequence
-    `;
-    const sequence = bumped?.pc_sequence ?? 1;
-    const pcNumber = `PC-${project.code}-${String(sequence).padStart(4, '0')}`;
-
-    const eventDate = daysAgo(change.daysAgo);
-    const noticeDueDate = addDays(eventDate, project.noticePeriodDays);
-    const daysRemaining = Math.round((noticeDueDate.getTime() - Date.now()) / 86_400_000);
-    const riskLevel = daysRemaining < 0 ? 'red' : daysRemaining <= 7 ? 'amber' : 'green';
-
-    const cm = project.members.find((m) => m.role === 'commercial_manager');
-    const pm = project.members.find((m) => m.role === 'project_manager');
-    const qs = project.members.find((m) => m.role === 'quantity_surveyor');
-    const se = project.members.find((m) => m.role === 'site_engineer');
-
-    const ownerKey = cm?.userKey ?? pm?.userKey;
-    const ownerId = ownerKey ? (userIds.get(ownerKey) ?? null) : null;
-
-    // A spread of stages, so the dashboards and the bottleneck sweep have
-    // something realistic to work with rather than twenty identical rows.
-    const assessed = change.daysAgo > 20;
-    const contact = CONTACTS.find((c) => c.projectCode === change.projectCode);
-    const contactRecord = contact
-      ? await prisma.contact.findFirst({ where: { projectId, fullName: contact.fullName } })
-      : null;
-
-    const created = await prisma.potentialChange.create({
-      data: {
-        projectId,
-        pcNumber,
-        title: change.title,
-        description: change.description,
-        eventDate,
-        captureDate: addDays(eventDate, 1),
-        location: change.location,
-        trade: change.trade,
-        workStatus: change.workStarted ? 'in_progress' : 'not_started',
-        estimatedValue: change.estimatedValue,
-        potentialTimeImpact: change.timeImpact,
-        sourceType: change.source,
-        sourceSenderName: contact?.fullName ?? null,
-        sourceSenderAuthorityStatus: contact?.verified ? 'authorised' : 'unknown',
-        requestedByContactId: contactRecord?.id ?? null,
-        reportedByUserId: se ? (userIds.get(se.userKey) ?? null) : ownerId,
-        currentStatus: assessed ? 'qs_pricing' : 'notice_assessment',
-        currentOwnerUserId: assessed && qs ? (userIds.get(qs.userKey) ?? ownerId) : ownerId,
-        waitingFor: assessed ? 'QS pricing' : 'Notice assessment',
-        nextAction: assessed
-          ? 'Price the change'
-          : 'Assess whether a contractual notice is required',
-        nextActionDueDate: addDays(eventDate, assessed ? 10 : 3),
-        noticeDueDate,
-        noticeStatus: assessed ? 'not_required' : 'not_assessed',
-        noticeRequired: false,
-        noticeAssessedAt: assessed ? addDays(eventDate, 2) : null,
-        noticeAssessedByUserId: assessed && ownerId ? ownerId : null,
-        riskLevel,
-      },
-    });
-    changeCount += 1;
-
-    const taskAssignee = assessed && qs ? userIds.get(qs.userKey) : ownerId;
-    await prisma.task.create({
-      data: {
-        projectId,
-        potentialChangeId: created.id,
-        taskType: assessed ? 'qs_pricing' : 'notice_assessment',
-        title: `${assessed ? 'QS pricing' : 'Notice assessment'} — ${pcNumber}`,
-        assignedToUserId: taskAssignee ?? null,
-        dueDate: addDays(eventDate, assessed ? 10 : 3),
-        priority: change.estimatedValue && change.estimatedValue > 300_000 ? 'high' : 'normal',
-        status: 'open',
-      },
-    });
-    taskCount += 1;
-
-    if (change.workStarted) {
+      const taskAssignee = assessed && qs ? userIds.get(qs.userKey) : ownerId;
       await prisma.task.create({
         data: {
           projectId,
           potentialChangeId: created.id,
-          taskType: 'evidence_collection',
-          title: `Record labour and materials — ${pcNumber}`,
-          description: 'Work has started. Capture daywork sheets and photographs now.',
-          assignedToUserId: se ? (userIds.get(se.userKey) ?? null) : null,
-          dueDate: addDays(new Date(), 2),
-          priority: 'high',
+          taskType: assessed ? 'qs_pricing' : 'notice_assessment',
+          title: `${assessed ? 'QS pricing' : 'Notice assessment'} — ${pcNumber}`,
+          assignedToUserId: taskAssignee ?? null,
+          dueDate: addDays(eventDate, assessed ? 10 : 3),
+          priority: change.estimatedValue && change.estimatedValue > 300_000 ? 'high' : 'normal',
           status: 'open',
         },
       });
       taskCount += 1;
-    }
 
-    await prisma.activityLog.create({
-      data: {
-        projectId,
-        userId: created.reportedByUserId,
-        recordType: 'potential_change',
-        recordId: created.id,
-        actionType: 'created',
-        newValueJson: { pcNumber, title: change.title, noticeDueDate: noticeDueDate.toISOString() } as Prisma.InputJsonValue,
-        source: 'seed',
-      },
-    });
+      if (change.workStarted) {
+        await prisma.task.create({
+          data: {
+            projectId,
+            potentialChangeId: created.id,
+            taskType: 'evidence_collection',
+            title: `Record labour and materials — ${pcNumber}`,
+            description: 'Work has started. Capture daywork sheets and photographs now.',
+            assignedToUserId: se ? (userIds.get(se.userKey) ?? null) : null,
+            dueDate: addDays(new Date(), 2),
+            priority: 'high',
+            status: 'open',
+          },
+        });
+        taskCount += 1;
+      }
 
-    if (assessed) {
       await prisma.activityLog.create({
         data: {
           projectId,
-          userId: ownerId,
+          userId: created.reportedByUserId,
           recordType: 'potential_change',
           recordId: created.id,
-          actionType: 'notice_not_required',
-          newValueJson: { noticeStatus: 'not_required' } as Prisma.InputJsonValue,
+          actionType: 'created',
+          newValueJson: { pcNumber, title: change.title, noticeDueDate: noticeDueDate.toISOString() } as Prisma.InputJsonValue,
           source: 'seed',
         },
       });
+
+      if (assessed) {
+        await prisma.activityLog.create({
+          data: {
+            projectId,
+            userId: ownerId,
+            recordType: 'potential_change',
+            recordId: created.id,
+            actionType: 'notice_not_required',
+            newValueJson: { noticeStatus: 'not_required' } as Prisma.InputJsonValue,
+            source: 'seed',
+          },
+        });
+      }
     }
-  }
-  console.log(`  changes    ${changeCount}`);
-  console.log(`  tasks      ${taskCount}`);
+    console.log(`  changes    ${changeCount}`);
+    console.log(`  tasks      ${taskCount}`);
 
-  // ── bottlenecks ──────────────────────────────────────────────────────────
-  const { runDetectionSweep } = await import('../src/services/bottleneck.service');
-  const { detected } = await runDetectionSweep();
-  console.log(`  bottleneck ${detected} detected by the real sweep`);
+    // ── bottlenecks ──────────────────────────────────────────────────────────
+    const { runDetectionSweep } = await import('../src/services/bottleneck.service');
+    const { detected } = await runDetectionSweep();
+    console.log(`  bottleneck ${detected} detected by the real sweep`);
 
-  const activityTotal = await prisma.activityLog.count();
-  console.log(`  activity   ${activityTotal}`);
+    const activityTotal = await prisma.activityLog.count();
+    console.log(`  activity   ${activityTotal}`);
 
-  // ── embeddings ───────────────────────────────────────────────────────────
-  try {
-    const { indexPotentialChange } = await import('../src/services/search.service');
-    const changes = await prisma.potentialChange.findMany({ select: { id: true } });
-    for (const change of changes) await indexPotentialChange(change.id);
-    console.log(`  embeddings ${changes.length}`);
-  } catch (error) {
-    console.log(
-      `  embeddings SKIPPED — ${error instanceof Error ? error.message : String(error)}`,
-    );
-    console.log('             Run prisma/sql/001_vector.sql first, then re-run the seed.');
+    // ── embeddings ───────────────────────────────────────────────────────────
+    try {
+      const { indexPotentialChange } = await import('../src/services/search.service');
+      const changes = await prisma.potentialChange.findMany({ select: { id: true } });
+      for (const change of changes) await indexPotentialChange(change.id);
+      console.log(`  embeddings ${changes.length}`);
+    } catch (error) {
+      console.log(
+        `  embeddings SKIPPED — ${error instanceof Error ? error.message : String(error)}`,
+      );
+      console.log('             Run prisma/sql/001_vector.sql first, then re-run the seed.');
+    }
+
   }
 
   console.log('\nDone.');
@@ -389,8 +406,8 @@ async function main() {
     console.log(`  QS             ${who('qs1')}   prices, on all four projects`);
     console.log(`  PM             ${who('pm1')}   DXB-001 and AUH-003`);
     console.log(`  PM             ${who('pm2')}   DXB-002 and DXB-004`);
-    console.log(`  Site engineer  ${who('se1')}   DXB-001 and DXB-004 only`);
-    console.log(`  Site engineer  ${who('se2')}   DXB-002 and AUH-003 only`);
+    console.log(`  Site engineer  ${who('se1')}   DXB-001 and DXB-002 only`);
+    console.log(`  Site engineer  ${who('se2')}   AUH-003 and DXB-004 only`);
   } else {
     console.log('\n  !! NO SUPABASE SERVICE ROLE KEY — identities were not created.');
     console.log('     The data is seeded but NOBODY CAN SIGN IN. Set the Supabase');

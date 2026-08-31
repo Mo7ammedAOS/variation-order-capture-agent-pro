@@ -16,6 +16,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "db:wipe": "tsx --conditions=react-server scripts/wipe.ts",
     "worker": "tsx --conditions=react-server src/workers/index.ts",
     "test:db": "vitest run tests/integration",
     "test:all": "vitest run",
