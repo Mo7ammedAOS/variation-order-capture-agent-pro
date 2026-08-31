@@ -20,6 +20,8 @@ const state = {
   pcUpdates: [] as Record<string, unknown>[],
   taskUpdates: [] as Record<string, unknown>[],
   approvalUpdates: [] as Record<string, unknown>[],
+  nextStageOwner: 'suresh' as string | null,
+  tasksCreated: [] as Record<string, unknown>[],
 };
 
 vi.mock('server-only', () => ({}));
@@ -31,6 +33,7 @@ vi.mock('@/services/project-access.service', () => ({
 vi.mock('@/services/permissions.service', () => ({
   hasCapability: async () => state.canFill,
   listMembersWithCapability: async () => [],
+  pickResponsibleMember: async () => state.nextStageOwner,
 }));
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],
@@ -53,7 +56,11 @@ const prismaMock = {
       state.taskUpdates.push(args);
       return { count: 1 };
     },
-    create: async () => ({ id: 'task-new' }),
+    findFirst: async () => null,
+    create: async (args: Record<string, unknown>) => {
+      state.tasksCreated.push(args);
+      return { id: 'task-new' };
+    },
   },
   potentialChange: {
     update: async (args: Record<string, unknown>) => {
@@ -84,7 +91,12 @@ function approval(overrides: Record<string, unknown> = {}) {
     round: 1,
     decision: 'pending',
     taskId: 'task-1',
-    potentialChange: { id: 'pc-1', pcNumber: 'PC-1', currentStatus: 'notice_required' },
+    potentialChange: {
+      id: 'pc-1',
+      pcNumber: 'PC-1',
+      title: 'Flooring change',
+      currentStatus: 'notice_required',
+    },
     ...overrides,
   };
 }
@@ -98,6 +110,8 @@ describe('the two-seat approval gate', () => {
     state.pcUpdates = [];
     state.taskUpdates = [];
     state.approvalUpdates = [];
+    state.nextStageOwner = 'suresh';
+    state.tasksCreated = [];
   });
 
   it('does not move the change on a single approval', async () => {
@@ -206,6 +220,43 @@ describe('the two-seat approval gate', () => {
       (u) => (u.data as Record<string, unknown>)?.status === 'cancelled',
     );
     expect(cancelled).toHaveLength(1);
+  });
+
+  /**
+   * The bug Osman reported: both approvals went in, the change moved to the
+   * next stage, and it appeared on nobody's list. Passing a gate has to hand
+   * the change to a named person with a task, or the approval simply moves a
+   * word in a column.
+   */
+  it('hands the change to the next stage with an owner and a task', async () => {
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'approved', taskId: 'task-2' },
+    ];
+
+    await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    const handover = state.pcUpdates.find(
+      (u) => (u.data as Record<string, unknown>)?.currentOwnerUserId !== undefined,
+    );
+    expect(handover).toBeTruthy();
+    expect((handover?.data as Record<string, unknown>).currentOwnerUserId).toBe('suresh');
+    expect(state.tasksCreated).toHaveLength(1);
+  });
+
+  it('leaves the next stage unowned rather than unmentioned when nobody can do it', async () => {
+    state.nextStageOwner = null;
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'approved', taskId: 'task-2' },
+    ];
+
+    await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    // Still a task, still a stated next action — an unowned task shows as a
+    // bottleneck, where no task at all shows as nothing.
+    expect(state.tasksCreated).toHaveLength(1);
+    expect((state.tasksCreated[0].data as Record<string, unknown>).assignedToUserId).toBeNull();
   });
 
   it('refuses a rejection with no reason', () => {

@@ -9,6 +9,7 @@ import { recordAudit } from '@/services/audit-log.service';
 import { assertProjectAccess, getProjectRoles } from '@/services/project-access.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
+import { enterStage } from '@/services/stage.service';
 import type { Capability } from '@/lib/rbac';
 
 /**
@@ -240,7 +241,9 @@ export async function recordApprovalDecision(
 
   const approval = await prisma.approval.findUnique({
     where: { id: parsed.approvalId },
-    include: { potentialChange: { select: { id: true, pcNumber: true, currentStatus: true } } },
+    include: {
+      potentialChange: { select: { id: true, pcNumber: true, title: true, currentStatus: true } },
+    },
   });
   if (!approval) throw new NotFoundError('Approval not found');
 
@@ -322,13 +325,26 @@ export async function recordApprovalDecision(
     if (movedTo) {
       await tx.potentialChange.update({
         where: { id: approval.potentialChangeId },
-        data: {
-          currentStatus: movedTo as never,
-          waitingFor: rejected ? 'Rework after rejection' : null,
-          nextAction: rejected
-            ? `Rejected by ${user.fullName}: ${parsed.comment ?? 'no reason given'}`
-            : null,
-        },
+        data: { currentStatus: movedTo as never },
+      });
+
+      // Then hand it over properly.
+      //
+      // This used to set `waitingFor` and `nextAction` to null on success,
+      // which was worse than saying nothing: a change that two directors had
+      // just approved arrived at the next stage owned by nobody, with no task
+      // and no next action, visible only to whoever thought to open it. Osman
+      // found it the way this is always found — "it didn't appear to the QS".
+      await enterStage(tx, {
+        potentialChangeId: approval.potentialChangeId,
+        projectId: approval.projectId,
+        pcNumber: approval.potentialChange.pcNumber,
+        title: approval.potentialChange.title,
+        status: movedTo as never,
+        actorUserId: user.id,
+        note: rejected
+          ? `Rejected by ${user.fullName}: ${parsed.comment ?? 'no reason given'}`
+          : undefined,
       });
     }
 

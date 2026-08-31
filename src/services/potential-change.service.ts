@@ -12,6 +12,7 @@ import { assertProjectAccess, scopeToUser } from '@/services/project-access.serv
 import { hasCapability, pickResponsibleMember } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { openGate } from '@/services/approval.service';
+import { enterStage } from '@/services/stage.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 
 /**
@@ -668,6 +669,19 @@ export async function changeStatus(
     const updated = await tx.potentialChange.update({
       where: { id },
       data: { currentStatus: status },
+    });
+
+    // A status is not a handover. Naming the owner, the next action and the
+    // task is — and until this call existed, moving a change wrote one column
+    // and left it belonging to nobody.
+    await enterStage(tx, {
+      potentialChangeId: id,
+      projectId: existing.projectId,
+      pcNumber: existing.pcNumber,
+      title: existing.title,
+      status,
+      actorUserId: user.id,
+      note,
     });
 
     // Reaching the final stage OPENS the gate rather than being the approval.
