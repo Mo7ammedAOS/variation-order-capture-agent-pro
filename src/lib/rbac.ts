@@ -41,6 +41,7 @@ export const ALL_CAPABILITIES = [
   'potentialChange.changeStatus',
   'approval.projectManager',
   'approval.managingDirector',
+  'potentialChange.cancel',
   'pricing.submit',
   'task.assign',
   'task.complete',

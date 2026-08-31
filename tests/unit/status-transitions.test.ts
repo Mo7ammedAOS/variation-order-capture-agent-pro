@@ -39,7 +39,6 @@ describe('allowedNextStatuses', () => {
   it('sends a newly captured change into the assessment', () => {
     expect(allowedNextStatuses('new_potential_change')).toEqual([
       'notice_assessment',
-      'cancelled',
     ]);
   });
 
@@ -54,7 +53,7 @@ describe('allowedNextStatuses', () => {
     // would let anyone holding `changeStatus` walk the change straight past a
     // gate that exists precisely so one person cannot — and a gate you can
     // step around is not a gate.
-    expect(allowedNextStatuses('notice_required')).toEqual(['cancelled']);
+    expect(allowedNextStatuses('notice_required')).toEqual([]);
   });
 
   it('advances exactly one stage along the chain', () => {
@@ -85,12 +84,27 @@ describe('allowedNextStatuses', () => {
   });
 
   it('offers no rework from the first stage of the chain', () => {
-    expect(allowedNextStatuses('pm_scope_review')).toEqual(['qs_pricing', 'cancelled']);
+    expect(allowedNextStatuses('pm_scope_review')).toEqual(['qs_pricing']);
   });
 
-  it('allows cancelling from anywhere that is not already an end', () => {
-    for (const status of [...CHAIN, 'needs_evidence', 'notice_required'] as PotentialChangeStatus[]) {
-      expect(allowedNextStatuses(status)).toContain('cancelled');
+  /**
+   * Cancelling LEFT the dropdown on 2026-08-31.
+   *
+   * It is not one more status. It is the company deciding to stop pursuing
+   * money it may be owed, and sitting in a list beside "QS pricing" it could be
+   * picked by accident. It now has its own action, its own permission and a
+   * mandatory reason — see `cancelPotentialChange`.
+   */
+  it('never offers cancelled as a status anybody can just pick', () => {
+    const everywhere: PotentialChangeStatus[] = [
+      ...CHAIN,
+      'new_potential_change',
+      'needs_evidence',
+      'notice_required',
+      'notice_assessment',
+    ];
+    for (const status of everywhere) {
+      expect(allowedNextStatuses(status)).not.toContain('cancelled');
     }
   });
 

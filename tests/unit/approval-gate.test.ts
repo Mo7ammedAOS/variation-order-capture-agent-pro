@@ -256,7 +256,7 @@ describe('the two-seat approval gate', () => {
     // Still a task, still a stated next action — an unowned task shows as a
     // bottleneck, where no task at all shows as nothing.
     expect(state.tasksCreated).toHaveLength(1);
-    expect((state.tasksCreated[0].data as Record<string, unknown>).assignedToUserId).toBeNull();
+    expect((state.tasksCreated[0]?.data as Record<string, unknown>).assignedToUserId).toBeNull();
   });
 
   it('refuses a rejection with no reason', () => {

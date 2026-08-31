@@ -24,6 +24,7 @@ import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
 import { EditPanel } from './edit-panel';
+import { CasePanel } from './case-panel';
 import { StatusForm } from './status-form';
 
 export const dynamic = 'force-dynamic';
@@ -141,6 +142,12 @@ export default async function PotentialChangeDetailPage({
     hasCapability(user.systemRole, projectRoles, 'potentialChange.reopen'),
     hasCapability(user.systemRole, projectRoles, 'document.upload'),
   ]);
+
+  const mayCancel = await hasCapability(
+    user.systemRole,
+    projectRoles,
+    'potentialChange.cancel',
+  );
 
   const isReporter = change.reportedByUserId === user.id;
   const canEdit = mayEditAny || (isReporter && mayEditOwn);
@@ -344,6 +351,13 @@ export default async function PotentialChangeDetailPage({
           ) : null}
 
           {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+
+          {mayCancel && change.currentStatus !== 'included_scope' ? (
+            <CasePanel
+              potentialChangeId={change.id}
+              cancelled={change.currentStatus === 'cancelled'}
+            />
+          ) : null}
 
           <EditPanel
             potentialChangeId={change.id}

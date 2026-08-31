@@ -601,10 +601,10 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
   // The entitlement question belongs to the assessment, never to a dropdown.
   if (current === 'notice_assessment') return [];
 
-  if (current === 'new_potential_change') return ['notice_assessment', 'cancelled'];
+  if (current === 'new_potential_change') return ['notice_assessment'];
 
   // Parked, not answered. The evidence arrived, so ask the question again.
-  if (current === 'needs_evidence') return ['notice_assessment', 'cancelled'];
+  if (current === 'needs_evidence') return ['notice_assessment'];
 
   // A notice is required, and two people have to agree before it is issued.
   //
@@ -612,21 +612,21 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
   // the dropdown would let anyone with `changeStatus` walk the change straight
   // past a gate that exists precisely so one person cannot — a gate you can
   // step around is not a gate. The approval itself is what advances it.
-  if (current === 'notice_required') return ['cancelled'];
+  if (current === 'notice_required') return [];
 
   const position = REVIEW_CHAIN.indexOf(current);
-  if (position === -1) return ['cancelled'];
+  if (position === -1) return [];
 
   // Same rule at the final gate: two seats decide, not a dropdown. Sending it
   // BACK is still allowed, because rework is a decision a person makes.
   if (current === 'internal_approval') {
-    return [...REVIEW_CHAIN.slice(0, position), 'cancelled'];
+    return [...REVIEW_CHAIN.slice(0, position)];
   }
 
   const forward = REVIEW_CHAIN[position + 1] ?? 'included_scope';
   const rework = REVIEW_CHAIN.slice(0, position);
 
-  return [forward, ...rework, 'cancelled'];
+  return [forward, ...rework];
 }
 
 export const statusChangeSchema = z.object({
@@ -639,6 +639,167 @@ export const statusChangeSchema = z.object({
 });
 
 export type StatusChangeInput = z.infer<typeof statusChangeSchema>;
+
+export const cancelSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, 'Say why this is no longer a claim. Somebody will ask, possibly in a year.')
+    .max(2000),
+});
+
+export type CancelInput = z.infer<typeof cancelSchema>;
+
+/**
+ * Cancelling a variation, and why there is no delete anywhere in this app.
+ *
+ * This system exists to prove entitlement. Deleting a change would remove the
+ * evidence that the event happened, that it was raised in time, and that
+ * somebody decided not to pursue it — which is precisely the evidence you need
+ * when a client argues the work was never instructed, or when your own
+ * director asks why a claim worth money quietly disappeared. A record that can
+ * be erased is not a record.
+ *
+ * So "no longer a case" is a STATE, kept forever, with a name against it and a
+ * reason. Duplicates are cancelled as duplicates, naming the change they
+ * duplicate. Mistakes are cancelled and reinstated, and both appear.
+ *
+ * Cancelling also stops the machinery: open tasks are closed and pending
+ * approvals withdrawn. Without that, the app goes on chasing three people
+ * daily about a claim the company has abandoned — which is how people learn to
+ * ignore it.
+ */
+export async function cancelPotentialChange(
+  user: AuthenticatedUser,
+  id: string,
+  input: CancelInput,
+) {
+  const parsed = cancelSchema.parse(input);
+
+  const existing = await prisma.potentialChange.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Potential Change not found');
+
+  const { projectRoles } = await assertProjectAccess(user, existing.projectId);
+  if (!(await hasCapability(user.systemRole, projectRoles, 'potentialChange.cancel'))) {
+    throw new ForbiddenError(
+      'Cancelling a change gives up a claim, so it needs the cancel permission.',
+    );
+  }
+
+  if (existing.currentStatus === 'cancelled') {
+    throw new ValidationError('This change is already cancelled.');
+  }
+  if (existing.currentStatus === 'included_scope') {
+    throw new ValidationError(
+      'This change has been agreed and included. Cancelling it now would hide an agreed variation — raise the reversal as its own change.',
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.potentialChange.update({
+      where: { id },
+      data: {
+        currentStatus: 'cancelled',
+        waitingFor: null,
+        nextAction: null,
+        nextActionDueDate: null,
+        currentOwnerUserId: null,
+        blockerReason: null,
+      },
+    });
+
+    await tx.task.updateMany({
+      where: { potentialChangeId: id, status: { in: ['open', 'in_progress', 'blocked'] } },
+      data: { status: 'cancelled' },
+    });
+
+    const pending = await tx.approval.findMany({
+      where: { potentialChangeId: id, decision: 'pending' },
+      select: { id: true },
+    });
+    if (pending.length > 0) {
+      await tx.approval.updateMany({
+        where: { id: { in: pending.map((row) => row.id) } },
+        data: { decision: 'rejected', comment: `Withdrawn — change cancelled: ${parsed.reason}` },
+      });
+    }
+
+    await recordAudit({
+      db: tx,
+      projectId: existing.projectId,
+      userId: user.id,
+      recordType: 'potential_change',
+      recordId: id,
+      actionType: 'status_changed',
+      oldValue: { currentStatus: existing.currentStatus },
+      newValue: { currentStatus: 'cancelled' },
+      metadata: { reason: parsed.reason, approvalsWithdrawn: pending.length },
+    });
+
+    return { change: updated, approvalsWithdrawn: pending.length };
+  });
+}
+
+/**
+ * Undoing a cancellation.
+ *
+ * People cancel the wrong record, and the alternative to reinstating is
+ * raising a duplicate — which loses the original capture date, and the capture
+ * date is the whole basis of a notice being on time.
+ *
+ * It returns to assessment rather than to wherever it was: the decisions taken
+ * before it was cancelled were taken in a different world, and the entitlement
+ * question deserves asking again.
+ */
+export async function reinstatePotentialChange(
+  user: AuthenticatedUser,
+  id: string,
+  input: CancelInput,
+) {
+  const parsed = cancelSchema.parse(input);
+
+  const existing = await prisma.potentialChange.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Potential Change not found');
+
+  const { projectRoles } = await assertProjectAccess(user, existing.projectId);
+  if (!(await hasCapability(user.systemRole, projectRoles, 'potentialChange.cancel'))) {
+    throw new ForbiddenError('Reinstating a change needs the cancel permission.');
+  }
+  if (existing.currentStatus !== 'cancelled') {
+    throw new ValidationError('This change is not cancelled.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.potentialChange.update({
+      where: { id },
+      data: { currentStatus: 'notice_assessment', noticeStatus: 'not_assessed' },
+    });
+
+    await enterStage(tx, {
+      potentialChangeId: id,
+      projectId: existing.projectId,
+      pcNumber: existing.pcNumber,
+      title: existing.title,
+      status: 'notice_assessment',
+      actorUserId: user.id,
+      note: `Reinstated by ${user.fullName}: ${parsed.reason}`,
+    });
+
+    await recordAudit({
+      db: tx,
+      projectId: existing.projectId,
+      userId: user.id,
+      recordType: 'potential_change',
+      recordId: id,
+      actionType: 'status_changed',
+      oldValue: { currentStatus: 'cancelled' },
+      newValue: { currentStatus: 'notice_assessment', reinstated: true },
+      metadata: { reason: parsed.reason },
+    });
+
+    return updated;
+  });
+}
 
 export async function changeStatus(
   user: AuthenticatedUser,

@@ -39,6 +39,9 @@ vi.mock('@/services/notification.service', () => ({
   recordTaskNotifications: async () => 0,
 }));
 vi.mock('@/services/approval.service', () => ({ openGate: async () => undefined }));
+vi.mock('@/services/stage.service', () => ({
+  enterStage: async () => ({ ownerUserId: null, taskCreated: false }),
+}));
 
 const prismaMock = {
   potentialChange: {
@@ -66,9 +69,12 @@ const prismaMock = {
 };
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }));
 
-const { updatePotentialChange, reopenPotentialChange } = await import(
-  '@/services/potential-change.service'
-);
+const {
+  updatePotentialChange,
+  reopenPotentialChange,
+  cancelPotentialChange,
+  reinstatePotentialChange,
+} = await import('@/services/potential-change.service');
 
 const REPORTER = { id: 'grace', fullName: 'Grace Mensah', systemRole: 'standard_user' } as never;
 const SOMEONE_ELSE = { id: 'ahmed', fullName: 'Ahmed Rashid', systemRole: 'standard_user' } as never;
@@ -197,5 +203,63 @@ describe('reopening', () => {
     await expect(
       reopenPotentialChange(REPORTER, ID, { reason: 'Trying to reopen an open change.' }),
     ).rejects.toThrow(/already open for editing/i);
+  });
+});
+
+describe('ending a claim', () => {
+  beforeEach(() => {
+    state.change = change({ currentStatus: 'qs_pricing' });
+    state.capabilities = new Set(['potentialChange.cancel']);
+    state.pendingApprovals = [];
+    state.pcUpdates = [];
+    state.approvalUpdates = [];
+    state.taskUpdates = [];
+  });
+
+  it('needs the cancel permission, which pricing a change does not give you', async () => {
+    state.capabilities = new Set(['pricing.submit', 'potentialChange.changeStatus']);
+
+    await expect(
+      cancelPotentialChange(REPORTER, ID, { reason: 'We are not going to pursue this one.' }),
+    ).rejects.toThrow(/needs the cancel permission/i);
+  });
+
+  it('insists on a real reason, not a shrug', async () => {
+    await expect(cancelPotentialChange(REPORTER, ID, { reason: 'no' })).rejects.toThrow();
+  });
+
+  // Without this the app chases three people daily about a claim the company
+  // has abandoned, which is how people learn to ignore it.
+  it('closes the open work and withdraws pending approvals', async () => {
+    state.pendingApprovals = [{ id: 'a1', taskId: 't1' }];
+
+    const result = await cancelPotentialChange(REPORTER, ID, {
+      reason: 'Duplicate of PC-AUH-003-0004, raised twice on the same day.',
+    });
+
+    expect(result.approvalsWithdrawn).toBe(1);
+    expect(state.taskUpdates[0]).toMatchObject({ data: { status: 'cancelled' } });
+    expect(state.pcUpdates[0]).toMatchObject({
+      data: { currentStatus: 'cancelled', currentOwnerUserId: null },
+    });
+  });
+
+  // Cancelling an agreed variation would hide it from the account.
+  it('refuses to cancel something already agreed and included', async () => {
+    state.change = change({ currentStatus: 'included_scope' });
+
+    await expect(
+      cancelPotentialChange(REPORTER, ID, { reason: 'Actually we should not have claimed it.' }),
+    ).rejects.toThrow(/raise the reversal as its own change/i);
+  });
+
+  it('brings a cancelled change back at assessment, keeping its capture date', async () => {
+    state.change = change({ currentStatus: 'cancelled' });
+
+    const updated = await reinstatePotentialChange(REPORTER, ID, {
+      reason: 'Cancelled in error — the client instruction does stand.',
+    });
+
+    expect(updated.currentStatus).toBe('notice_assessment');
   });
 });

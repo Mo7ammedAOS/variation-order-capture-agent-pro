@@ -4,8 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { requirePageUser } from '@/lib/auth/session';
 import { assessNotice, noticeAssessmentSchema } from '@/services/notice.service';
 import {
+  cancelPotentialChange,
+  cancelSchema,
   changeStatus,
   potentialChangeUpdateSchema,
+  reinstatePotentialChange,
   reopenPotentialChange,
   reopenSchema,
   statusChangeSchema,
@@ -273,4 +276,46 @@ export async function addEvidenceAction(
     return { ok: `${files.length - failed} added, ${failed} failed. Try the rest again.` };
   }
   return { ok: `${files.length} added.` };
+}
+
+/**
+ * Ending a claim, and bringing one back.
+ *
+ * Both demand a reason of real length, because the question they answer is
+ * asked much later and by somebody who was not there.
+ */
+export async function cancelChangeAction(
+  _prev: EditState,
+  formData: FormData,
+): Promise<EditState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+  const reinstating = formData.get('mode') === 'reinstate';
+
+  const parsed = cancelSchema.safeParse({ reason: formData.get('reason') });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Give a reason' };
+  }
+
+  try {
+    if (reinstating) {
+      await reinstatePotentialChange(user, id, parsed.data);
+      revalidatePath(`/variations/${id}`);
+      return { ok: 'Reinstated and back at assessment, with its original capture date intact.' };
+    }
+
+    const { approvalsWithdrawn } = await cancelPotentialChange(user, id, parsed.data);
+    revalidatePath(`/variations/${id}`);
+    revalidatePath('/my-tasks');
+    revalidatePath('/variations');
+    return {
+      ok:
+        approvalsWithdrawn > 0
+          ? `Cancelled. Open tasks closed and ${approvalsWithdrawn} pending approval${approvalsWithdrawn === 1 ? '' : 's'} withdrawn. The record stays.`
+          : 'Cancelled. Open tasks closed, and the record stays on the file.',
+    };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
 }
