@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       'email',
       payload.idempotency_key,
       payload,
-      async () =>
+      async (eventId) =>
         captureFromChannel({
           channel: 'email',
           senderIdentifier: payload.from.address,
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
           externalMessageId: payload.idempotency_key,
           eventDate: payload.received_at,
           projectCodeHint: payload.project_code ?? null,
-        }),
+        }, eventId),
       // A parked message is not a processed one. Without this the triage inbox
       // is empty while messages quietly pile up inside result_json.
       (outcome) => (outcome.kind === 'needs_triage' ? 'needs_triage' : 'processed'),

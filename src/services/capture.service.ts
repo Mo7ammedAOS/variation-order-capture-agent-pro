@@ -14,6 +14,7 @@ import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { assertCapability, assertProjectAccess } from '@/services/project-access.service';
 import { closeEvent, listUnprocessedEvents } from '@/services/integration.service';
+import { askWhichProject, tryAnswerQuestion } from '@/services/capture-question.service';
 
 /**
  * Capture from an external channel.
@@ -48,7 +49,41 @@ export interface CaptureInput {
   projectCodeHint?: string | null;
 }
 
-export async function captureFromChannel(input: CaptureInput): Promise<CaptureOutcome> {
+export async function captureFromChannel(
+  input: CaptureInput,
+  /** The event this message was recorded as. Needed to hang a question off it. */
+  integrationEventId?: string,
+): Promise<CaptureOutcome> {
+  // Is this an ANSWER to a question we already asked? Checked first, because
+  // "2" from someone with a question outstanding is not a new change, and
+  // treating it as one would file a Potential Change titled "2" and leave the
+  // real report parked for ever.
+  const answer = await tryAnswerQuestion({
+    senderIdentifier: input.senderIdentifier,
+    channel: input.channel,
+    text: input.text,
+  });
+
+  if (answer) {
+    const outcome = await createChangeFromCapture({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: { ...input, text: answer.originalText || input.text },
+    });
+
+    if (outcome.kind === 'created') {
+      await closeEvent(answer.integrationEventId, 'processed', {
+        answeredBy: answer.userId,
+        answeredAt: new Date().toISOString(),
+        projectId: answer.projectId,
+        pcNumber: outcome.pcNumber,
+        via: input.channel,
+      });
+    }
+    return outcome;
+  }
+
   const sender = await prisma.user.findFirst({
     where: {
       active: true,
@@ -92,10 +127,27 @@ export async function captureFromChannel(input: CaptureInput): Promise<CaptureOu
   }
 
   if (candidates.length > 1) {
+    const candidateProjectIds = candidates.map((m) => m.projectId);
+
+    // Ask the one person who knows. Parking it for a coordinator instead would
+    // hand the decision to somebody with LESS context than the reporter had.
+    const asked = integrationEventId
+      ? await askWhichProject({
+          integrationEventId,
+          userId: sender.id,
+          userName: sender.fullName,
+          channel: input.channel,
+          originalText: input.text,
+          candidateProjectIds,
+        })
+      : null;
+
     return {
       kind: 'needs_triage',
-      reason: `${sender.fullName} is on ${candidates.length} active projects — cannot determine which`,
-      candidateProjectIds: candidates.map((m) => m.projectId),
+      reason: asked
+        ? `Asked ${sender.fullName} which of ${candidates.length} projects this is (${asked.token}). Waiting for a reply.`
+        : `${sender.fullName} is on ${candidates.length} active projects — cannot determine which`,
+      candidateProjectIds,
     };
   }
 

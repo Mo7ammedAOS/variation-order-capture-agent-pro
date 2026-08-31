@@ -167,6 +167,75 @@ export async function recordTaskNotifications(
 }
 
 /**
+ * Records a message that belongs to no task.
+ *
+ * "Which project did you mean?" is the first of these: it is not a task, it
+ * cannot be opened in the app, and it is answered by replying. Recording it as
+ * a task notification would put it in front of the daily chase, which would
+ * then hound someone about a question that is not on any list.
+ */
+export async function recordDirectNotifications(
+  db: Prisma.TransactionClient,
+  input: {
+    kind: NotificationKind;
+    subject: string;
+    body: string;
+    recipients: NotificationRecipient[];
+    /** Makes the row unique. Stable per logical message, so a retry writes nothing. */
+    dedupeSeed: string;
+    on: Date;
+    potentialChangeId?: string | null;
+  },
+): Promise<number> {
+  const available = configuredChannels();
+  const rows: Prisma.NotificationLogCreateManyInput[] = [];
+
+  for (const recipient of input.recipients) {
+    const common = {
+      potentialChangeId: input.potentialChangeId ?? null,
+      userId: recipient.userId,
+      kind: input.kind,
+      subject: input.subject,
+      body: input.body,
+      payloadSummary: input.subject,
+    };
+
+    rows.push({
+      ...common,
+      channel: 'in_app' as const,
+      recipient: recipient.userId,
+      status: 'sent' as const,
+      sentAt: new Date(),
+      dedupeKey: `${input.dedupeSeed}:in_app:${recipient.userId}`,
+    });
+
+    if (available.email && recipient.email) {
+      rows.push({
+        ...common,
+        channel: 'email' as const,
+        recipient: recipient.email,
+        status: 'pending' as const,
+        dedupeKey: `${input.dedupeSeed}:email:${recipient.email}`,
+      });
+    }
+
+    if (available.whatsapp && recipient.phone) {
+      rows.push({
+        ...common,
+        channel: 'whatsapp' as const,
+        recipient: recipient.phone,
+        status: 'pending' as const,
+        dedupeKey: `${input.dedupeSeed}:whatsapp:${recipient.phone}`,
+      });
+    }
+  }
+
+  if (rows.length === 0) return 0;
+  const result = await db.notificationLog.createMany({ data: rows, skipDuplicates: true });
+  return result.count;
+}
+
+/**
  * Hands queued messages to n8n.
  *
  * `queued` and not `sent`: all a 200 from n8n means is that a courier accepted

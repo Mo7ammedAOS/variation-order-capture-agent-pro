@@ -37,7 +37,7 @@ export async function processOnce<T>(
   source: IntegrationSource,
   externalId: string,
   payload: unknown,
-  process: () => Promise<T>,
+  process: (eventId: string) => Promise<T>,
   /**
    * What the event's status becomes when `process` succeeds.
    *
@@ -85,7 +85,7 @@ export async function processOnce<T>(
   }
 
   try {
-    const result = await process();
+    const result = await process(event.id);
     await prisma.integrationEvent.update({
       where: { id: event.id },
       data: { status: statusFor(result), processedAt: new Date(), resultJson: toJson(result) },

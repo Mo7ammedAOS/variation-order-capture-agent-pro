@@ -119,7 +119,7 @@ async function main() {
         originalContractValue: project.value,
         currency: 'AED',
         projectStatus: 'active',
-        createdByUserId: userIds.get('admin') ?? null,
+        createdByUserId: userIds.get('md') ?? null,
       },
       update: { projectName: project.name, clientName: project.client },
     });
@@ -212,7 +212,7 @@ async function main() {
           // Registered by reference. No bytes are invented — a seeded file that
           // 404s on click is worse than an honest link-only record.
           sourceUrl: `https://drive.example.com/${project.code}/${template.number ?? 'doc'}`,
-          uploadedByUserId: userIds.get('admin') ?? null,
+          uploadedByUserId: userIds.get('md') ?? null,
           sourceChannel: 'document_upload',
         },
       });
@@ -384,7 +384,7 @@ async function main() {
   if (admin) {
     console.log(`\nSign in as any seeded user with the password: ${DEFAULT_PASSWORD}`);
     const who = (key: string) => USERS.find((u) => u.key === key)?.email ?? '(missing)';
-    console.log(`  Administrator  ${who('admin')}   adds projects, people and permissions`);
+    console.log(`  Administrator  ${who('md')}   adds projects, people and permissions`);
     console.log(`  Director       ${who('md')}   approves, and sees every project`);
     console.log(`  QS             ${who('qs1')}   prices, on all four projects`);
     console.log(`  PM             ${who('pm1')}   DXB-001 and AUH-003`);

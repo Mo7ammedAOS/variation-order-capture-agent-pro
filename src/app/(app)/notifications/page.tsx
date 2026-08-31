@@ -12,11 +12,12 @@ import { markAllReadAction, markReadAction } from './actions';
 export const metadata: Metadata = { title: 'Notifications' };
 export const dynamic = 'force-dynamic';
 
-const KIND_LABEL = {
+const KIND_LABEL: Record<string, string> = {
   task_assigned: 'Assigned to you',
   task_reminder: 'Reminder',
   task_escalation: 'Overdue',
-} as const;
+  capture_question: 'Needs your answer',
+};
 
 export default async function NotificationsPage() {
   const user = await requirePageUser();
@@ -68,7 +69,7 @@ export default async function NotificationsPage() {
                         }
                       >
                         {escalated ? <ShieldAlert aria-hidden className="size-3" /> : null}
-                        {KIND_LABEL[item.kind]}
+                        {KIND_LABEL[item.kind] ?? 'Notification'}
                       </span>
                       {unreadItem ? (
                         <span className="size-2 rounded-full bg-primary" aria-label="Unread" />

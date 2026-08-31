@@ -349,6 +349,8 @@ enum NotificationKind {
   task_assigned
   task_reminder
   task_escalation
+  /// "Which project did you mean?" — answered by replying, not in the app.
+  capture_question
 }
 
 enum NotificationChannel {
@@ -441,6 +443,7 @@ model User {
   uploadedDocuments    ProjectDocument[]
   activityLogs         ActivityLog[]
   notifications        NotificationLog[]
+  captureQuestions     CaptureQuestion[]
   approvalsAssigned    Approval[]       @relation("ApprovalAssignedTo")
   approvalsDecided     Approval[]       @relation("ApprovalDecidedBy")
   pricingSubmitted     PotentialChange[] @relation("PricingSubmittedBy")
@@ -843,6 +846,40 @@ model ActivityLog {
 /// Every inbound event from n8n lands here first. The unique (source, externalId)
 /// is what makes a retried webhook safe: the second delivery finds this row and
 /// returns the original result instead of creating a second Potential Change.
+enum CaptureQuestionStatus {
+  open
+  answered
+  expired
+  cancelled
+}
+
+/// A question put to the person who reported a change, still outstanding.
+///
+/// Raised when the reporter is on several active projects and named none. The
+/// alternative to asking is guessing, and a change filed against the wrong job
+/// looks handled — so nobody ever looks at it again.
+model CaptureQuestion {
+  id                  String                @id @default(uuid()) @db.Uuid
+  integrationEventId  String                @unique @map("integration_event_id") @db.Uuid
+  userId              String                @map("user_id") @db.Uuid
+  /// Short and typable, so a reply is unambiguous when two are outstanding.
+  token               String                @unique
+  /// Frozen when asked. Re-reading memberships later would make "2" drift.
+  candidateProjectIds String[]              @map("candidate_project_ids") @db.Uuid
+  askedText           String?               @map("asked_text")
+  status              CaptureQuestionStatus @default(open)
+  chosenProjectId     String?               @map("chosen_project_id") @db.Uuid
+  askedAt             DateTime              @default(now()) @map("asked_at")
+  answeredAt          DateTime?             @map("answered_at")
+  expiresAt           DateTime              @map("expires_at")
+
+  integrationEvent IntegrationEvent @relation(fields: [integrationEventId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("capture_questions")
+}
+
 model IntegrationEvent {
   id         String                 @id @default(uuid()) @db.Uuid
   source     IntegrationSource
@@ -853,6 +890,8 @@ model IntegrationEvent {
   errorMessage String?              @map("error_message")
   receivedAt DateTime               @default(now()) @map("received_at")
   processedAt DateTime?             @map("processed_at")
+
+  captureQuestion CaptureQuestion?
 
   @@unique([source, externalId])
   @@index([status, receivedAt])

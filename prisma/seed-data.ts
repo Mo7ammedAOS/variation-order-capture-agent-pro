@@ -29,25 +29,28 @@ export interface SeedUser {
 }
 
 export const USERS: SeedUser[] = [
-  // Six people, deliberately. Twelve made every test a hunt for which of four
-  // near-identical accounts to sign in as, and none of the extras proved
-  // anything the six do not.
+  // Osman's own six addresses, so every notification this system sends can
+  // actually be read by someone testing it. Six real inboxes beats twelve
+  // fictional ones: an email to khalid@abcfitout.example proves nothing.
   //
   // The separation that matters is intact: the QS prices, the MD approves, and
-  // neither of them is the person who captured it. That is what makes a
-  // variation file defensible when the client's QS challenges it.
-  { key: 'md',    fullName: 'Khalid Al Suwaidi',  email: 'khalid.alsuwaidi@abcfitout.example',  phone: '+971501000001', systemRole: 'managing_director' },
-
-  // Administration sits with the administrator. It stays a FLAG rather than a
-  // role, so a firm that puts it on its Finance Manager or office manager can,
-  // without pretending that person's job is something else.
-  { key: 'admin', fullName: 'Noura Al Blooshi',   email: 'noura.alblooshi@abcfitout.example',   phone: '+971501000002', systemRole: 'company_admin', canAdministerCompany: true },
-
-  { key: 'qs1',   fullName: 'Suresh Iyer',        email: 'suresh.iyer@abcfitout.example',       phone: '+971501000003', systemRole: 'standard_user' },
-  { key: 'pm1',   fullName: 'Daniel Okafor',      email: 'daniel.okafor@abcfitout.example',     phone: '+971501000004', systemRole: 'standard_user' },
-  { key: 'pm2',   fullName: 'Mariam Al Zaabi',    email: 'mariam.alzaabi@abcfitout.example',    phone: '+971501000005', systemRole: 'standard_user' },
-  { key: 'se1',   fullName: 'Ahmed Rashid',       email: 'ahmed.rashid@abcfitout.example',      phone: '+971501000006', systemRole: 'standard_user' },
-  { key: 'se2',   fullName: 'Grace Mensah',       email: 'grace.mensah@abcfitout.example',      phone: '+971501000007', systemRole: 'standard_user' },
+  // neither is the person who captured it. That is what makes a variation file
+  // defensible when the client's QS challenges it.
+  //
+  // ⚠️ PHONE NUMBERS ARE PLACEHOLDERS. "Which project did you mean?" goes out on
+  // email AND WhatsApp; until these are real, only the email half arrives.
+  {
+    key: 'md', fullName: 'Mohammed', email: 'mohammed@osmanflow.com',
+    phone: '+971500000001', systemRole: 'managing_director',
+    // Administration is a FLAG, not a job. With no separate administrator in
+    // this cast it sits with the MD, which is also how a small firm runs.
+    canAdministerCompany: true,
+  },
+  { key: 'qs1', fullName: 'Osman',       email: 'guided369@gmail.com',                    phone: '+971500000002', systemRole: 'standard_user' },
+  { key: 'pm1', fullName: 'Abdelmoneim', email: 'osman.constructionsystems@hotmail.com',  phone: '+971500000003', systemRole: 'standard_user' },
+  { key: 'pm2', fullName: 'Hashim',      email: 'mohammedosman2400@outlook.com',          phone: '+971500000004', systemRole: 'standard_user' },
+  { key: 'se1', fullName: 'Ahmed',       email: 'org3700@gmail.com',                      phone: '+971500000005', systemRole: 'standard_user' },
+  { key: 'se2', fullName: 'Hassan',      email: 'mohammedossidahmed@gmail.com',           phone: '+971500000006', systemRole: 'standard_user' },
 ];
 
 export interface SeedProject {
@@ -67,12 +70,16 @@ export const PROJECTS: SeedProject[] = [
     Membership is arranged so the access rule is PROVABLE by signing in, not
     only by reading a test:
 
-      Ahmed  (se1) is on DXB-001 and DXB-004 only  -> AUH-003 must 403
-      Grace  (se2) is on DXB-002 and AUH-003 only
-      Daniel (pm1) runs DXB-001 and AUH-003        -> a PM across two sites
-      Mariam (pm2) runs DXB-002 and DXB-004
-      Suresh (qs1) prices ALL FOUR                 -> one QS, as Osman set it
-      Khalid (md)  is on none of them, and sees every one anyway, through the
+      Ahmed  (se1) is on THREE: DXB-001, DXB-002, DXB-004
+                   -> AUH-003 must still 403 for him, and reporting without
+                      naming a job must make the system ASK him which of the
+                      three he meant. Three is the point: two is too easy and
+                      four leaves no project to prove the 403 with.
+      Hassan (se2) is on DXB-002 and AUH-003 only
+      Abdelmoneim (pm1) runs DXB-001 and AUH-003   -> a PM across two sites
+      Hashim (pm2) runs DXB-002 and DXB-004
+      Osman  (qs1) prices ALL FOUR                 -> one QS, as Osman set it
+      Mohammed (md) is on none of them, and sees every one anyway, through the
                    project.viewAll capability rather than a membership row.
   */
   {
@@ -90,7 +97,7 @@ export const PROJECTS: SeedProject[] = [
     contractNumber: 'ABC/2026/002', value: 7_200_000, noticePeriodDays: 21,
     members: [
       { userKey: 'pm2', role: 'project_manager' }, { userKey: 'qs1', role: 'quantity_surveyor' },
-      { userKey: 'se2', role: 'site_engineer' },
+      { userKey: 'se2', role: 'site_engineer' }, { userKey: 'se1', role: 'site_engineer' },
     ],
   },
   {
