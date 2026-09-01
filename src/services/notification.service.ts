@@ -303,15 +303,31 @@ export async function dispatchPendingNotifications(limit = 100): Promise<{
         continue;
       }
 
-      await prisma.notificationLog.update({
-        where: { id: row.id },
+      // Only from `pending`, and this condition is load bearing.
+      //
+      // Lane D's webhook uses `responseMode: lastNode`, so n8n holds this HTTP
+      // response open until the whole lane finishes — including the delivery
+      // callback, which has already come back through the front door and
+      // marked the row `sent` with a real provider message id. An
+      // unconditional update then stamps `queued` back over the truth, and the
+      // row sits there for ever with a `sent_at`, an `external_message_id`,
+      // and a status saying it never went. Observed on the first two messages
+      // this system ever delivered.
+      //
+      // A courier's receipt must never overwrite the recipient's signature.
+      await prisma.notificationLog.updateMany({
+        where: { id: row.id, status: 'pending' },
         data: { status: 'queued', lastAttemptAt: new Date(), failureReason: null },
       });
       queued++;
     } catch (error) {
       failed++;
-      await prisma.notificationLog.update({
-        where: { id: row.id },
+      // Guarded for the same reason, and a sharper one: the lane can send the
+      // message, report it delivered, and THEN fail on something afterwards.
+      // Recording that as failed would deny a delivery we hold the provider's
+      // id for, and the next sweep would send it a second time.
+      await prisma.notificationLog.updateMany({
+        where: { id: row.id, status: 'pending' },
         data: {
           status: 'failed',
           lastAttemptAt: new Date(),

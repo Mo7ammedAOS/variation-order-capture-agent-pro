@@ -240,6 +240,18 @@ job.
 The confirmation is sent as a **reply on the original email thread** (lane D's
 `D3a`/`D4b` branch, driven by `notification_logs.reply_to_message_id`).
 
+**The dispatcher must not overwrite the delivery callback.** Lane D's webhook
+uses `responseMode: lastNode`, so n8n holds the app's request open until the
+lane finishes — and the lane's last act is calling back to say the message was
+delivered. That callback lands BEFORE the dispatcher gets its 200, so an
+unconditional write stamped `queued` over a row that already said `sent` and
+carried the provider's message id. Both of the first two messages this system
+delivered ended up looking undelivered. `dispatchPendingNotifications` now
+writes only `WHERE status = 'pending'`, on both the success and the failure
+path. For a notice, `sent` is the proof of service and the bottleneck sweep
+chases `notice_drafted_not_sent` — so the old behaviour would have chased a
+delivered notice for ever, then served it twice.
+
 **The email is taken apart from the report inside it.** `src/lib/email-cleanup.ts`
 strips the signature (`-- `), quoted history ("On … wrote:", Outlook's
 `From:/Sent:/To:` block, `>` lines), mail client footers and confidentiality
