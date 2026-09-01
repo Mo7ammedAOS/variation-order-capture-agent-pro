@@ -192,7 +192,8 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 |---|---|
 | **Document register** | No upload panel. The Documents tab is read-only, and revisions do not supersede. |
 | **Document intelligence** | Nothing reads a PDF. No drawing versions, no "not in scope" detection, no document search. |
-| **AI** | A mock that matches keywords. No vision, no OCR, no real extraction. |
+| **AI vision and OCR** | Nothing reads a photograph or a scanned drawing. Text extraction from PDFs and spreadsheets works; images do not. |
+| **Voice notes** | Stored as evidence, not transcribed. Claude has no speech-to-text. |
 
 ### Built since this plan was written — these ARE testable now
 
@@ -205,6 +206,7 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 | **WhatsApp and email capture** | The n8n lanes exist and are built. Not activated. |
 | **The notice** | Drafted, approved, filed as a PDF, queued to the client, and only "served" when the courier says so. Section 12. |
 | **The money end** | Variation orders, monthly progress applications with retention and VAT, payments, and the approved-but-unbilled figure. Section 13. |
+| **Real capture extraction** | Off by default. Set `AI_PROVIDER=claude` with a key and captured messages are read by Claude instead of a keyword matcher. |
 
 ---
 

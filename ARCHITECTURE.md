@@ -144,6 +144,20 @@ outstanding, overdue and retention held are computed on read from rows that
 cannot go stale. A cached total needs a job to maintain it; the day that job
 fails, the number is wrong and confident, and a director acts on it.
 
+**AI suggests, and is structurally prevented from deciding.** The capture
+extractor answers into a JSON schema with no field for a cost, a rate, a
+quantity, a number of days, or a notice decision. Prohibitions written into a
+prompt are requests a model may or may not honour; a schema with nowhere to put
+a price is a wall. The Potential Change is created before the extraction is
+consulted, so a model failure degrades the title and never loses the report —
+and the audit event records which reader actually ran.
+
+**Captured text is untrusted input.** A WhatsApp message from site can contain
+a sentence shaped like an instruction. It is passed inside a fenced block
+labelled as data, with the reminder to follow only the original instructions
+placed AFTER the payload — the half that matters, since an instruction before
+the payload is the one the payload gets to argue with.
+
 ## Reusability per client
 
 Nothing is hardcoded to ABC Fit-Out. A new deployment is a new database, a new

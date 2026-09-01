@@ -201,8 +201,9 @@ equal, which silently discarded every `.default()` and handed services
 ## What is left, 2026-09-01
 
 Stages 1 to 3 are done: the build, the deployment, and the decision spine
-(two approval gates, QS pricing, reporter edits, cancel, the chase). Stages 5
-and 6 — the notice, and the money end — are done as of 2026-09-01.
+(two approval gates, QS pricing, reporter edits, cancel, the chase). Stages 5,
+6 and 7 — the notice, the money end, and real capture extraction — are done as
+of 2026-09-01.
 
 **Stage 4 — n8n becomes the nervous system.** In progress.
 `n8n-workflows/master.json` is built and validated: lanes A, B, C (capture in),
@@ -270,9 +271,42 @@ completion does not exist), **credit notes** (an over-certification and a
 payment against the wrong invoice are both refused rather than credited), and
 **EOT valuation**.
 
-**Stage 7 — AI for real.** The Claude adapter throws by design. No extraction,
-no scope check against contract or BOQ, no transcription. Duplicate detection
-already works on local MiniLM.
+**Stage 7 — AI for real.** Built, 2026-09-01, for capture extraction.
+
+`AI_PROVIDER=claude` now runs a real adapter on `claude-opus-5` at `effort:
+low`. It reads a captured WhatsApp or email message and proposes a title, a
+location, a trade, and — most usefully — a list of what the message does not
+say.
+
+Four things about it are worth stating, because they are the reasons it is safe
+to point at a live instance:
+
+- **The schema is the wall, not the prompt.** No field accepts a cost, a rate,
+  a quantity, a number of days, or a notice decision. A prompt asking a model
+  not to price things is a request; a schema with nowhere to put a price is
+  structural.
+- **A failure never loses a report.** Rate limit, expired key, refusal,
+  truncated output, malformed shape, missing prompt file — every one falls back
+  to the keyword extractor, and the change is created identically. The audit
+  event records `readBy`, so a suggestion is never attributed to a model that
+  did not run.
+- **The prompt is a file**, `agents/prompts/capture-extraction.prompt.md`, read
+  at runtime and copied into the image explicitly. Editing it needs no deploy.
+- **The message is fenced as data.** A WhatsApp message is untrusted input; the
+  instruction reminder sits after the payload, not before it.
+
+Cost, per captured message: one call, ~2k output cap, with the instructions as
+a cached prefix billed at a tenth on every message after the first.
+
+Still mock or absent: **voice transcription** (Claude has no speech-to-text —
+it throws rather than inventing a transcript), scope checking against contract
+and BOQ (that is the pgvector path, already built and separate), notice
+drafting assistance, and impact assessment. Duplicate detection continues to
+run on local MiniLM and costs nothing.
+
+**`AI_PROVIDER` still defaults to `mock`.** Nothing calls Anthropic until an
+`ANTHROPIC_API_KEY` is set and the provider switched — deliberately, so the
+first paid call is a decision rather than a side effect of a deploy.
 
 **Stage 8** — procurement and subcontractor quotations, EOT.
 **Stage 9** — document RAG over drawings and specs.

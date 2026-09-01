@@ -9,7 +9,7 @@ import { recordAudit } from '@/services/audit-log.service';
 import { pickResponsibleMember } from '@/services/permissions.service';
 import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
-import { getAiProvider } from '@/integrations/claude';
+import { extractWithFallback } from '@/integrations/claude';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { assertCapability, assertProjectAccess } from '@/services/project-access.service';
@@ -183,7 +183,12 @@ export async function createChangeFromCapture(args: {
   const { projectId, reporterId, reporterName, input } = args;
   // AI reads the message and proposes structure. It does not decide anything:
   // the change is created either way, and the extraction only fills fields in.
-  const extraction = await getAiProvider().extractPotentialChange({
+  //
+  // `extractWithFallback` cannot throw for a provider reason — if Claude is
+  // down, rate limited, or declines the message, the keyword reader answers
+  // instead and says so. A site engineer's report must never be lost because
+  // a third party is having a bad afternoon.
+  const { envelope: extraction, provider: readBy, degraded } = await extractWithFallback({
     text: input.text,
     sourceType: input.channel,
     senderName: input.senderName ?? reporterName,
@@ -243,6 +248,11 @@ export async function createChangeFromCapture(args: {
         sourceSenderPhoneOrEmail: input.senderIdentifier,
         sourceSenderAuthorityStatus: 'unknown',
         reportedByUserId: reporterId,
+        // Taken from the message when it says so. It used to be dropped on the
+        // floor: the model was asked for the location, answered, and nothing
+        // read the answer — so a change that named "Reception, Level 2" arrived
+        // with no location at all.
+        location: extraction.extractedData.location,
         trade: extraction.extractedData.affectedTrade[0] ?? null,
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
@@ -290,6 +300,7 @@ export async function createChangeFromCapture(args: {
         externalMessageId: input.externalMessageId,
         aiConfidence: extraction.confidenceScore,
         aiMissingInformation: extraction.missingInformation,
+        readBy,
       },
     });
 
@@ -308,6 +319,10 @@ export async function createChangeFromCapture(args: {
         confidenceScore: extraction.confidenceScore,
         missingInformation: extraction.missingInformation,
         suggestedNextAction: extraction.suggestedNextAction,
+        // WHICH reader produced this. A suggestion attributed to a model that
+        // never ran would be a lie in the one record that has to be true.
+        readBy,
+        degraded,
       },
     });
 

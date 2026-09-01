@@ -57,13 +57,20 @@ vi.mock('@/lib/prisma', () => ({
 }));
 
 vi.mock('@/integrations/claude', () => ({
-  getAiProvider: () => ({
-    extractPotentialChange: async () => ({
-      extractedData: { suggestedTitle: 'Reception wall moved 400mm', affectedTrade: ['joinery'], possibleTimeImpact: false },
+  extractWithFallback: async () => ({
+    envelope: {
+      extractedData: {
+        suggestedTitle: 'Reception wall moved 400mm',
+        location: 'Reception, Level 2',
+        affectedTrade: ['joinery'],
+        possibleTimeImpact: false,
+      },
       confidenceScore: 0.6,
       missingInformation: [],
       suggestedNextAction: 'assess',
-    }),
+    },
+    provider: 'mock',
+    degraded: false,
   }),
 }));
 

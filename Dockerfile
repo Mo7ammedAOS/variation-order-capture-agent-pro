@@ -96,6 +96,12 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
+# The agent prompts are READ AT RUNTIME, not compiled in — see
+# src/integrations/claude/claude-provider.ts. Without this line the image
+# builds, starts, passes its health check, and then every extraction falls back
+# to the keyword reader with a file-not-found in the log: degraded, not broken,
+# which is the hardest kind of failure to notice.
+COPY --from=build --chown=nextjs:nodejs /app/agents/prompts ./agents/prompts
 COPY --from=build --chown=nextjs:nodejs /app/.model-cache /app/.model-cache
 
 # Prisma CLI and the migration engine, for `migrate deploy` on release.
