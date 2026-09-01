@@ -77,6 +77,15 @@ success without an `external_message_id` is rejected: "sent" with nothing to
 point at is not evidence, and this record may later be the proof a notice was
 served.
 
+**`potential_changes.description` vs `.summary`** — evidence and convenience.
+
+`description` is what the reporter actually wrote, with the email furniture
+stripped off. It is never paraphrased, because `notice-template.ts` prints it
+verbatim under WHAT HAPPENED and a model's improvement on somebody's words is
+not evidence of what they said. `summary` is the model's standardised
+restatement, for scanning a register of forty. Null when the model added
+nothing. Nothing contractual reads it.
+
 **`capture_questions`** — the outstanding "which project?" and its answer.
 
 `kind` distinguishes the two shapes. A **choose** question lists the reporter's

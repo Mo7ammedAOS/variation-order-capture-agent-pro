@@ -70,7 +70,10 @@ const EXTRACTION_JSON_SCHEMA = {
     },
     changeDescription: {
       type: 'string',
-      description: 'What changed, in plain words, taken from the message. Do not embellish.',
+      description:
+        'A standardised restatement of what is changing: one or two plain sentences, ' +
+        'same register every time. Keep every fact and every hedge in the message. ' +
+        'Add nothing, and drop only greetings, sign-offs and repetition.',
     },
     location: {
       type: ['string', 'null'],

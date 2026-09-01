@@ -240,6 +240,24 @@ job.
 The confirmation is sent as a **reply on the original email thread** (lane D's
 `D3a`/`D4b` branch, driven by `notification_logs.reply_to_message_id`).
 
+**The email is taken apart from the report inside it.** `src/lib/email-cleanup.ts`
+strips the signature (`-- `), quoted history ("On … wrote:", Outlook's
+`From:/Sent:/To:` block, `>` lines), mail client footers and confidentiality
+disclaimers. It runs BEFORE project matching, which is the point: a signature
+reading "Site Engineer | Al Futtaim Contracting" matches a client name and
+would have the system propose a job the message was never about. It only ever
+deletes, never rewrites, and if cleaning would empty a message it returns the
+original — an untidy description beats a lost variation.
+
+**`description` and `summary` are different things on purpose.** `description`
+is the reporter's own words, cleaned, and is printed verbatim under WHAT
+HAPPENED in a notice. `summary` is the model's standardised restatement, shown
+above it in the UI with the original one click away. Convenience may be wrong;
+evidence may not. Nothing contractual reads `summary`, and it is left null when
+the model merely echoed the message back — the keyword fallback does exactly
+that, and storing a copy as if it were a reading would be a lie in the one
+place a reviewer trusts.
+
 **Attachments are evidence.** Lane B downloads them and forwards them base64;
 the app files them into the change's Drive `Evidence` folder with a
 `project_documents` row each. They ride along in `integration_events.

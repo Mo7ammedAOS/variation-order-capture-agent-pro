@@ -446,7 +446,29 @@ export default async function PotentialChangeDetailPage({
               <CardTitle className="text-base">What changed</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{change.description}</p>
+              {/*
+                The standardised reading first, the reporter's own words under
+                it — and never the other way round, and never one instead of
+                the other. The summary is quick to scan and may be wrong; the
+                description is what was actually said and is quoted verbatim in
+                a notice. Anyone acting on this needs to be able to check one
+                against the other without leaving the page.
+              */}
+              {change.summary ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm leading-relaxed">{change.summary}</p>
+                  <details className="group">
+                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                      As reported
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap border-s-2 ps-3 text-sm leading-relaxed text-muted-foreground">
+                      {change.description}
+                    </p>
+                  </details>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{change.description}</p>
+              )}
 
               <dl className="grid gap-4 sm:grid-cols-2">
                 <Field label="Requested by" icon={User}>

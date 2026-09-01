@@ -20,6 +20,7 @@ import {
   tryAnswerQuestion,
 } from '@/services/capture-question.service';
 import { matchProjectsInText } from '@/lib/project-match';
+import { cleanCapturedText } from '@/lib/email-cleanup';
 import { storeCaptureEvidence, type CaptureAttachment } from '@/services/document.service';
 
 /**
@@ -68,10 +69,20 @@ export interface CaptureInput {
 }
 
 export async function captureFromChannel(
-  input: CaptureInput,
+  rawInput: CaptureInput,
   /** The event this message was recorded as. Needed to hang a question off it. */
   integrationEventId?: string,
 ): Promise<CaptureOutcome> {
+  // Strip the email furniture FIRST, before anything reads the text.
+  //
+  // Not cosmetic. A signature reading "Site Engineer | Al Futtaim Contracting"
+  // matches a client name, and the system would propose a project the message
+  // was never about — a wrong answer delivered confidently. The same text also
+  // becomes the description, which a notice prints verbatim.
+  //
+  // Deletion only. Nothing here rewrites a word the reporter wrote.
+  const cleaned = cleanCapturedText(rawInput.text);
+  const input: CaptureInput = { ...rawInput, text: cleaned.text };
   // Is this an ANSWER to a question we already asked? Checked first, because
   // "2" from someone with a question outstanding is not a new change, and
   // treating it as one would file a Potential Change titled "2" and leave the
@@ -324,7 +335,14 @@ export async function createChangeFromCapture(args: {
   reporterName: string;
   input: CaptureInput;
 }): Promise<CaptureOutcome> {
-  const { projectId, reporterId, reporterName, input } = args;
+  const { projectId, reporterId, reporterName } = args;
+
+  // Cleaned again here, not only in `captureFromChannel`. This function is
+  // also the triage path — a coordinator filing a parked message by hand — and
+  // a change filed by hand must come out identical to one filed by reply,
+  // signature stripping included. Cleaning already clean text is a no-op.
+  const cleanedReport = cleanCapturedText(args.input.text);
+  const input: CaptureInput = { ...args.input, text: cleanedReport.text };
   // AI reads the message and proposes structure. It does not decide anything:
   // the change is created either way, and the extraction only fills fields in.
   //
@@ -384,7 +402,13 @@ export async function createChangeFromCapture(args: {
         projectId: projectId,
         pcNumber,
         title: extraction.extractedData.suggestedTitle,
+        // The reporter's own words. A notice prints this verbatim.
         description: input.text,
+        // The model's tidy restatement, beside it and never instead of it.
+        // Dropped when it adds nothing — the keyword fallback simply echoes
+        // the message back, and storing that would dress up a copy as a
+        // reading, which is the one thing an AI field must never do.
+        summary: standardisedSummary(extraction.extractedData.changeDescription, input.text),
         eventDate,
         sourceType: input.channel,
         sourceMessageId: input.externalMessageId,
@@ -511,6 +535,24 @@ export async function createChangeFromCapture(args: {
   }
 
   return outcome;
+}
+
+/**
+ * The model's restatement, or nothing.
+ *
+ * Returns null when the "summary" is really just the message again. The
+ * keyword fallback echoes the text verbatim by design, and a field labelled as
+ * a reading that contains a copy is worse than an empty one: it tells a
+ * commercial manager the system understood something when it did not.
+ */
+function standardisedSummary(candidate: string, reported: string): string | null {
+  const summary = candidate?.trim();
+  if (!summary) return null;
+
+  const normalise = (value: string) => value.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (normalise(summary) === normalise(reported)) return null;
+
+  return summary;
 }
 
 /* ─── Attachments carried on a parked message ────────────────────────────── */

@@ -759,7 +759,20 @@ model PotentialChange {
   pcNumber  String @map("pc_number")
 
   title       String
+  /// WHAT THE REPORTER ACTUALLY WROTE, with the email furniture stripped off —
+  /// signature, quoted history, disclaimer. Never rewritten, never paraphrased,
+  /// because this exact text is printed under WHAT HAPPENED in a contractual
+  /// notice, and a model's improvement on somebody's words is not evidence of
+  /// what they said.
   description String
+  /// The model's standardised restatement of the same thing: one or two plain
+  /// sentences a commercial manager can scan.
+  ///
+  /// A SEPARATE field rather than a better `description`, and the distinction
+  /// is the whole point. This is convenience and is allowed to be wrong; the
+  /// description is evidence and is not. Nothing contractual reads this.
+  /// Null when the model was off, declined, or added nothing.
+  summary     String?
 
   sourceType                SourceType      @default(mobile_form) @map("source_type")
   /// WHERE the change was raised, which is not where the change is.
