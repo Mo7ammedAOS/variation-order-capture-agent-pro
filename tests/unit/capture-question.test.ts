@@ -18,12 +18,16 @@ const state = {
   projects: [] as Record<string, unknown>[],
   claimed: [] as { id: string; data: Record<string, unknown> }[],
   claimCount: 1,
+  senders: null as Record<string, unknown>[] | null,
 };
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    user: { findFirst: async () => state.user },
+    user: {
+      findFirst: async () => state.user,
+      findMany: async () => state.senders ?? (state.user ? [state.user] : []),
+    },
     captureQuestion: {
       findMany: async () => state.questions,
       updateMany: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -74,6 +78,7 @@ describe('answering "which project did you mean?"', () => {
     ];
     state.claimed = [];
     state.claimCount = 1;
+    state.senders = null;
   });
 
   it('reads a bare number as the answer, in the order it was asked', async () => {
@@ -119,6 +124,17 @@ describe('answering "which project did you mean?"', () => {
     expect(await tryAnswerQuestion(attempt('2'))).toBeNull();
   });
 
+  it('ignores a reply from a number several people share', async () => {
+    // We cannot know whose question a "2" settles, and settling the wrong one
+    // files a change against a project nobody chose.
+    state.senders = [
+      { id: 'ahmed', fullName: 'Ahmed' },
+      { id: 'hassan', fullName: 'Hassan' },
+    ];
+    expect(await tryAnswerQuestion(attempt('2'))).toBeNull();
+    expect(state.claimed).toHaveLength(0);
+  });
+
   it('files nothing twice when the email and the WhatsApp are both answered', async () => {
     // The claim is atomic: the second reply loses the race and returns null,
     // rather than creating a second Potential Change for the same message.
@@ -154,6 +170,7 @@ describe('confirming a project we read out of the message', () => {
     ];
     state.claimed = [];
     state.claimCount = 1;
+    state.senders = null;
   });
 
   it('takes a yes as the proposal', async () => {

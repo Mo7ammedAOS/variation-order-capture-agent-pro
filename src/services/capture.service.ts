@@ -21,6 +21,10 @@ import {
 } from '@/services/capture-question.service';
 import { matchProjectsInText } from '@/lib/project-match';
 import { cleanCapturedText } from '@/lib/email-cleanup';
+import {
+  ambiguousSenderReason,
+  resolveSender,
+} from '@/services/sender-identity.service';
 import { storeCaptureEvidence, type CaptureAttachment } from '@/services/document.service';
 
 /**
@@ -148,23 +152,28 @@ export async function captureFromChannel(
     };
   }
 
-  const sender = await prisma.user.findFirst({
-    where: {
-      active: true,
-      ...(input.channel === 'whatsapp'
-        ? { phone: input.senderIdentifier }
-        : { email: input.senderIdentifier.toLowerCase() }),
-    },
-    select: { id: true, fullName: true },
-  });
+  const identity = await resolveSender(input.channel, input.senderIdentifier);
 
-  if (!sender) {
+  if (identity.kind === 'none') {
     return {
       kind: 'needs_triage',
       reason: `No active user matches ${input.channel} identifier ${input.senderIdentifier}`,
       candidateProjectIds: [],
     };
   }
+
+  // Several people share this number. Picking one would put a colleague's name
+  // on a claim they know nothing about, silently, and the audit trail would
+  // agree with it. Park it and say why.
+  if (identity.kind === 'ambiguous') {
+    return {
+      kind: 'needs_triage',
+      reason: ambiguousSenderReason(identity, input.channel, input.senderIdentifier),
+      candidateProjectIds: [],
+    };
+  }
+
+  const sender = { id: identity.userId, fullName: identity.fullName };
 
   const memberships = await prisma.projectMember.findMany({
     where: { userId: sender.id, active: true, project: { projectStatus: { in: ['active', 'awarded'] } } },
@@ -713,14 +722,13 @@ export async function fileTriagedEvent(
 
   // Falls back to the person filing it only when the sender is not a user we
   // hold — an outside email, say. Attribution never silently becomes "nobody".
-  const originalSender = senderIdentifier
-    ? await prisma.user.findFirst({
-        where:
-          channel === 'whatsapp'
-            ? { phone: senderIdentifier, active: true }
-            : { email: senderIdentifier.toLowerCase(), active: true },
-        select: { id: true, fullName: true },
-      })
+  // Ambiguous resolves to null here rather than to a guess, so a shared number
+  // attributes the change to whoever FILED it — a fact — instead of to one of
+  // several people who might have sent it. The audit trail then says a
+  // coordinator filed it, which is true and checkable.
+  const identity = senderIdentifier ? await resolveSender(channel, senderIdentifier) : null;
+  const originalSender = identity?.kind === 'one'
+    ? { id: identity.userId, fullName: identity.fullName }
     : null;
 
   const outcome = await createChangeFromCapture({

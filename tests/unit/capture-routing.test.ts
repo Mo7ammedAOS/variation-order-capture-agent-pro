@@ -24,6 +24,7 @@ const state = {
   evidence: [] as Record<string, unknown>[],
   answer: null as Record<string, unknown> | null,
   eventPayload: null as unknown,
+  senders: null as Record<string, unknown>[] | null,
 };
 
 vi.mock('server-only', () => ({}));
@@ -48,7 +49,13 @@ const tx = {
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    user: { findFirst: async () => state.user },
+    user: {
+      findFirst: async () => state.user,
+      // `resolveSender` reads MANY and refuses to pick when several people
+      // share the identifier. `state.senders` overrides for that case.
+      findMany: async () =>
+        state.senders ?? (state.user ? [state.user] : []),
+    },
     projectMember: { findMany: async () => state.memberships },
     project: {
       findMany: async (args: { where?: { id?: { notIn?: string[] } } }) => {
@@ -148,6 +155,7 @@ describe('choosing the project a captured message belongs to', () => {
     state.evidence = [];
     state.answer = null;
     state.eventPayload = null;
+    state.senders = null;
   });
 
   it('files straight away when the sender is on exactly one live project', async () => {
@@ -203,6 +211,29 @@ describe('choosing the project a captured message belongs to', () => {
     await capture('extra sockets needed', { projectCodeHint: 'DXB-002' });
     expect(state.confirmed[0]?.proposedProjectId).toBe('proj-b');
   });
+
+  it('REFUSES to pick when several people share the identifier', async () => {
+    // Every user on this deployment shares one phone number. Picking the first
+    // row would put a colleague's name on a claim they know nothing about, in
+    // the audit trail, silently. Park it and say why.
+    state.senders = [
+      { id: 'ahmed', fullName: 'Ahmed' },
+      { id: 'hassan', fullName: 'Hassan' },
+    ];
+
+    const outcome = await capture('DXB-002 the wall came down', {
+      channel: 'whatsapp',
+      senderIdentifier: '+971565951887',
+    });
+
+    expect(outcome.kind).toBe('needs_triage');
+    if (outcome.kind !== 'needs_triage') throw new Error('unreachable');
+    expect(outcome.reason).toContain('more than one active user');
+    expect(outcome.reason).toContain('Ahmed');
+    expect(state.created).toHaveLength(0);
+    expect(state.confirmed).toHaveLength(0);
+    expect(state.asked).toHaveLength(0);
+  });
 });
 
 describe('evidence that arrived with the message', () => {
@@ -216,6 +247,7 @@ describe('evidence that arrived with the message', () => {
     state.evidence = [];
     state.answer = null;
     state.eventPayload = null;
+    state.senders = null;
   });
 
   it('files the attachments against the change it created', async () => {

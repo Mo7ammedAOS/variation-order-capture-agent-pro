@@ -51,6 +51,10 @@ vi.mock('@/lib/prisma', () => ({
         state.users.find((u) =>
           args.where.phone ? u.phone === args.where.phone : u.email === args.where.email,
         ) ?? null,
+      findMany: async (args: { where: Record<string, unknown> }) =>
+        state.users.filter((u) =>
+          args.where.phone ? u.phone === args.where.phone : u.email === args.where.email,
+        ),
     },
     $transaction: async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
   },

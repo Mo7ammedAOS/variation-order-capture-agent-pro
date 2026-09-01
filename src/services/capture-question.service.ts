@@ -3,6 +3,7 @@ import type { CaptureQuestionKind, Prisma, SourceType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { loadRecipients, recordDirectNotifications } from '@/services/notification.service';
 import { describeMatch, type ProjectMatch } from '@/lib/project-match';
+import { resolveSender } from '@/services/sender-identity.service';
 
 /**
  * "Which project did you mean?" — and, when we think we already know,
@@ -325,14 +326,12 @@ export async function tryAnswerQuestion(
   const identifier = attempt.senderIdentifier.trim();
   if (!identifier) return null;
 
-  const user = await prisma.user.findFirst({
-    where:
-      attempt.channel === 'whatsapp'
-        ? { phone: identifier, active: true }
-        : { email: identifier.toLowerCase(), active: true },
-    select: { id: true, fullName: true },
-  });
-  if (!user) return null;
+  // Ambiguous is treated as "not an answer". If several people share the
+  // number we cannot know whose question this settles, and settling the wrong
+  // one files a change against a project nobody chose.
+  const identity = await resolveSender(attempt.channel, identifier);
+  if (identity.kind !== 'one') return null;
+  const user = { id: identity.userId, fullName: identity.fullName };
 
   const open = await prisma.captureQuestion.findMany({
     where: { userId: user.id, status: 'open', expiresAt: { gt: new Date() } },
