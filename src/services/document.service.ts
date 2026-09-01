@@ -1,5 +1,5 @@
 import 'server-only';
-import type { DocumentType, Prisma } from '@prisma/client';
+import type { DocumentType, Prisma, SourceType } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/errors';
@@ -244,6 +244,145 @@ export async function storeNoticeDocument(input: {
       sourceChannel: 'other',
     },
   });
+}
+
+/**
+ * A photo, a drawing or a PDF that arrived attached to a captured message.
+ *
+ * The bytes come in base64 because n8n downloads the attachment and forwards
+ * it — the inbox it came from needs credentials we deliberately do not hold, so
+ * a URL alone is usually not fetchable later. When only a URL is given the row
+ * is still created, pointing at it, because knowing a file existed is worth
+ * more than nothing.
+ */
+export interface CaptureAttachment {
+  externalId: string;
+  fileName: string;
+  mimeType: string;
+  contentBase64?: string | undefined;
+  url?: string | undefined;
+}
+
+export interface StoredEvidence {
+  stored: number;
+  skipped: { fileName: string; reason: string }[];
+}
+
+/**
+ * Files the attachments on a captured message as evidence for its change.
+ *
+ * ── There is no signed-in user here ────────────────────────────────────────
+ * The capture path has already resolved authority: the sender was matched to a
+ * real user, and the project was chosen from that user's own memberships or
+ * confirmed by them. So this takes the project explicitly and performs no
+ * access check, exactly as `storeNoticeDocument` does. It must never be reached
+ * from a route that has a user, because it would be an access check missing.
+ *
+ * ── It cannot throw ────────────────────────────────────────────────────────
+ * A rejected file, a Drive outage, a corrupt base64 blob — none of these may
+ * lose the change. The change is the commercial record and the notice clock is
+ * already running on it; the photo is supporting material. So every failure is
+ * caught per file, counted, and reported back to the caller for the audit trail
+ * rather than thrown. A site engineer whose photo did not stick still has his
+ * variation on the register.
+ */
+export async function storeCaptureEvidence(input: {
+  projectId: string;
+  potentialChangeId: string;
+  uploadedByUserId: string | null;
+  channel: SourceType;
+  attachments: CaptureAttachment[];
+}): Promise<StoredEvidence> {
+  const result: StoredEvidence = { stored: 0, skipped: [] };
+  if (input.attachments.length === 0) return result;
+
+  let evidenceFolderId: string | null = null;
+  try {
+    evidenceFolderId = (await ensurePotentialChangeFolders(input.potentialChangeId))
+      .evidenceFolderId;
+  } catch (error) {
+    // No folder means no bytes can be stored. The URL-only rows below still
+    // get written, so the change records that attachments came with it.
+    evidenceFolderId = null;
+    result.skipped.push({
+      fileName: '(evidence folder)',
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const storage = getStorageProvider();
+
+  for (const attachment of input.attachments) {
+    const fileName = attachment.fileName?.trim() || `${attachment.externalId}`;
+
+    try {
+      if (!attachment.contentBase64) {
+        if (!attachment.url) {
+          result.skipped.push({ fileName, reason: 'No bytes and no link' });
+          continue;
+        }
+        await prisma.projectDocument.create({
+          data: {
+            projectId: input.projectId,
+            potentialChangeId: input.potentialChangeId,
+            documentType: inferDocumentType(attachment.mimeType, fileName),
+            documentName: fileName,
+            sourceUrl: attachment.url,
+            mimeType: attachment.mimeType,
+            uploadedByUserId: input.uploadedByUserId,
+            sourceChannel: input.channel,
+          },
+        });
+        result.stored++;
+        continue;
+      }
+
+      const content = Buffer.from(attachment.contentBase64, 'base64');
+      if (content.byteLength === 0) {
+        result.skipped.push({ fileName, reason: 'Attachment was empty' });
+        continue;
+      }
+      assertAcceptableFile(attachment.mimeType, content.byteLength, fileName);
+
+      if (!evidenceFolderId) {
+        result.skipped.push({ fileName, reason: 'Evidence folder unavailable' });
+        continue;
+      }
+
+      const stored = await storage.upload({
+        folderId: evidenceFolderId,
+        name: fileName,
+        mimeType: attachment.mimeType,
+        content,
+      });
+
+      await prisma.projectDocument.create({
+        data: {
+          projectId: input.projectId,
+          potentialChangeId: input.potentialChangeId,
+          documentType: inferDocumentType(attachment.mimeType, fileName),
+          documentName: fileName,
+          driveFileId: stored.fileId,
+          storagePath: stored.storagePath,
+          sourceUrl: stored.sourceUrl,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+          uploadedByUserId: input.uploadedByUserId,
+          // Where it actually came from. `mobile_form` would be a lie, and the
+          // channel is what tells a reviewer how much to trust the sender.
+          sourceChannel: input.channel,
+        },
+      });
+      result.stored++;
+    } catch (error) {
+      result.skipped.push({
+        fileName,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return result;
 }
 
 export const documentRegisterSchema = z.object({

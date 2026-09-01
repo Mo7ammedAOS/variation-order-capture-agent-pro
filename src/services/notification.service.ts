@@ -185,6 +185,13 @@ export async function recordDirectNotifications(
     dedupeSeed: string;
     on: Date;
     potentialChangeId?: string | null;
+    /**
+     * The inbound message this answers, so n8n can send it as a REPLY on the
+     * existing thread. A question about an email that arrives as a fresh email
+     * gets read as noise from the system, and noise is what people stop
+     * opening.
+     */
+    replyToMessageId?: string | null;
   },
 ): Promise<number> {
   const available = configuredChannels();
@@ -198,6 +205,7 @@ export async function recordDirectNotifications(
       subject: input.subject,
       body: input.body,
       payloadSummary: input.subject,
+      replyToMessageId: input.replyToMessageId ?? null,
     };
 
     rows.push({
@@ -277,6 +285,9 @@ export async function dispatchPendingNotifications(limit = 100): Promise<{
           body: row.body,
           pc_number: row.potentialChange?.pcNumber ?? null,
           task_title: row.task?.title ?? null,
+          // Lane D sets In-Reply-To / References from this when it is present,
+          // so the answer lands in the thread the person already has open.
+          reply_to_message_id: row.replyToMessageId,
           due_date: row.task?.dueDate ? formatDate(row.task.dueDate) : null,
         },
         { idempotencyKey: row.dedupeKey },

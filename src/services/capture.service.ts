@@ -14,7 +14,13 @@ import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { assertCapability, assertProjectAccess } from '@/services/project-access.service';
 import { closeEvent, listUnprocessedEvents } from '@/services/integration.service';
-import { askWhichProject, tryAnswerQuestion } from '@/services/capture-question.service';
+import {
+  askWhichProject,
+  confirmProject,
+  tryAnswerQuestion,
+} from '@/services/capture-question.service';
+import { matchProjectsInText } from '@/lib/project-match';
+import { storeCaptureEvidence, type CaptureAttachment } from '@/services/document.service';
 
 /**
  * Capture from an external channel.
@@ -27,12 +33,20 @@ import { askWhichProject, tryAnswerQuestion } from '@/services/capture-question.
  *
  * PROJECT IDENTIFICATION, and the rule that matters:
  *
- *   one active project   → use it
- *   several              → do not choose. Park it for triage.
- *   none, or unknown     → park it for triage.
+ *   one active project             → use it
+ *   several, and the text names one → propose it and ask them to confirm
+ *   several, and it names none      → ask which, from their list
+ *   names a project they are not on → park it, saying so
+ *   none, or unknown sender         → park it for triage
  *
  * NEVER GUESS. A Potential Change filed against the wrong project is worse than
  * one sitting in a queue, because it looks handled.
+ *
+ * Reading the project out of the message is not a softening of that rule. The
+ * matcher (`src/lib/project-match.ts`) proposes; it never decides. What it
+ * saves is the reporter's time: instead of "here are your four jobs", he gets
+ * "this is DXB-001, yes?" and answers in one word. The safety property is
+ * unchanged, because nothing is written until he answers.
  */
 
 export type CaptureOutcome =
@@ -47,6 +61,10 @@ export interface CaptureInput {
   externalMessageId: string;
   eventDate?: Date;
   projectCodeHint?: string | null;
+  /** The subject line, for a reply that threads. Email only. */
+  sourceSubject?: string | null;
+  /** Photos, drawings, PDFs sent with the message. Filed as evidence. */
+  attachments?: CaptureAttachment[];
 }
 
 export async function captureFromChannel(
@@ -64,12 +82,21 @@ export async function captureFromChannel(
     text: input.text,
   });
 
-  if (answer) {
+  if (answer?.outcome === 'answered' && answer.projectId) {
+    // The attachments came with the ORIGINAL message, not with the word "yes".
+    // Reading them off this reply alone would file the change and quietly lose
+    // the photographs it was reported with.
+    const original = await attachmentsForEvent(answer.integrationEventId);
+
     const outcome = await createChangeFromCapture({
       projectId: answer.projectId,
       reporterId: answer.userId,
       reporterName: answer.userName,
-      input: { ...input, text: answer.originalText || input.text },
+      input: {
+        ...input,
+        text: answer.originalText || input.text,
+        attachments: mergeAttachments(original, input.attachments ?? []),
+      },
     });
 
     if (outcome.kind === 'created') {
@@ -82,6 +109,32 @@ export async function captureFromChannel(
       });
     }
     return outcome;
+  }
+
+  // "No, wrong project." Put the full list back to them on the same thread,
+  // rather than leaving someone who answered correctly with nothing to do.
+  if (answer?.outcome === 'rejected') {
+    const reAsked =
+      answer.candidateProjectIds.length >= 2
+        ? await askWhichProject({
+            integrationEventId: answer.integrationEventId,
+            userId: answer.userId,
+            userName: answer.userName,
+            channel: input.channel,
+            originalText: answer.originalText || input.text,
+            candidateProjectIds: answer.candidateProjectIds,
+            sourceMessageId: answer.sourceMessageId,
+            sourceSubject: answer.sourceSubject,
+          })
+        : null;
+
+    return {
+      kind: 'needs_triage',
+      reason: reAsked
+        ? `${answer.userName} said that was the wrong project. Asked which of ${answer.candidateProjectIds.length} instead (${reAsked.token}).`
+        : `${answer.userName} said that was the wrong project, and has no other live project to move it to.`,
+      candidateProjectIds: answer.candidateProjectIds,
+    };
   }
 
   const sender = await prisma.user.findFirst({
@@ -104,7 +157,10 @@ export async function captureFromChannel(
 
   const memberships = await prisma.projectMember.findMany({
     where: { userId: sender.id, active: true, project: { projectStatus: { in: ['active', 'awarded'] } } },
-    select: { projectId: true, project: { select: { projectCode: true } } },
+    select: {
+      projectId: true,
+      project: { select: { projectCode: true, projectName: true, clientName: true } },
+    },
     distinct: ['projectId'],
   });
 
@@ -116,51 +172,139 @@ export async function captureFromChannel(
     };
   }
 
-  // A project code in the payload is a HINT from an external system. It only
-  // ever narrows the sender's real memberships; it can never widen them.
-  let candidates = memberships;
-  if (input.projectCodeHint) {
-    const hinted = memberships.filter(
-      (m) => m.project.projectCode.toUpperCase() === input.projectCodeHint?.toUpperCase(),
-    );
-    if (hinted.length === 1) candidates = hinted;
-  }
+  const memberProjectIds = memberships.map((m) => m.projectId);
 
-  if (candidates.length > 1) {
-    const candidateProjectIds = candidates.map((m) => m.projectId);
+  // A project code in the payload is a HINT from an external system — n8n may
+  // have read it off a subject line. It is folded into the text and matched the
+  // same way, so "DXB001" in a subject and "DXB-001" in a sentence behave
+  // identically, and neither can ever widen the sender's real memberships.
+  const searchText = [input.projectCodeHint, input.text].filter(Boolean).join('\n');
 
-    // Ask the one person who knows. Parking it for a coordinator instead would
-    // hand the decision to somebody with LESS context than the reporter had.
-    const asked = integrationEventId
-      ? await askWhichProject({
-          integrationEventId,
-          userId: sender.id,
-          userName: sender.fullName,
-          channel: input.channel,
-          originalText: input.text,
-          candidateProjectIds,
-        })
-      : null;
-
+  // Named a job they are not on. This is the one case where being clever is
+  // worth it: without it, the engineer is shown his OWN four projects, picks
+  // one, and the change lands on the wrong job looking perfectly filed.
+  // Restricted to project CODES — a code is an identifier, a client name is a
+  // resemblance, and parking on a resemblance would park half the inbox.
+  const foreign = await findForeignProjectByCode(searchText, memberProjectIds);
+  if (foreign) {
     return {
       kind: 'needs_triage',
-      reason: asked
-        ? `Asked ${sender.fullName} which of ${candidates.length} projects this is (${asked.token}). Waiting for a reply.`
-        : `${sender.fullName} is on ${candidates.length} active projects — cannot determine which`,
-      candidateProjectIds,
+      reason:
+        `${sender.fullName} named ${foreign.projectCode} (${foreign.projectName}), ` +
+        `which they are not assigned to. Add them to it, or file it by hand.`,
+      candidateProjectIds: [],
     };
   }
 
-  const target = candidates[0];
-  if (!target) {
-    return { kind: 'needs_triage', reason: 'No candidate project', candidateProjectIds: [] };
+  // Only one live job: there is nothing to be wrong about.
+  if (memberships.length === 1) {
+    const only = memberships[0];
+    if (!only) {
+      return { kind: 'needs_triage', reason: 'No candidate project', candidateProjectIds: [] };
+    }
+    return createChangeFromCapture({
+      projectId: only.projectId,
+      reporterId: sender.id,
+      reporterName: sender.fullName,
+      input,
+    });
   }
-  return createChangeFromCapture({
-    projectId: target.projectId,
-    reporterId: sender.id,
-    reporterName: sender.fullName,
-    input,
+
+  const matches = matchProjectsInText(
+    searchText,
+    memberships.map((m) => ({
+      id: m.projectId,
+      projectCode: m.project.projectCode,
+      projectName: m.project.projectName,
+      clientName: m.project.clientName,
+    })),
+  );
+
+  // The text pointed at exactly one of their jobs. Propose it and ask for one
+  // word back, instead of making them read a list they already answered.
+  const proposal = matches.length === 1 ? matches[0] : null;
+  if (proposal && integrationEventId) {
+    const confirmed = await confirmProject({
+      integrationEventId,
+      userId: sender.id,
+      userName: sender.fullName,
+      channel: input.channel,
+      originalText: input.text,
+      proposedProjectId: proposal.projectId,
+      match: proposal,
+      otherProjectIds: memberProjectIds,
+      sourceMessageId: input.externalMessageId,
+      sourceSubject: input.sourceSubject ?? null,
+    });
+
+    if (confirmed) {
+      return {
+        kind: 'needs_triage',
+        reason:
+          `Read this as ${proposal.matchedText} (${proposal.matchedOn}). ` +
+          `Asked ${sender.fullName} to confirm (${confirmed.token}). Waiting for a reply.`,
+        candidateProjectIds: [proposal.projectId],
+      };
+    }
+  }
+
+  // Either nothing was named, or several jobs were. Narrowing to the ones the
+  // text could mean is still a shorter question than the full list.
+  const candidateProjectIds =
+    matches.length > 1 ? matches.map((m) => m.projectId) : memberProjectIds;
+
+  // Ask the one person who knows. Parking it for a coordinator instead would
+  // hand the decision to somebody with LESS context than the reporter had.
+  const asked = integrationEventId
+    ? await askWhichProject({
+        integrationEventId,
+        userId: sender.id,
+        userName: sender.fullName,
+        channel: input.channel,
+        originalText: input.text,
+        candidateProjectIds,
+        sourceMessageId: input.externalMessageId,
+        sourceSubject: input.sourceSubject ?? null,
+      })
+    : null;
+
+  return {
+    kind: 'needs_triage',
+    reason: asked
+      ? `Asked ${sender.fullName} which of ${candidateProjectIds.length} projects this is (${asked.token}). Waiting for a reply.`
+      : `${sender.fullName} is on ${candidateProjectIds.length} active projects — cannot determine which`,
+    candidateProjectIds,
+  };
+}
+
+/**
+ * A project named by CODE in the text that the sender has no business filing
+ * against.
+ *
+ * Deliberately a separate query over every live project, and deliberately code
+ * only. It exists to REFUSE, never to select: nothing here can ever put a
+ * change on a project the sender is not a member of.
+ */
+async function findForeignProjectByCode(
+  text: string,
+  memberProjectIds: string[],
+): Promise<{ id: string; projectCode: string; projectName: string } | null> {
+  if (!text.trim()) return null;
+
+  const outside = await prisma.project.findMany({
+    where: {
+      projectStatus: { in: ['active', 'awarded'] },
+      id: { notIn: memberProjectIds },
+    },
+    select: { id: true, projectCode: true, projectName: true, clientName: true },
   });
+  if (outside.length === 0) return null;
+
+  const named = matchProjectsInText(text, outside.map((p) => ({ ...p })))
+    .filter((m) => m.matchedOn === 'code');
+  if (named.length === 0) return null;
+
+  return outside.find((p) => p.id === named[0]?.projectId) ?? null;
 }
 
 /**
@@ -208,7 +352,7 @@ export async function createChangeFromCapture(args: {
   );
   const noticeRecipients = await loadRecipients([noticeOwner]);
 
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx): Promise<CaptureOutcome> => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
       include: { contractRules: true },
@@ -333,6 +477,96 @@ export async function createChangeFromCapture(args: {
       projectId: projectId,
     };
   });
+
+  // ── Attachments become evidence ─────────────────────────────────────────
+  // AFTER the transaction, never inside it. Uploading to Drive takes seconds
+  // and Prisma's interactive transaction budget is five of them; a photo would
+  // roll back the whole Potential Change, which is the record that matters.
+  //
+  // `storeCaptureEvidence` does not throw. A rejected file loses the file, not
+  // the change — the notice clock is already running on it.
+  const attachments = input.attachments ?? [];
+  if (outcome.kind === 'created' && attachments.length > 0) {
+    const filed = await storeCaptureEvidence({
+      projectId: outcome.projectId,
+      potentialChangeId: outcome.potentialChangeId,
+      uploadedByUserId: reporterId,
+      channel: input.channel,
+      attachments,
+    });
+
+    await recordAudit({
+      db: prisma,
+      projectId: outcome.projectId,
+      userId: reporterId,
+      recordType: 'potential_change',
+      recordId: outcome.potentialChangeId,
+      actionType: 'uploaded',
+      newValue: { attachments: attachments.length, stored: filed.stored },
+      source: input.channel === 'whatsapp' ? 'whatsapp' : 'email',
+      // What did NOT stick, and why. A silent skip is how a claim arrives at
+      // adjudication with the one photograph that proved it simply absent.
+      metadata: { skipped: filed.skipped },
+    });
+  }
+
+  return outcome;
+}
+
+/* ─── Attachments carried on a parked message ────────────────────────────── */
+
+/**
+ * Reads the attachments back off a stored integration event.
+ *
+ * They are held in `payload_json` exactly as n8n sent them, base64 and all, so
+ * a message parked for two days waiting on "which project?" still has its
+ * photographs when the answer arrives. Storing only their names would mean the
+ * evidence existed for as long as it took someone to reply.
+ */
+export function attachmentsFromPayload(payload: unknown): CaptureAttachment[] {
+  const root = asRecord(payload);
+  const message = asRecord(root.message);
+  const raw = Array.isArray(root.attachments)
+    ? root.attachments
+    : Array.isArray(message.media)
+      ? message.media
+      : [];
+
+  return raw.flatMap((entry): CaptureAttachment[] => {
+    const item = asRecord(entry);
+    const externalId = str(item.external_id) ?? str(item.file_name);
+    const mimeType = str(item.mime_type);
+    if (!externalId || !mimeType) return [];
+    return [
+      {
+        externalId,
+        fileName: str(item.file_name) ?? externalId,
+        mimeType,
+        contentBase64: str(item.content_base64) ?? undefined,
+        url: str(item.url) ?? undefined,
+      },
+    ];
+  });
+}
+
+async function attachmentsForEvent(eventId: string): Promise<CaptureAttachment[]> {
+  const event = await prisma.integrationEvent.findUnique({
+    where: { id: eventId },
+    select: { payloadJson: true },
+  });
+  return event ? attachmentsFromPayload(event.payloadJson) : [];
+}
+
+/** Same file sent twice is one piece of evidence, not two. */
+function mergeAttachments(
+  first: CaptureAttachment[],
+  second: CaptureAttachment[],
+): CaptureAttachment[] {
+  const byId = new Map<string, CaptureAttachment>();
+  for (const attachment of [...first, ...second]) {
+    if (!byId.has(attachment.externalId)) byId.set(attachment.externalId, attachment);
+  }
+  return [...byId.values()];
 }
 
 /* ─── Triage: the messages the system refused to guess about ─────────────── */
@@ -459,6 +693,11 @@ export async function fileTriagedEvent(
       externalMessageId: event.externalId,
       eventDate: event.receivedAt,
       projectCodeHint: null,
+      sourceSubject: str(payload.subject),
+      // The photographs the message arrived with. Filing by hand must produce
+      // the same record as filing by reply, evidence included — otherwise the
+      // changes that needed a human are the ones missing their proof.
+      attachments: attachmentsFromPayload(event.payloadJson),
     },
   });
 

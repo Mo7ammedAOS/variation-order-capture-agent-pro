@@ -48,7 +48,10 @@ function question(over: Record<string, unknown> = {}) {
     id: 'q1',
     integrationEventId: 'evt-1',
     userId: 'ahmed',
+    kind: 'choose',
     token: 'K4T9',
+    sourceMessageId: null,
+    sourceSubject: null,
     candidateProjectIds: ['proj-a', 'proj-b', 'proj-c'],
     askedText: 'Client wants the reception wall moved 400mm',
     status: 'open',
@@ -127,5 +130,84 @@ describe('answering "which project did you mean?"', () => {
     await tryAnswerQuestion(attempt('3'));
     expect(state.claimed[0]?.data.status).toBe('answered');
     expect(state.claimed[0]?.data.chosenProjectId).toBe('proj-c');
+  });
+});
+
+/**
+ * "This is DXB-001, correct?"
+ *
+ * When the message itself names a project, the reporter should not be made to
+ * read a list he already answered. He is shown what we read and why, and one
+ * word settles it.
+ *
+ * `candidateProjectIds[0]` is the proposal, by construction. Everything below
+ * depends on that, which is why it is stated in the service header too.
+ */
+describe('confirming a project we read out of the message', () => {
+  beforeEach(() => {
+    state.user = { id: 'ahmed', fullName: 'Ahmed' };
+    state.questions = [question({ kind: 'confirm', candidateProjectIds: ['proj-b', 'proj-a', 'proj-c'] })];
+    state.projects = [
+      { id: 'proj-a', projectCode: 'DXB-001' },
+      { id: 'proj-b', projectCode: 'DXB-002' },
+      { id: 'proj-c', projectCode: 'DXB-004' },
+    ];
+    state.claimed = [];
+    state.claimCount = 1;
+  });
+
+  it('takes a yes as the proposal', async () => {
+    const reply = await tryAnswerQuestion(attempt('yes'));
+    expect(reply?.outcome).toBe('answered');
+    expect(reply?.projectId).toBe('proj-b');
+  });
+
+  it('takes agreement written the way people actually write it', async () => {
+    for (const yes of ['YES', 'Yes please', 'confirmed', 'thats right', 'K4T9 yes']) {
+      state.claimed = [];
+      const reply = await tryAnswerQuestion(attempt(yes));
+      expect(reply?.projectId, yes).toBe('proj-b');
+    }
+  });
+
+  it('takes a no as a rejection, and settles nothing', async () => {
+    const reply = await tryAnswerQuestion(attempt('no'));
+    expect(reply?.outcome).toBe('rejected');
+    expect(reply?.projectId).toBeNull();
+    // Cancelled, not answered — the caller re-asks on this same row, so a
+    // second "no" from the other channel finds nothing open.
+    expect(state.claimed[0]?.data.status).toBe('cancelled');
+  });
+
+  it('takes the right code directly, skipping a round trip', async () => {
+    const reply = await tryAnswerQuestion(attempt('no, DXB-004'));
+    expect(reply?.outcome).toBe('answered');
+    expect(reply?.projectId).toBe('proj-c');
+  });
+
+  it('ignores a bare number, because no numbered list was ever sent', async () => {
+    expect(await tryAnswerQuestion(attempt('2'))).toBeNull();
+  });
+
+  it('does NOT read a real report as agreement', async () => {
+    expect(await tryAnswerQuestion(attempt('yes the client also wants 3 more sockets'))).toBeNull();
+    expect(state.claimed).toHaveLength(0);
+  });
+
+  it('does not answer itself out of the quoted text of its own question', async () => {
+    // The failure this prevents: a one word reply on an email client that
+    // quotes the original. Our question lists DXB-004 as an alternative, so
+    // reading past the quote marker would file it against DXB-004 — the exact
+    // wrong-project outcome the confirmation exists to stop.
+    const quoted = [
+      'Yes',
+      '',
+      'On 1 Sep 2026 at 09:14, VO Capture wrote:',
+      '> This looks like DXB-002. If not, reply with the right code:',
+      '>   K4T9 DXB-004 - Corniche Retail',
+    ].join('\n');
+
+    const reply = await tryAnswerQuestion(attempt(quoted));
+    expect(reply?.projectId).toBe('proj-b');
   });
 });

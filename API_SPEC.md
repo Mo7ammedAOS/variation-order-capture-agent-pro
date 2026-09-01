@@ -66,12 +66,38 @@ Every payload carries `idempotency_key`. It is required. A retry returns the
 }
 ```
 
-`project_code` is a **hint**. It can only narrow the sender's real memberships,
-never widen them.
+`project_code` is a **hint**. It is folded into the message text and matched the
+same way anything written in the body is, so it can only narrow the sender's
+real memberships, never widen them.
 
-**Project identification.** One active project → use it. Several, or none, or an
-unknown sender → parked for triage. It never guesses: a change filed against the
-wrong project is worse than one in a queue, because it looks handled.
+**Project identification.** The message is read for a project code, the client
+name, or a distinctive project name:
+
+| | |
+|---|---|
+| Sender on one live project | filed there |
+| Text names one of their jobs | proposed — "this is DXB-001, correct?" — and filed on their reply |
+| Text names two of their jobs | asked, from those two |
+| Text names none | asked, from their full list |
+| Text names a job they are not on | parked, saying exactly that |
+| Unknown sender, or on no live project | parked for triage |
+
+It never guesses: a change filed against the wrong project is worse than one in
+a queue, because it looks handled. Reading the message is not an exception to
+that — the reader proposes, and **nothing is written until the reporter
+answers**.
+
+**Attachments.** `message.media[]` (WhatsApp) and `attachments[]` (email) carry
+`content_base64` and are filed as evidence into the change's Drive `Evidence`
+folder, one `project_documents` row each. While a message waits for a "which
+project?" answer they are held on the event, so a report parked for two days
+still has its photographs when the answer lands. A file that is rejected or
+that storage refuses is skipped and named in the audit trail; it never fails
+the capture, because the change is the record that matters and its notice clock
+is already running.
+
+**Body limit: 32 MB.** Larger is refused with a 400 naming the size. Lane B
+spends a 20 MB budget per email and names anything it left behind.
 
 ```json
 201 { "duplicate": false, "event_id": "…",
@@ -82,7 +108,10 @@ wrong project is worse than one in a queue, because it looks handled.
 
 ### `POST /api/integrations/email/incoming-email`
 
-Same shape. `idempotency_key` is the RFC message id; sender is `from.address`.
+Same shape. `idempotency_key` is the RFC message id; sender is `from.address`;
+files arrive in `attachments[]`. `subject` is kept so a question about this
+message can go back as a **reply on the same thread** rather than as a fresh
+email nobody connects to it.
 
 ### `POST /api/integrations/documents/uploaded`
 

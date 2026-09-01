@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { errorResponse } from '@/lib/api';
 import { verifyIntegrationRequest } from '@/lib/integration-auth';
 import { checkRateLimit, INTEGRATION_RATE_LIMIT } from '@/lib/rate-limit';
-import { emailIncomingSchema } from '@/app/api/integrations/schemas';
+import { assertCaptureBodySize, emailIncomingSchema } from '@/app/api/integrations/schemas';
 import { processOnce } from '@/services/integration.service';
-import { captureFromChannel } from '@/services/capture.service';
+import { attachmentsFromPayload, captureFromChannel } from '@/services/capture.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +13,7 @@ export async function POST(request: Request) {
   try {
     const raw = await request.text();
     verifyIntegrationRequest(raw, request.headers);
+    assertCaptureBodySize(raw);
 
     checkRateLimit('integration:email', INTEGRATION_RATE_LIMIT);
 
@@ -33,6 +34,11 @@ export async function POST(request: Request) {
           externalMessageId: payload.idempotency_key,
           eventDate: payload.received_at,
           projectCodeHint: payload.project_code ?? null,
+          sourceSubject: payload.subject,
+          // Anything attached becomes evidence on the change. It stays in the
+          // event payload meanwhile, so a message parked awaiting a reply
+          // still has its photographs when the reply comes.
+          attachments: attachmentsFromPayload(payload),
         }, eventId),
       // A parked message is not a processed one. Without this the triage inbox
       // is empty while messages quietly pile up inside result_json.

@@ -78,6 +78,39 @@ the notice stays `issued`, the bottleneck sweep raises
 `notice_drafted_not_sent`, and somebody is chased. That is the correct
 behaviour, not a bug to smooth over.
 
+### Lane B carries the attachments
+
+The Gmail trigger downloads them (`options.downloadAttachments`), and B2
+forwards each one base64 encoded in the `attachments[]` array. They become
+evidence on the Potential Change, filed into its Drive `Evidence` folder.
+
+Two details that are not optional:
+
+**B2 reads bytes with `this.helpers.getBinaryDataBuffer(i, key)`, never off
+`binary[key].data`.** This instance runs `binaryMode: separate`, so `.data` is
+absent — the naive read produces an empty file and no error at all, which is
+the worst possible way to lose a site photograph.
+
+**B2 spends a 20 MB base64 budget per email and NAMES what it dropped** in the
+body text it forwards. The app refuses a captured message over 32 MB outright,
+so a silent overflow would bounce the whole email; a named omission at least
+tells the reviewer a file existed.
+
+### Lane D replies on the thread
+
+`D3a · Is a Reply?` splits on `reply_to_message_id` in the app's payload:
+
+| It carries | Node | Result |
+|---|---|---|
+| `gmail:<id>` | `D4b · Reply On Thread` | Gmail `message: reply` on that thread |
+| nothing | `D4 · Send Email` | a fresh mail, as before |
+
+The app sets it only when it is answering a captured email — "which project did
+you mean?", "this is DXB-001, correct?". A question that arrives detached from
+the mail that provoked it reads as noise from the system, people stop opening
+it, and capture dies quietly. Both nodes report through the same D7/D6 pair, so
+the delivery contract below is unchanged.
+
 ## Sticky notes are structural
 
 1. **Header** — client name, slug, app base URL, which credentials this copy
@@ -94,6 +127,7 @@ memory.
 
 ```text
 Carry an idempotency key    WhatsApp message id, RFC message id, file id
+Carry the attachments       base64; the app files them as evidence
 Sign every request          HMAC over the raw body, timestamp within 5 min
 Report delivery back        a 200 from us is not "delivered"
 Never write to Postgres     the app validates, decides and audits

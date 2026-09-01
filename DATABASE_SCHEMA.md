@@ -77,6 +77,23 @@ success without an `external_message_id` is rejected: "sent" with nothing to
 point at is not evidence, and this record may later be the proof a notice was
 served.
 
+**`capture_questions`** — the outstanding "which project?" and its answer.
+
+`kind` distinguishes the two shapes. A **choose** question lists the reporter's
+live jobs and is answered with a number or a code. A **confirm** question puts
+back the one project we read out of their own message, and is answered with a
+word. For a confirm, `candidate_project_ids[0]` **is the proposal** and the rest
+are their other live jobs, carried so that "no, it is DXB-002" resolves in one
+reply instead of being read as a brand new report. Nothing may reorder that
+array.
+
+`source_message_id` and `source_subject` are the message being answered, so the
+question goes back as a REPLY on the same thread rather than as a fresh email.
+
+**`notification_logs.reply_to_message_id`** — passed to n8n lane D, which uses
+it to reply in place of sending. Null on everything that is not answering an
+inbound message.
+
 **`drive_folder_id` / `drive_file_id`** — Drive holds bytes, this database is
 the index. We never list a folder to discover what exists: Drive permits
 duplicate names, and a listing is not an access-control boundary.

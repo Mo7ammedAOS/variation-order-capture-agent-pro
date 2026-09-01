@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ValidationError } from '@/lib/errors';
 
 /**
  * The wire contracts n8n builds against.
@@ -11,6 +12,28 @@ import { z } from 'zod';
  * Field names are snake_case here and only here: this is the boundary where an
  * external system's convention meets ours.
  */
+
+/**
+ * The ceiling on one captured message, bytes on the wire.
+ *
+ * Attachments arrive base64 encoded and are held in `integration_events.
+ * payload_json` until the message is filed, which is what keeps a photograph
+ * alive while its report waits two days for "which project?". That storage is
+ * a JSONB column, so the limit is here, at the door, rather than discovered as
+ * a database error after the signature has already been verified. Base64 costs
+ * a third on top, so this is roughly 24 MB of actual files.
+ */
+export const MAX_CAPTURE_BODY_BYTES = 32 * 1024 * 1024;
+
+export function assertCaptureBodySize(raw: string): void {
+  const bytes = Buffer.byteLength(raw, 'utf8');
+  if (bytes > MAX_CAPTURE_BODY_BYTES) {
+    throw new ValidationError(
+      `That message is ${Math.round(bytes / 1024 / 1024)} MB, over the ` +
+        `${MAX_CAPTURE_BODY_BYTES / 1024 / 1024} MB limit. Send the large files separately.`,
+    );
+  }
+}
 
 export const mediaSchema = z.object({
   external_id: z.string().min(1),

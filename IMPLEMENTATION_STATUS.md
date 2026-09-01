@@ -206,10 +206,47 @@ Stages 1 to 3 are done: the build, the deployment, and the decision spine
 of 2026-09-01.
 
 **Stage 4 — n8n becomes the nervous system.** In progress.
-`n8n-workflows/master.json` is built and validated: lanes A, B, C (capture in),
-D, E (notify out), S (the schedules), H (errors). Not yet imported or bound.
-The app side is done — `/api/integrations/n8n/run-job`, the capture inbox, and
-`needs_triage` as a real event status.
+`n8n-workflows/master.json` is built, validated, imported and ACTIVE on the
+live instance as `TkHAKIIHVt2n6fV4`: lanes A, B, C (capture in), D, E (notify
+out), S (the schedules), H (errors). The app side is done —
+`/api/integrations/n8n/run-job`, the capture inbox, and `needs_triage` as a
+real event status.
+
+Still unbound: `N8N_NOTIFY_EMAIL_URL` and `N8N_NOTIFY_WHATSAPP_URL` are blank
+in `.env.production`, so every question and reminder is recorded in-app and
+**nothing is sent**. Lane D exists and will reply the moment the URL is set.
+That is one line and a redeploy, and it starts sending real email to real
+people, which is why it is not set.
+
+**Stage 4b — capture understands the message.** Built, 2026-09-01.
+
+| Situation | What happens |
+|---|---|
+| Sender on one live project | Filed there, no question |
+| Text names a code or the client, one job fits | "This is DXB-001, correct?" — one word files it |
+| Text names two of their jobs | Asked, from those two only |
+| Text names none | Asked, from their full list |
+| Text names a job they are NOT on | Parked, saying exactly that |
+| Unknown sender, or on no live project | Parked for triage |
+
+The matcher is `src/lib/project-match.ts` — pure, no model, no network. It
+proposes and never decides: nothing is written until the reporter answers.
+Codes match however they are typed (`DXB-001`, `dxb001`, `DXB - 001`); a client
+name matches on its leading distinctive word, because nobody writes "Miral
+Asset Management" in a WhatsApp. Generic words — `contracting`, `properties`,
+`office` — identify nobody and are stripped, or every message would match every
+job.
+
+The confirmation is sent as a **reply on the original email thread** (lane D's
+`D3a`/`D4b` branch, driven by `notification_logs.reply_to_message_id`).
+
+**Attachments are evidence.** Lane B downloads them and forwards them base64;
+the app files them into the change's Drive `Evidence` folder with a
+`project_documents` row each. They ride along in `integration_events.
+payload_json` while a message waits for its answer, so a report parked two days
+still has its photographs when the reply lands. `storeCaptureEvidence` cannot
+throw — a rejected file loses the file, never the change, because the notice
+clock is already running on the change.
 
 **Stage 5 — the notice.** Built, 2026-09-01. The chain runs end to end:
 

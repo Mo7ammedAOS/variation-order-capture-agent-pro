@@ -952,6 +952,14 @@ model ActivityLog {
 /// Every inbound event from n8n lands here first. The unique (source, externalId)
 /// is what makes a retried webhook safe: the second delivery finds this row and
 /// returns the original result instead of creating a second Potential Change.
+enum CaptureQuestionKind {
+  /// "Which of these four?" — the reporter picks.
+  choose
+  /// "This is DXB-001, correct?" — we read it out of their message and they
+  /// only have to agree.
+  confirm
+}
+
 enum CaptureQuestionStatus {
   open
   answered
@@ -968,11 +976,20 @@ model CaptureQuestion {
   id                  String                @id @default(uuid()) @db.Uuid
   integrationEventId  String                @unique @map("integration_event_id") @db.Uuid
   userId              String                @map("user_id") @db.Uuid
+  /// Whether we are asking them to CHOOSE from a list or to CONFIRM one we
+  /// read out of their own words. The difference is not cosmetic: a confirm
+  /// accepts "yes", and a "no" to a confirm re-opens the full list rather than
+  /// leaving the reporter with nothing to say.
+  kind                CaptureQuestionKind   @default(choose)
   /// Short and typable, so a reply is unambiguous when two are outstanding.
   token               String                @unique
   /// Frozen when asked. Re-reading memberships later would make "2" drift.
   candidateProjectIds String[]              @map("candidate_project_ids") @db.Uuid
   askedText           String?               @map("asked_text")
+  /// The message we are answering, so the question goes back as a REPLY on the
+  /// same thread instead of arriving as a fresh email nobody connects to it.
+  sourceMessageId     String?               @map("source_message_id")
+  sourceSubject       String?               @map("source_subject")
   status              CaptureQuestionStatus @default(open)
   chosenProjectId     String?               @map("chosen_project_id") @db.Uuid
   askedAt             DateTime              @default(now()) @map("asked_at")
@@ -1022,6 +1039,10 @@ model NotificationLog {
   escalationLevel   EscalationLevel     @default(none) @map("escalation_level")
   status            DeliveryStatus      @default(pending)
   externalMessageId String?             @map("external_message_id")
+  /// The inbound message this one answers. Passed to n8n so lane D can set
+  /// In-Reply-To and the reply lands in the thread the person already has open,
+  /// rather than as a new email they read as spam from their own system.
+  replyToMessageId  String?             @map("reply_to_message_id")
   failureReason     String?             @map("failure_reason")
 
   /// What makes the daily sweep safe to run twice.

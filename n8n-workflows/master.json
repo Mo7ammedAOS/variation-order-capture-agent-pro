@@ -13,8 +13,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1560,
-        -300
+        -1568,
+        -304
       ]
     },
     {
@@ -29,14 +29,14 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1560,
-        440
+        -1568,
+        448
       ]
     },
     {
       "parameters": {
         "content": "### Lane A · WhatsApp in (Evolution)\n**Trigger:** Evolution posts `MESSAGES_UPSERT` here.\n**Calls:** `POST /api/integrations/whatsapp/incoming-message`\n**Idempotency:** `evolution:<message id>` — Evolution retries, and a retry must\nnot create a second Potential Change.\n\n**This lane must never:** decide which project a message belongs to. It carries\nthe sender's phone; the app resolves identity and memberships. A courier that\nguesses at a project is how a claim ends up on the wrong job.",
-        "height": 300,
+        "height": 364,
         "width": 520,
         "color": 5
       },
@@ -46,7 +46,7 @@
       "typeVersion": 1,
       "position": [
         -880,
-        -420
+        -416
       ]
     },
     {
@@ -54,7 +54,6 @@
         "httpMethod": "POST",
         "path": "vo/whatsapp",
         "responseMode": "lastNode",
-        "responseData": "firstEntryJson",
         "options": {}
       },
       "id": "59489a8d-3b91-534e-91f6-898b16e21996",
@@ -62,14 +61,13 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -300,
-        -300
-      ],
-      "webhookId": "898dfcef-5a85-5917-9b33-8e809be51a71"
+        -304,
+        -304
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Evolution speaks Baileys. The app speaks its own contract. This is the only\n// node that knows both, on purpose: when Evolution changes shape, one node\n// changes.\nconst input = $input.first().json;\nconst body = input.body ?? input;\nconst data = body.data ?? {};\nconst key = data.key ?? {};\n\n// Our own outgoing messages come back through the same event.\nif (key.fromMe) return [];\n\nconst m = data.message ?? {};\nconst text = m.conversation ?? m.extendedTextMessage?.text ?? '';\nconst caption = m.imageMessage?.caption ?? m.videoMessage?.caption\n  ?? m.documentMessage?.caption ?? '';\n\nlet type = 'text';\nif (m.imageMessage) type = 'image';\nelse if (m.audioMessage) type = 'audio';\nelse if (m.videoMessage) type = 'video';\nelse if (m.documentMessage) type = 'document';\n\n// Nothing to read and nothing to look at. Not an error, just not a change.\nif (!text && !caption && type === 'text') return [];\n\nconst jid = String(key.remoteJid ?? '');\n// Groups end @g.us and carry the real sender in `participant`. A group message\n// signed by the group would resolve to no user at all.\nconst sender = jid.endsWith('@g.us') ? String(key.participant ?? '') : jid;\n\nconst payload = {\n  idempotency_key: 'evolution:' + (key.id ?? ''),\n  received_at: new Date((Number(data.messageTimestamp) || Date.now() / 1000) * 1000).toISOString(),\n  sender: {\n    phone: '+' + sender.split('@')[0].split(':')[0],\n    display_name: data.pushName || undefined,\n  },\n  message: {\n    type,\n    text: text || undefined,\n    caption: caption || undefined,\n    media: [],\n  },\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// Evolution speaks Baileys. The app speaks its own contract. This is the only\n// node that knows both, on purpose: when Evolution changes shape, one node\n// changes.\n//\n// Every item, not just the first. A webhook usually delivers one message, but\n// Evolution can batch, and `$input.first()` would drop the rest silently.\nreturn $input.all().flatMap((item) => {\n  const input = item.json;\n  const body = input.body ?? input;\n  const data = body.data ?? {};\n  const key = data.key ?? {};\n\n  // Our own outgoing messages come back through the same event.\n  if (key.fromMe) return [];\n\n  const m = data.message ?? {};\n  const text = m.conversation ?? m.extendedTextMessage?.text ?? '';\n  const caption = m.imageMessage?.caption ?? m.videoMessage?.caption\n    ?? m.documentMessage?.caption ?? '';\n\n  let type = 'text';\n  if (m.imageMessage) type = 'image';\n  else if (m.audioMessage) type = 'audio';\n  else if (m.videoMessage) type = 'video';\n  else if (m.documentMessage) type = 'document';\n\n  // Nothing to read and nothing to look at. Not an error, just not a change.\n  if (!text && !caption && type === 'text') return [];\n\n  const jid = String(key.remoteJid ?? '');\n  // Groups end @g.us and carry the real sender in `participant`. A group\n  // message signed by the group would resolve to no user at all.\n  const sender = jid.endsWith('@g.us') ? String(key.participant ?? '') : jid;\n  const phoneDigits = sender.split('@')[0].split(':')[0];\n  if (!phoneDigits) return [];\n\n  const payload = {\n    idempotency_key: 'evolution:' + (key.id ?? ''),\n    received_at: new Date((Number(data.messageTimestamp) || Date.now() / 1000) * 1000).toISOString(),\n    sender: {\n      phone: '+' + phoneDigits,\n      display_name: data.pushName || undefined,\n    },\n    message: {\n      type,\n      text: text || undefined,\n      caption: caption || undefined,\n      media: [],\n    },\n  };\n\n  return [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];\n});"
       },
       "id": "1217db4c-ac7a-5a0c-9c4e-e1c0e5781d89",
       "name": "A2 · Shape Message",
@@ -77,25 +75,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        -300
+        -304
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "28abb054-a004-519d-9f77-7d6689a85513",
       "name": "A3 · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        -300
+        144,
+        -304
       ],
       "credentials": {
         "crypto": {
@@ -131,9 +126,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -142,8 +135,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        -300
+        368,
+        -304
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -151,8 +144,8 @@
     },
     {
       "parameters": {
-        "content": "### Lane B · Email in\n**Trigger:** Gmail, unread in the VO mailbox.\n**Calls:** `POST /api/integrations/email/incoming-email`\n**Idempotency:** the Gmail message id.\n\n**Bound to the `Gmail account` credential.** The mailbox has not been chosen yet.\nSwap this node for IMAP if the client is not on Google.\n\n**This lane must never:** mark a mail read before the app has accepted it. A\nmail marked read on a failed POST is a change nobody ever sees again.",
-        "height": 280,
+        "content": "### Lane B · Email in\n**Trigger:** Gmail, unread in the VO mailbox.\n**Calls:** `POST /api/integrations/email/incoming-email`\n**Idempotency:** the Gmail message id.\n\n**Attachments are downloaded and forwarded**, base64, as evidence for the\nchange. B2 reads them with `this.helpers.getBinaryDataBuffer`, NOT off\n`binary[key].data` — this instance stores binary separately, so that field is\nabsent and the naive read yields an empty file with no error. B2 spends a\n20 MB budget per email and NAMES anything it had to leave behind in the body,\nbecause the app refuses a message over 32 MB outright.\n\n**Bound to the `Gmail account` credential.** Swap this node for IMAP if the\nclient is not on Google.\n\n**This lane must never:** mark a mail read before the app has accepted it. A\nmail marked read on a failed POST is a change nobody ever sees again.",
+        "height": 420,
         "width": 520,
         "color": 5
       },
@@ -162,7 +155,7 @@
       "typeVersion": 1,
       "position": [
         -880,
-        20
+        -32
       ]
     },
     {
@@ -178,15 +171,18 @@
         "filters": {
           "readStatus": "unread"
         },
-        "options": {}
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
       },
       "id": "b50cf4e9-9340-5a64-ae28-655a2c6eff9e",
       "name": "B1 · Gmail Trigger",
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1.4,
       "position": [
-        -300,
-        120
+        -304,
+        128
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -197,7 +193,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// With `simple: false` the Gmail Trigger already parses the message: from, to,\n// subject, text, date. It does NOT return the raw Gmail API envelope, so\n// reading payload.headers here — which is what the API returns — would find\n// nothing and every captured email would arrive with an empty sender.\nconst m = $input.first().json;\n\n// `from` arrives as `Name <address@host>` or bare. Take the address either way.\nconst raw = String(m.from ?? '');\nconst match = raw.match(/<([^>]+)>/);\nconst address = (match ? match[1] : raw).trim().toLowerCase();\nconst name = match ? raw.slice(0, raw.indexOf('<')).replace(/[\"']/g, '').trim() : '';\n\nconst list = (v) => (Array.isArray(v) ? v : String(v ?? '').split(','))\n  .map((x) => String(x).trim())\n  .filter(Boolean);\n\nconst payload = {\n  idempotency_key: 'gmail:' + (m.id ?? m.messageId ?? ''),\n  received_at: new Date(m.date ?? Date.now()).toISOString(),\n  from: { address, name: name || undefined },\n  to: list(m.to),\n  cc: list(m.cc),\n  subject: m.subject ?? '',\n  body_text: m.text ?? m.textAsHtml ?? '',\n  attachments: [],\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// The Gmail Trigger with `simple: false` returns a PARSED message, and `from`,\n// `to` and `cc` are mailparser ADDRESS OBJECTS:\n//\n//   { value: [{ address: 'a@b.com', name: 'A B' }], text: '...', html: '...' }\n//\n// The first version of this node treated them as strings. `String(m.from)`\n// yields the literal text \"[object Object]\", which the app correctly refused\n// with `400 from: Invalid email`. It failed loudly, which is the only good\n// thing about it.\nconst addressesOf = (field) => {\n  if (!field) return [];\n  const value = Array.isArray(field) ? field : field.value;\n  if (Array.isArray(value)) {\n    return value\n      .map((entry) => String(entry?.address ?? '').trim().toLowerCase())\n      .filter(Boolean);\n  }\n  // A plain string, kept because a future Gmail node version may return one:\n  // \"Name <a@b.com>, c@d.com\".\n  return String(field.text ?? field)\n    .split(',')\n    .map((part) => {\n      const match = part.match(/<([^>]+)>/);\n      return (match ? match[1] : part).trim().toLowerCase();\n    })\n    .filter(Boolean);\n};\n\nconst nameOf = (field) => {\n  const value = field && !Array.isArray(field) ? field.value : field;\n  if (Array.isArray(value) && value[0]?.name) return String(value[0].name).trim();\n  return '';\n};\n\n// The app refuses a captured message over 32 MB, because attachments are held\n// base64 encoded in the event row until somebody says which project it is. So\n// the budget is spent here, where a skipped file can still be NAMED in the\n// body, rather than at the door where the whole email would bounce.\nconst BASE64_BUDGET = 20 * 1024 * 1024;\n\n// EVERY item, not just the first. The trigger delivers a BATCH when more than\n// one message arrived since the last poll, and `$input.first()` dropped all but\n// one of them — an email that vanishes with no error anywhere. Two arrived on\n// the first real test and only one was ever sent.\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const m = items[i].json;\n  const address = addressesOf(m.from)[0] ?? '';\n\n  // No readable sender means the app cannot attribute it to anybody. Better to\n  // drop it here, visibly, than to POST a body we know will be refused.\n  if (!address) continue;\n\n  // ── Attachments become evidence ───────────────────────────────────────\n  // The trigger writes each one to a binary property: attachment_0, _1, ...\n  // The bytes are read through the helper and NOT off `binary[key].data`,\n  // because when n8n is configured to keep binary on the filesystem or S3\n  // that field is absent — and the naive read produces an empty file with no\n  // error, which is the worst way to lose a site photograph.\n  const attachments = [];\n  const skipped = [];\n  const binary = items[i].binary ?? {};\n  let budget = BASE64_BUDGET;\n\n  for (const key of Object.keys(binary)) {\n    const meta = binary[key] ?? {};\n    const fileName = meta.fileName || key;\n    try {\n      const buffer = await this.helpers.getBinaryDataBuffer(i, key);\n      const encoded = buffer.toString('base64');\n      if (encoded.length > budget) {\n        skipped.push(fileName + ' (too large to forward)');\n        continue;\n      }\n      budget -= encoded.length;\n      attachments.push({\n        external_id: String(m.id ?? 'gmail') + ':' + key,\n        file_name: fileName,\n        mime_type: meta.mimeType || 'application/octet-stream',\n        content_base64: encoded,\n      });\n    } catch (error) {\n      // One unreadable attachment must never lose the email it came with.\n      skipped.push(fileName + ' (could not be read)');\n    }\n  }\n\n  let bodyText = m.text ?? m.textAsHtml ?? '';\n  if (skipped.length > 0) {\n    bodyText += '\\n\\n[Not attached to this record: ' + skipped.join(', ') + ']';\n  }\n\n  const payload = {\n    idempotency_key: 'gmail:' + (m.id ?? m.messageId ?? ''),\n    received_at: new Date(m.date ?? Date.now()).toISOString(),\n    from: { address, name: nameOf(m.from) || undefined },\n    to: addressesOf(m.to),\n    cc: addressesOf(m.cc),\n    subject: m.subject ?? '',\n    body_text: bodyText,\n    attachments,\n  };\n\n  out.push({ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } });\n}\n\nreturn out;"
       },
       "id": "ddac1536-4ecd-5f91-938b-2aed95d21e74",
       "name": "B2 · Shape Email",
@@ -205,25 +201,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        120
+        128
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "8ea437fc-5110-502d-8ecd-91ca9d90de69",
       "name": "B3 · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        120
+        144,
+        128
       ],
       "credentials": {
         "crypto": {
@@ -259,9 +252,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -270,8 +261,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        120
+        368,
+        128
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -290,12 +281,18 @@
       "typeVersion": 1,
       "position": [
         -880,
-        260
+        272
       ]
     },
     {
       "parameters": {
-        "event": "fileCreated",
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
         "triggerOn": "specificFolder",
         "folderToWatch": {
           "__rl": true,
@@ -303,22 +300,16 @@
           "value": "1wBMqHELFV93RPzpgJEsAiY3l03OG0prr",
           "cachedResultName": "VO Capture & Control"
         },
-        "options": {},
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        }
+        "event": "fileCreated",
+        "options": {}
       },
       "id": "5e91b469-c0fd-5927-93b2-755f57501949",
       "name": "C1 · Drive Trigger",
       "type": "n8n-nodes-base.googleDriveTrigger",
       "typeVersion": 1,
       "position": [
-        -300,
-        340
+        -304,
+        352
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -329,7 +320,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// The project code comes from the folder name, which is where the app puts it\n// (`DXB-001 — Dubai Office Fit-Out`). If it cannot be read, send it anyway and\n// let the app reject it: a 4xx that names the file beats a document filed\n// against a project somebody guessed at.\nconst f = $input.first().json;\nconst name = f.name ?? '';\nconst parentName = f.parentFolderName ?? f.parents?.[0]?.name ?? '';\nconst code = (parentName.match(/^[A-Z]{2,4}-\\d{3}/) ?? name.match(/^[A-Z]{2,4}-\\d{3}/) ?? [''])[0];\n\nconst payload = {\n  idempotency_key: 'drive:' + (f.id ?? ''),\n  project_code: code,\n  document_name: name,\n  document_type: 'other',\n  external_file_id: f.id,\n  source_url: f.webViewLink || undefined,\n};\n\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(payload) } }];"
+        "jsCode": "// The project code comes from the folder name, which is where the app puts it\n// (`DXB-001 — Dubai Office Fit-Out`). If it cannot be read, send it anyway and\n// let the app reject it: a 4xx that names the file beats a document filed\n// against a project somebody guessed at.\n//\n// Every item, not just the first. One Drive poll routinely returns several new\n// files, and `$input.first()` filed one and lost the rest with no error.\nreturn $input.all().map((item) => {\n  const f = item.json;\n  const name = f.name ?? '';\n  const parentName = f.parentFolderName ?? f.parents?.[0]?.name ?? '';\n  const code = (parentName.match(/^[A-Z]{2,4}-\\d{3}/) ?? name.match(/^[A-Z]{2,4}-\\d{3}/) ?? [''])[0];\n\n  const payload = {\n    idempotency_key: 'drive:' + (f.id ?? ''),\n    project_code: code,\n    document_name: name,\n    document_type: 'other',\n    external_file_id: f.id,\n    source_url: f.webViewLink || undefined,\n  };\n\n  return { json: { ts: String(Date.now()), payload: JSON.stringify(payload) } };\n});"
       },
       "id": "0f123143-252f-5778-a2fa-166c99c2a415",
       "name": "C2 · Shape Document",
@@ -337,25 +328,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        340
+        352
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "18c8ce45-a90d-5d60-87ba-179fe7c96e02",
       "name": "C3 · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        340
+        144,
+        352
       ],
       "credentials": {
         "crypto": {
@@ -391,9 +379,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -402,8 +388,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        340
+        368,
+        352
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -411,8 +397,8 @@
     },
     {
       "parameters": {
-        "content": "### Lane D · Email out\n**Trigger:** the app posts a queued notification here.\n**Sends:** Gmail.\n**Then:** reports back to `/api/integrations/notifications/delivery-status`.\n\n**The callback is the point.** The app marks a row `queued` when it hands the\nmessage over, never `sent`. Only D9 can move it to delivered. Without that,\nthe app would claim a notice was delivered on the strength of its own outbound\nrequest — which is exactly the claim that loses an argument later.\n\n**Bound to the `Gmail account` credential.**",
-        "height": 320,
+        "content": "### Lane D · Email out\n**Trigger:** the app posts a queued notification here.\n**Sends:** Gmail — as a REPLY when the app says what it is answering.\n**Then:** reports back to `/api/integrations/notifications/delivery-status`.\n\n**D3a splits on `reply_to_message_id`.** When the app is answering a captured\nemail (\"which project did you mean?\", \"this is DXB-001, correct?\") it sends the\noriginal Gmail id, and D4b replies on that thread. Everything else goes out as\na fresh mail through D4. A question that arrives detached from the mail that\nprovoked it reads as noise from the system, and noise is what people stop\nopening — which would quietly kill capture.\n\n**The callback is the point.** The app marks a row `queued` when it hands the\nmessage over, never `sent`. Only D9 can move it to delivered. Without that,\nthe app would claim a notice was delivered on the strength of its own outbound\nrequest — which is exactly the claim that loses an argument later.\n\n**Bound to the `Gmail account` credential.**",
+        "height": 400,
         "width": 520,
         "color": 6
       },
@@ -422,7 +408,7 @@
       "typeVersion": 1,
       "position": [
         -880,
-        520
+        528
       ]
     },
     {
@@ -430,7 +416,6 @@
         "httpMethod": "POST",
         "path": "vo/notify-email",
         "responseMode": "lastNode",
-        "responseData": "firstEntryJson",
         "options": {
           "rawBody": true
         }
@@ -440,19 +425,15 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -300,
-        620
-      ],
-      "webhookId": "cbad79c0-e113-5ddb-952e-3f2e081e4a43"
+        -304,
+        624
+      ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
-        "dataPropertyName": "expected",
-        "encoding": "hex"
+        "dataPropertyName": "expected"
       },
       "id": "434e8719-39f6-5e3a-9beb-7f463561cc8f",
       "name": "D2 · Recompute Signature",
@@ -460,7 +441,7 @@
       "typeVersion": 2,
       "position": [
         -80,
-        620
+        624
       ],
       "credentials": {
         "crypto": {
@@ -474,9 +455,9 @@
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "version": 2,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "and",
           "conditions": [
@@ -498,8 +479,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        140,
-        620
+        144,
+        624
       ]
     },
     {
@@ -511,16 +492,16 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
-        360,
-        840
+        368,
+        848
       ]
     },
     {
       "parameters": {
         "sendTo": "={{ $json.body.to }}",
         "subject": "={{ $json.body.subject }}",
-        "message": "={{ $json.body.body }}",
         "emailType": "text",
+        "message": "={{ $json.body.body }}",
         "options": {
           "appendAttribution": false
         }
@@ -530,16 +511,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        360,
-        620
+        368,
+        624
       ],
-      "onError": "continueErrorOutput",
       "credentials": {
         "gmailOAuth2": {
           "id": "nYohZIRCus2816jl",
           "name": "Gmail account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -550,18 +531,15 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        620
+        592,
+        624
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "7a463af7-ce7f-54b3-9d34-022f6ceb7ba4",
       "name": "D8 · Sign Delivery Report",
@@ -569,7 +547,7 @@
       "typeVersion": 2,
       "position": [
         800,
-        620
+        624
       ],
       "credentials": {
         "crypto": {
@@ -605,9 +583,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -616,8 +592,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1020,
-        620
+        1024,
+        624
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -632,8 +608,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        820
+        592,
+        832
       ]
     },
     {
@@ -657,7 +633,6 @@
         "httpMethod": "POST",
         "path": "vo/notify-whatsapp",
         "responseMode": "lastNode",
-        "responseData": "firstEntryJson",
         "options": {
           "rawBody": true
         }
@@ -667,19 +642,15 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -300,
-        1060
-      ],
-      "webhookId": "e10d27b6-700f-5dea-bcb2-2371898fc3a7"
+        -304,
+        1072
+      ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
-        "dataPropertyName": "expected",
-        "encoding": "hex"
+        "dataPropertyName": "expected"
       },
       "id": "3f2e1ff7-7e58-5b2b-9dae-2bc948d10aa4",
       "name": "E2 · Recompute Signature",
@@ -687,7 +658,7 @@
       "typeVersion": 2,
       "position": [
         -80,
-        1060
+        1072
       ],
       "credentials": {
         "crypto": {
@@ -701,9 +672,9 @@
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "version": 2,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "and",
           "conditions": [
@@ -725,8 +696,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        140,
-        1060
+        144,
+        1072
       ]
     },
     {
@@ -738,7 +709,7 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
-        360,
+        368,
         1280
       ]
     },
@@ -758,7 +729,6 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ number: $json.body.to, text: ($json.body.subject ? $json.body.subject + '\\n\\n' : '') + $json.body.body }) }}",
         "options": {}
@@ -768,16 +738,16 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        1060
+        368,
+        1072
       ],
-      "onError": "continueErrorOutput",
       "credentials": {
         "httpHeaderAuth": {
           "id": "yNOZlmIi6LbsfjFt",
           "name": "VO · Evolution API"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -788,18 +758,15 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        1060
+        592,
+        1072
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "240ac963-58a5-587e-b5ca-972c900e5091",
       "name": "E8 · Sign Delivery Report",
@@ -807,7 +774,7 @@
       "typeVersion": 2,
       "position": [
         800,
-        1060
+        1072
       ],
       "credentials": {
         "crypto": {
@@ -843,9 +810,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -854,8 +819,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1020,
-        1060
+        1024,
+        1072
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -870,8 +835,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        1260
+        592,
+        1264
       ]
     },
     {
@@ -887,7 +852,7 @@
       "typeVersion": 1,
       "position": [
         -880,
-        1380
+        1392
       ]
     },
     {
@@ -906,8 +871,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -300,
-        1500
+        -304,
+        1504
       ]
     },
     {
@@ -920,25 +885,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        1500
+        1504
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "c81455be-9728-5ed2-ab71-9d8a54aa948e",
       "name": "S1b · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        1500
+        144,
+        1504
       ],
       "credentials": {
         "crypto": {
@@ -974,9 +936,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -985,8 +945,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        1500
+        368,
+        1504
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -1008,8 +968,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -300,
-        1700
+        -304,
+        1712
       ]
     },
     {
@@ -1022,25 +982,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        1700
+        1712
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "75023b53-dddb-52e6-8ef8-566a5dfade1f",
       "name": "S2b · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        1700
+        144,
+        1712
       ],
       "credentials": {
         "crypto": {
@@ -1076,9 +1033,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -1087,8 +1042,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        1700
+        368,
+        1712
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -1099,9 +1054,7 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
-              "triggerAtHour": 6,
-              "triggerAtMinute": 0
+              "triggerAtHour": 6
             }
           ]
         }
@@ -1111,8 +1064,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -300,
-        1900
+        -304,
+        1904
       ]
     },
     {
@@ -1125,25 +1078,22 @@
       "typeVersion": 2,
       "position": [
         -80,
-        1900
+        1904
       ]
     },
     {
       "parameters": {
         "action": "hmac",
-        "binaryData": false,
-        "type": "SHA256",
         "value": "={{ $json.ts + '.' + $json.payload }}",
-        "dataPropertyName": "signature",
-        "encoding": "hex"
+        "dataPropertyName": "signature"
       },
       "id": "9f260309-7b8e-5645-bac0-40290adf637d",
       "name": "S3b · Sign",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        140,
-        1900
+        144,
+        1904
       ],
       "credentials": {
         "crypto": {
@@ -1179,9 +1129,7 @@
         "body": "={{ $json.payload }}",
         "options": {
           "response": {
-            "response": {
-              "neverError": false
-            }
+            "response": {}
           }
         }
       },
@@ -1190,8 +1138,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        360,
-        1900
+        368,
+        1904
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -1210,7 +1158,7 @@
       "typeVersion": 1,
       "position": [
         -880,
-        2120
+        2128
       ]
     },
     {
@@ -1220,8 +1168,8 @@
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -300,
-        2200
+        -304,
+        2208
       ]
     },
     {
@@ -1234,7 +1182,7 @@
       "typeVersion": 2,
       "position": [
         -80,
-        2200
+        2208
       ]
     },
     {
@@ -1249,9 +1197,69 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        900,
-        2120
+        912,
+        2128
       ]
+    },
+    {
+      "id": "9877cc46-1fa9-44f0-99d9-67c96bfd88a5",
+      "name": "D3a · Is a Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        256,
+        624
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "D-reply",
+              "leftValue": "={{ $json.body.reply_to_message_id }}",
+              "rightValue": "gmail:",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "06d1ce4d-d890-4511-82e1-d906f3d438da",
+      "name": "D4b · Reply On Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        368,
+        448
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "={{ $json.body.reply_to_message_id.replace('gmail:', '') }}",
+        "emailType": "text",
+        "message": "={{ $json.body.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nYohZIRCus2816jl",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueErrorOutput"
     }
   ],
   "connections": {
@@ -1380,7 +1388,7 @@
       "main": [
         [
           {
-            "node": "D4 · Send Email",
+            "node": "D3a · Is a Reply?",
             "type": "main",
             "index": 0
           }
@@ -1640,6 +1648,42 @@
         [
           {
             "node": "H2 · Name The Lane",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3a · Is a Reply?": {
+      "main": [
+        [
+          {
+            "node": "D4b · Reply On Thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "D4 · Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D4b · Reply On Thread": {
+      "main": [
+        [
+          {
+            "node": "D7 · Build Delivery Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "D6 · Email Failed",
             "type": "main",
             "index": 0
           }
