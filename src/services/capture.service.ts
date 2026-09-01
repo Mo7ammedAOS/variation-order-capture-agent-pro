@@ -15,6 +15,7 @@ import { NotFoundError, ValidationError } from '@/lib/errors';
 import { assertCapability, assertProjectAccess } from '@/services/project-access.service';
 import { closeEvent, listUnprocessedEvents } from '@/services/integration.service';
 import {
+  acknowledgeCapture,
   askWhichProject,
   confirmProject,
   tryAnswerQuestion,
@@ -56,7 +57,9 @@ import { storeCaptureEvidence, type CaptureAttachment } from '@/services/documen
 
 export type CaptureOutcome =
   | { kind: 'created'; potentialChangeId: string; pcNumber: string; projectId: string }
-  | { kind: 'needs_triage'; reason: string; candidateProjectIds: string[] };
+  | { kind: 'needs_triage'; reason: string; candidateProjectIds: string[] }
+  /** The reporter withdrew it. Nothing was filed, and that was the right answer. */
+  | { kind: 'cancelled'; reason: string };
 
 export interface CaptureInput {
   channel: Extract<SourceType, 'whatsapp' | 'email'>;
@@ -97,6 +100,29 @@ export async function captureFromChannel(
     text: input.text,
   });
 
+  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
+  // Nothing is filed and the message leaves the inbox, because a withdrawn
+  // report waiting on a coordinator is worse than no report at all: somebody
+  // spends time on it and finds there was nothing there.
+  if (answer?.outcome === 'cancelled') {
+    await closeEvent(answer.integrationEventId, 'ignored', {
+      cancelledByUserId: answer.userId,
+      cancelledAt: new Date().toISOString(),
+      reason: 'Withdrawn by the reporter',
+      via: input.channel,
+    });
+
+    await acknowledgeCapture({
+      userId: answer.userId,
+      token: `${answer.questionId.slice(0, 4).toUpperCase()}X`,
+      text: 'Cancelled. Nothing has been recorded against any project.',
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+
+    return { kind: 'cancelled', reason: `${answer.userName} withdrew it` };
+  }
+
   if (answer?.outcome === 'answered' && answer.projectId) {
     // The attachments came with the ORIGINAL message, not with the word "yes".
     // Reading them off this reply alone would file the change and quietly lose
@@ -121,6 +147,29 @@ export async function captureFromChannel(
         projectId: answer.projectId,
         pcNumber: outcome.pcNumber,
         via: input.channel,
+      });
+
+      // Tell them it landed, and where. Without this the exchange just stops,
+      // and a reporter who is not told assumes he was not heard.
+      // QUOTES THE REPORT IT FILED, and that is load bearing.
+      //
+      // A token-less reply is applied to the most recent open question. That is
+      // right almost always and wrong occasionally, and this line is what makes
+      // the occasional case survivable: the reporter reads back his own words
+      // and knows within seconds whether the right thing was filed. Without the
+      // quote, answering the wrong question is invisible.
+      const filed = answer.originalText.trim();
+      const excerpt = filed.length > 100 ? `${filed.slice(0, 100).trimEnd()}…` : filed;
+
+      await acknowledgeCapture({
+        userId: answer.userId,
+        token: outcome.pcNumber,
+        text:
+          `Filed as ${outcome.pcNumber}.\n\n"${excerpt}"\n\n` +
+          `A notice assessment has been raised and the contractual clock is ` +
+          `running from the date of the event. Reply CANCEL if that is the wrong report.`,
+        sourceMessageId: answer.sourceMessageId,
+        sourceSubject: answer.sourceSubject,
       });
     }
     return outcome;

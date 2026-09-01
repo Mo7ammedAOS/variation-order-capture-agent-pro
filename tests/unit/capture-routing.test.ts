@@ -25,6 +25,7 @@ const state = {
   answer: null as Record<string, unknown> | null,
   eventPayload: null as unknown,
   senders: null as Record<string, unknown>[] | null,
+  acknowledged: [] as Record<string, unknown>[],
 };
 
 vi.mock('server-only', () => ({}));
@@ -78,6 +79,9 @@ vi.mock('@/services/capture-question.service', () => ({
     return { token: 'CNF1' };
   },
   tryAnswerQuestion: async () => state.answer,
+  acknowledgeCapture: async (input: Record<string, unknown>) => {
+    state.acknowledged.push(input);
+  },
 }));
 
 vi.mock('@/services/document.service', () => ({
@@ -156,6 +160,7 @@ describe('choosing the project a captured message belongs to', () => {
     state.answer = null;
     state.eventPayload = null;
     state.senders = null;
+    state.acknowledged = [];
   });
 
   it('files straight away when the sender is on exactly one live project', async () => {
@@ -248,6 +253,7 @@ describe('evidence that arrived with the message', () => {
     state.answer = null;
     state.eventPayload = null;
     state.senders = null;
+    state.acknowledged = [];
   });
 
   it('files the attachments against the change it created', async () => {
@@ -292,6 +298,30 @@ describe('evidence that arrived with the message', () => {
     expect(state.evidence[0]?.attachments).toHaveLength(1);
     // And the change carries the ORIGINAL report, not the word "yes".
     expect(state.created[0]?.description).toContain('reception wall');
+    // The exchange is closed by telling them where it landed. A reporter who
+    // is never told assumes he was not heard, and reports it again by hand.
+    expect(String(state.acknowledged[0]?.text)).toContain('PC-');
+  });
+
+  it('files nothing and says so when the reporter cancels', async () => {
+    state.answer = {
+      outcome: 'cancelled',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: null,
+      originalText: 'Client wants the reception wall moved 400mm',
+      candidateProjectIds: ['proj-a', 'proj-b'],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('cancel');
+    expect(outcome.kind).toBe('cancelled');
+    expect(state.created).toHaveLength(0);
+    expect(state.evidence).toHaveLength(0);
+    expect(String(state.acknowledged[0]?.text)).toContain('Nothing has been recorded');
   });
 
   it('re-asks with the full list when the reporter says we had it wrong', async () => {

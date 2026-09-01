@@ -83,12 +83,17 @@ function distinctiveTokens(name: string): string[] {
 /**
  * A project code, however it was typed.
  *
+ * Exported because answering "which project?" needs exactly the same tolerance
+ * as reading a project out of a report. Somebody replying `dxb004` to a list
+ * that said `DXB-004` has answered the question, and a matcher strict enough to
+ * miss that turns a settled conversation into a parked message.
+ *
  * `DXB-001` has to be found in "DXB001", "dxb 001" and "DXB - 001", because all
  * three get typed on a phone. The separator is allowed to be anything up to
  * three characters wide, and the ends are anchored so `DXB-001` does not match
  * inside `DXB-0012`.
  */
-function codePattern(projectCode: string): RegExp {
+export function codePattern(projectCode: string): RegExp {
   const runs = projectCode.toUpperCase().match(/[A-Z0-9]+/g) ?? [];
   if (runs.length === 0) return /(?!)/;
   const body = runs.map(escapeRegExp).join('[^A-Z0-9]{0,3}');

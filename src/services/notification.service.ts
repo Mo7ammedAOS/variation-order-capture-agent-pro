@@ -252,13 +252,27 @@ export async function recordDirectNotifications(
  * would let the app claim a notice was delivered on the strength of its own
  * outbound request, which is exactly the claim that loses an argument later.
  */
-export async function dispatchPendingNotifications(limit = 100): Promise<{
+export async function dispatchPendingNotifications(
+  limit = 100,
+  /**
+   * Restricts the sweep to one logical message, by dedupe-key prefix.
+   *
+   * Used by `dispatchNow` so answering somebody takes their message and only
+   * theirs. A conversational reply that flushed the whole outbound queue would
+   * make one person's WhatsApp the trigger for everybody else's overdue chase.
+   */
+  dedupeSeed?: string,
+): Promise<{
   attempted: number;
   queued: number;
   failed: number;
 }> {
   const pending = await prisma.notificationLog.findMany({
-    where: { status: 'pending', channel: { in: ['email', 'whatsapp'] } },
+    where: {
+      status: 'pending',
+      channel: { in: ['email', 'whatsapp'] },
+      ...(dedupeSeed ? { dedupeKey: { startsWith: dedupeSeed } } : {}),
+    },
     orderBy: { requestedAt: 'asc' },
     take: limit,
     include: {
@@ -338,6 +352,37 @@ export async function dispatchPendingNotifications(limit = 100): Promise<{
   }
 
   return { attempted: pending.length, queued, failed };
+}
+
+/**
+ * Sends one message NOW, without waiting for the sweep.
+ *
+ * ── Why a conversation cannot run on a cron ────────────────────────────────
+ * "Which project did you mean?" is a question a person is standing there
+ * waiting for. Recording it and leaving it to a scheduled dispatcher put a
+ * two to thirty minute pause in the middle of an exchange that takes fifteen
+ * seconds on either side, and a site engineer who gets no reply assumes the
+ * thing is broken and goes back to WhatsApping his PM directly. The system
+ * loses by being slow long before it loses by being wrong.
+ *
+ * So the question goes out on the same request that created it. The sweep
+ * stays, and stays unchanged, as the safety net for anything this call could
+ * not deliver — a lane that was down, a container that died mid-send. Belt and
+ * braces, not belt instead of braces.
+ *
+ * ── Why it cannot throw ────────────────────────────────────────────────────
+ * The caller is a capture route. A message that could not be sent this second
+ * is still recorded, still owed, and will go on the next sweep; letting a
+ * courier's bad minute bubble up would fail the whole capture and lose the
+ * report that provoked the question. So failures are swallowed here and
+ * recorded on the row, where they are inspectable.
+ */
+export async function dispatchNow(dedupeSeed: string): Promise<void> {
+  try {
+    await dispatchPendingNotifications(10, dedupeSeed);
+  } catch {
+    // Deliberately silent. The row carries the failure; the sweep retries.
+  }
 }
 
 /* ─── Reading, for the bell ──────────────────────────────────────────────── */

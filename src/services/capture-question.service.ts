@@ -1,8 +1,12 @@
 import 'server-only';
 import type { CaptureQuestionKind, Prisma, SourceType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { loadRecipients, recordDirectNotifications } from '@/services/notification.service';
-import { describeMatch, type ProjectMatch } from '@/lib/project-match';
+import {
+  dispatchNow,
+  loadRecipients,
+  recordDirectNotifications,
+} from '@/services/notification.service';
+import { codePattern, describeMatch, type ProjectMatch } from '@/lib/project-match';
 import { resolveSender } from '@/services/sender-identity.service';
 
 /**
@@ -51,6 +55,16 @@ const TOKEN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TOKEN_LENGTH = 4;
 const EXPIRES_AFTER_DAYS = 7;
 
+/**
+ * How long a token-less reply is still read as part of the conversation.
+ *
+ * A question stays answerable for seven days BY TOKEN, because somebody may
+ * come back to a parked report. But a bare "2" only means "the thing you just
+ * asked me". After this long it is far likelier to be a new report that starts
+ * with a number, and reading it as an answer would throw that report away.
+ */
+const CONVERSATION_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 /** Whole-reply agreement. Every word has to be one of these, or it is not a yes. */
 const AFFIRMATIVE = new Set([
   'YES', 'Y', 'YEP', 'YEAH', 'YUP', 'CORRECT', 'CONFIRM', 'CONFIRMED', 'RIGHT',
@@ -60,6 +74,32 @@ const AFFIRMATIVE = new Set([
 const NEGATIVE = new Set([
   'NO', 'NOPE', 'NOT', 'WRONG', 'INCORRECT', 'NEGATIVE', 'THATS', 'THAT', 'IS', 'IT',
 ]);
+
+/**
+ * Closing the conversation without filing anything.
+ *
+ * A reporter who realises it is not a change needs a way to say so, or the
+ * question sits open for seven days and the message sits in the inbox waiting
+ * for a coordinator who will never know it was withdrawn.
+ */
+const CANCEL = new Set([
+  'CANCEL', 'CANCELLED', 'IGNORE', 'DISREGARD', 'FORGET', 'NEVERMIND', 'NEVER',
+  'MIND', 'IT', 'STOP', 'DELETE', 'REMOVE', 'NOTHING', 'MISTAKE', 'SORRY',
+  // Filler that carries no meaning of its own, so "my mistake" and "it was a
+  // mistake" read the same as "cancel". None of these can cancel alone: the
+  // rule is that EVERY word must be in this set, and a reply of just "was"
+  // still has to get past the four word ceiling and mean something.
+  'MY', 'WAS', 'A', 'THIS', 'THAT',
+]);
+
+/**
+ * Words that can sit in front of a number without changing its meaning.
+ *
+ * "2", "no 2", "project 2", "option 2", "#2" are the same answer. Anything
+ * else in the reply and it stops being a bare answer and becomes a report,
+ * which is the distinction the strict rule below exists to protect.
+ */
+const NUMBER_PREFIXES = new Set(['NO', 'NUMBER', 'PROJECT', 'OPTION', 'ITS', 'IT', 'IS', 'THE']);
 
 export interface AskInput {
   integrationEventId: string;
@@ -95,7 +135,7 @@ export interface AnswerAttempt {
  * fields either way and the only difference is whether a project was settled.
  */
 export interface QuestionReply {
-  outcome: 'answered' | 'rejected';
+  outcome: 'answered' | 'rejected' | 'cancelled';
   questionId: string;
   integrationEventId: string;
   userId: string;
@@ -188,6 +228,11 @@ async function putQuestion(input: {
       replyToMessageId: input.sourceMessageId,
     });
   });
+
+  // Out of the door NOW, not on the next sweep. AFTER the transaction, because
+  // this makes network calls and the transaction holds row locks — the same
+  // rule that cost this project a duplicated Drive folder tree once already.
+  await dispatchNow(`question:${input.token}`);
 }
 
 /**
@@ -304,6 +349,68 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
   return { token };
 }
 
+/**
+ * The list position somebody meant, or null.
+ *
+ * Accepts a number surrounded only by permitted filler. Returns null the moment
+ * a word appears that is not filler, because at that point the reply is prose
+ * and prose is a report.
+ */
+function bareNumber(text: string): number | null {
+  const words = text.split(/[^A-Z0-9]+/).filter(Boolean);
+  if (words.length === 0 || words.length > 4) return null;
+
+  let found: number | null = null;
+  for (const word of words) {
+    if (/^\d{1,2}$/.test(word)) {
+      // Two numbers is not an answer, it is a sentence.
+      if (found !== null) return null;
+      found = Number(word);
+      continue;
+    }
+    if (!NUMBER_PREFIXES.has(word)) return null;
+  }
+  return found;
+}
+
+/**
+ * The last message in the exchange.
+ *
+ * A conversation that ends without a reply does not feel finished, and a
+ * reporter who is never told his change was filed has no way to know whether
+ * the system heard him — so he tells his PM again, by hand, which is the
+ * behaviour this product exists to replace. Two sentences close the loop.
+ *
+ * Sent on the same request, like the question itself. Best effort: failing to
+ * say "filed" must never unfile anything.
+ */
+export async function acknowledgeCapture(input: {
+  userId: string;
+  token: string;
+  text: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+}): Promise<void> {
+  const recipients = await loadRecipients([input.userId]);
+  if (recipients.length === 0) return;
+
+  const seed = `ack:${input.token}`;
+
+  await prisma.$transaction(async (tx) => {
+    await recordDirectNotifications(tx as Prisma.TransactionClient, {
+      kind: 'capture_question',
+      subject: replySubject(input.sourceSubject, input.token),
+      body: input.text,
+      recipients,
+      dedupeSeed: seed,
+      on: new Date(),
+      replyToMessageId: input.sourceMessageId ?? null,
+    });
+  });
+
+  await dispatchNow(seed);
+}
+
 /** True when EVERY word of the reply is in `vocabulary`. A partial is not an answer. */
 function isWholly(text: string, vocabulary: Set<string>): boolean {
   // Digits are split out as their own words and are in neither vocabulary, so
@@ -342,10 +449,26 @@ export async function tryAnswerQuestion(
   const text = attempt.text.trim();
   const upper = text.toUpperCase();
 
-  // A token in the text names the question outright. Without one, an answer is
-  // only safe to apply when exactly one question is outstanding.
+  // A token in the text names the question outright.
+  //
+  // Without one, the answer belongs to the MOST RECENT open question — which
+  // is how a conversation works: you answer the last thing you were asked.
+  // This used to refuse whenever two were outstanding, which was safe and
+  // useless: someone with three parked reports could not answer any of them
+  // without copying a code out of an old message.
+  //
+  // What makes the looser rule acceptable is that a mistake is now VISIBLE
+  // within seconds. The acknowledgement quotes the report it filed, so
+  // answering the wrong question is something the reporter sees immediately
+  // and can correct, instead of a silent wrong filing nobody ever looks at.
+  //
+  // The staleness guard is the remaining protection: a "2" arriving a day
+  // later is not a reply to anything, and is treated as a new report.
   const byToken = open.find((q) => new RegExp(`\\b${q.token}\\b`).test(upper));
-  const question = byToken ?? (open.length === 1 ? open[0] : null);
+  const newest = open[0];
+  const question =
+    byToken ??
+    (newest && Date.now() - newest.askedAt.getTime() < CONVERSATION_WINDOW_MS ? newest : null);
   if (!question) return null;
 
   const projects = await prisma.project.findMany({
@@ -360,12 +483,25 @@ export async function tryAnswerQuestion(
 
   // A project code is unambiguous and beats everything else, in case someone
   // writes both. It also survives the list being read out of order.
-  const byCode = projects.find((p) => new RegExp(`\\b${p.projectCode}\\b`).test(withoutToken));
+  //
+  // Matched with the SAME tolerance used to read a code out of a report:
+  // `DXB-004`, `dxb004`, `dxb 004` and `DXB - 004` are one answer. Requiring
+  // the exact punctuation of the list would park a conversation the reporter
+  // had already settled, which is the most irritating possible way to fail.
+  const byCode = projects.find((p) => codePattern(p.projectCode).test(withoutToken));
 
   let chosenProjectId: string | null = byCode?.id ?? null;
   let rejected = false;
+  let cancelled = false;
 
-  if (!chosenProjectId && question.kind === 'confirm') {
+  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
+  // Checked before everything except a code, because someone who names a
+  // project has plainly not withdrawn it.
+  if (!chosenProjectId && isWholly(withoutToken, CANCEL)) {
+    cancelled = true;
+  }
+
+  if (!chosenProjectId && !cancelled && question.kind === 'confirm') {
     // Element zero is the proposal — see the header note.
     if (isWholly(withoutToken, AFFIRMATIVE)) {
       chosenProjectId = question.candidateProjectIds[0] ?? null;
@@ -376,18 +512,22 @@ export async function tryAnswerQuestion(
     // confirmation, so a "2" in the reply means something we cannot see.
   }
 
-  if (!chosenProjectId && !rejected && question.kind === 'choose') {
-    // Only a bare, short numeric answer counts. "2" is an answer; "moving 2
-    // sockets on level 2" is a new report, and reading it as an answer would
-    // throw the report away.
-    const bare = withoutToken.match(/^#?(\d{1,2})$/);
-    if (bare) {
-      const index = Number(bare[1]) - 1;
-      chosenProjectId = question.candidateProjectIds[index] ?? null;
+  if (!chosenProjectId && !rejected && !cancelled && question.kind === 'choose') {
+    // A number, with or without the small words people put in front of it.
+    // "2", "no 2", "project 2", "#2", "its 2" are one answer.
+    //
+    // Still deliberately strict about everything else: "moving 2 sockets on
+    // level 2" is a REPORT, and reading it as an answer files it against a
+    // project nobody chose and throws the report away. That is the one failure
+    // here worth being pedantic about, so every other word in the reply has to
+    // be a permitted filler.
+    const index = bareNumber(withoutToken);
+    if (index !== null) {
+      chosenProjectId = question.candidateProjectIds[index - 1] ?? null;
     }
   }
 
-  if (!chosenProjectId && !rejected) return null;
+  if (!chosenProjectId && !rejected && !cancelled) return null;
 
   // Claim it atomically. Two replies racing — the email and the WhatsApp both
   // answered — must file one change, not two.
@@ -396,14 +536,14 @@ export async function tryAnswerQuestion(
     // A rejection CANCELS the question. The caller then re-asks, which reopens
     // this same row with a fresh token — so a second "no" arriving from the
     // other channel finds nothing open and does not re-ask twice.
-    data: rejected
+    data: rejected || cancelled
       ? { status: 'cancelled', answeredAt: new Date() }
       : { status: 'answered', answeredAt: new Date(), chosenProjectId },
   });
   if (claimed.count === 0) return null;
 
   return {
-    outcome: rejected ? 'rejected' : 'answered',
+    outcome: cancelled ? 'cancelled' : rejected ? 'rejected' : 'answered',
     questionId: question.id,
     integrationEventId: question.integrationEventId,
     userId: user.id,

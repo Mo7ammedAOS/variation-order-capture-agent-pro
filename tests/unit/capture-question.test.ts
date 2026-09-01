@@ -43,6 +43,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.map((id) => ({ userId: id, email: 'a@b.c', phone: '+9715' })),
   recordDirectNotifications: async () => 1,
+  dispatchNow: async () => undefined,
 }));
 
 const { tryAnswerQuestion } = await import('@/services/capture-question.service');
@@ -107,9 +108,35 @@ describe('answering "which project did you mean?"', () => {
     expect(await tryAnswerQuestion(attempt('9'))).toBeNull();
   });
 
-  it('will not guess between TWO outstanding questions without a token', async () => {
-    state.questions = [question(), question({ id: 'q2', token: 'M7PQ' })];
+  it('answers the MOST RECENT question when no token is given', async () => {
+    // How a conversation works: you answer the last thing you were asked.
+    // Refusing here was safe and useless — somebody with three parked reports
+    // could not answer any of them without copying a code out of an old
+    // message, which is exactly the friction that makes people give up and
+    // WhatsApp their PM directly instead.
+    //
+    // What makes it safe is downstream: the acknowledgement quotes the report
+    // it filed, so answering the wrong one is visible within seconds.
+    state.questions = [
+      question({ id: 'q2', token: 'M7PQ', candidateProjectIds: ['proj-c', 'proj-a'] }),
+      question(),
+    ];
+    const reply = await tryAnswerQuestion(attempt('2'));
+    expect(reply?.projectId).toBe('proj-a');
+    expect(state.claimed[0]?.id).toBe('q2');
+  });
+
+  it('ignores a bare number long after the conversation ended', async () => {
+    // A "2" arriving a day later is not a reply. It is far likelier to be a
+    // new report that happens to start with a number, and reading it as an
+    // answer would throw that report away.
+    state.questions = [question({ askedAt: new Date(Date.now() - 20 * 3600 * 1000) })];
     expect(await tryAnswerQuestion(attempt('2'))).toBeNull();
+  });
+
+  it('still answers an old question when the token names it', async () => {
+    state.questions = [question({ askedAt: new Date(Date.now() - 20 * 3600 * 1000) })];
+    expect((await tryAnswerQuestion(attempt('K4T9 2')))?.projectId).toBe('proj-b');
   });
 
   it('uses the token to pick between two outstanding questions', async () => {
@@ -226,5 +253,81 @@ describe('confirming a project we read out of the message', () => {
 
     const reply = await tryAnswerQuestion(attempt(quoted));
     expect(reply?.projectId).toBe('proj-b');
+  });
+});
+
+/**
+ * Answering it the way a person on a phone actually types.
+ *
+ * The strictness here is asymmetric on purpose. Missing an answer parks a
+ * conversation the reporter thought he had finished — annoying, and he will
+ * tell you. Reading a REPORT as an answer files it against a project nobody
+ * chose and throws the report away — silent, and nobody ever tells you.
+ */
+describe('reading a loosely typed answer', () => {
+  beforeEach(() => {
+    state.user = { id: 'ahmed', fullName: 'Ahmed' };
+    state.questions = [question()];
+    state.projects = [
+      { id: 'proj-a', projectCode: 'DXB-001' },
+      { id: 'proj-b', projectCode: 'DXB-002' },
+      { id: 'proj-c', projectCode: 'DXB-004' },
+    ];
+    state.claimed = [];
+    state.claimCount = 1;
+    state.senders = null;
+  });
+
+  it('takes a project code however it was typed', async () => {
+    for (const written of ['DXB-004', 'dxb004', 'dxb 004', 'DXB - 004', 'K4T9 dxb004']) {
+      state.claimed = [];
+      const reply = await tryAnswerQuestion(attempt(written));
+      expect(reply?.projectId, written).toBe('proj-c');
+    }
+  });
+
+  it('takes a number with the small words people put in front of it', async () => {
+    for (const written of ['2', '#2', 'no 2', 'project 2', 'its 2', 'number 2']) {
+      state.claimed = [];
+      const reply = await tryAnswerQuestion(attempt(written));
+      expect(reply?.projectId, written).toBe('proj-b');
+    }
+  });
+
+  it('still refuses a real report that happens to contain a number', async () => {
+    for (const report of [
+      'moving 2 sockets on level 2',
+      'client wants 3 more downlights',
+      'the grid on 2 needs changing before Thursday',
+    ]) {
+      expect(await tryAnswerQuestion(attempt(report)), report).toBeNull();
+    }
+    expect(state.claimed).toHaveLength(0);
+  });
+
+  it('refuses two numbers, which is a sentence and not an answer', async () => {
+    expect(await tryAnswerQuestion(attempt('2 3'))).toBeNull();
+  });
+
+  it('lets the reporter cancel, and files nothing', async () => {
+    const reply = await tryAnswerQuestion(attempt('cancel'));
+    expect(reply?.outcome).toBe('cancelled');
+    expect(reply?.projectId).toBeNull();
+    expect(state.claimed[0]?.data.status).toBe('cancelled');
+  });
+
+  it('understands the other ways people withdraw something', async () => {
+    for (const written of ['ignore', 'forget it', 'nevermind', 'disregard', 'my mistake']) {
+      state.claimed = [];
+      const reply = await tryAnswerQuestion(attempt(written));
+      expect(reply?.outcome, written).toBe('cancelled');
+    }
+  });
+
+  it('does not read a code as a cancellation', async () => {
+    // "cancel DXB-004" names a project. Naming one is not withdrawing it.
+    const reply = await tryAnswerQuestion(attempt('cancel DXB-004'));
+    expect(reply?.outcome).toBe('answered');
+    expect(reply?.projectId).toBe('proj-c');
   });
 });

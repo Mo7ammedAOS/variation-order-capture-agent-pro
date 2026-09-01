@@ -252,6 +252,30 @@ path. For a notice, `sent` is the proof of service and the bottleneck sweep
 chases `notice_drafted_not_sent` — so the old behaviour would have chased a
 delivered notice for ever, then served it twice.
 
+**The exchange is a conversation, not a queue.** A question goes out on the
+same request that created it (`dispatchNow`), not on the next sweep — a two to
+thirty minute pause in the middle of a fifteen second exchange makes a site
+engineer assume the thing is broken and go back to WhatsApping his PM directly.
+The scheduled sweep stays, unchanged, as the safety net for anything that call
+could not deliver.
+
+Answers are read the way people type them: `DXB-004`, `dxb004`, `dxb 004` and
+`DXB - 004` are one answer; so are `2`, `#2`, `no 2` and `project 2`. A
+token-less reply settles the MOST RECENT open question within a 12 hour window,
+because that is how a conversation works — the old rule refused whenever two
+were outstanding, which was safe and useless. What makes the looser rule
+survivable is that the acknowledgement **quotes the report it filed**, so
+answering the wrong question is visible in seconds rather than silent for ever.
+Prose is still refused outright: "moving 2 sockets on level 2" is a report, and
+reading it as an answer would throw that report away.
+
+The conversation ends one of two ways. **Confirmed** — "Filed as
+PC-DXB-002-0007", with the report quoted back. **Cancelled** — `cancel`,
+`ignore`, `forget it`, `my mistake` close the question, mark the event
+`ignored`, and answer "nothing has been recorded". A withdrawn report left
+sitting in the inbox is worse than no report: somebody spends time on it and
+finds there was nothing there.
+
 **The email is taken apart from the report inside it.** `src/lib/email-cleanup.ts`
 strips the signature (`-- `), quoted history ("On … wrote:", Outlook's
 `From:/Sent:/To:` block, `>` lines), mail client footers and confidentiality
