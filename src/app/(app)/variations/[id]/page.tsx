@@ -10,11 +10,13 @@ import { allowedNextStatuses, getPotentialChange } from '@/services/potential-ch
 import { findSimilarChanges } from '@/services/search.service';
 import { findScopeMatches } from '@/services/document-index.service';
 import { prisma } from '@/lib/prisma';
-import { toDateInputValue, formatDate, formatDateTime, daysSince } from '@/lib/dates';
+import { toDateInputValue, formatDate, formatDateTime, daysSince, todayUtc } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
 import { getCurrentNotice } from '@/services/notice-document.service';
+import { getVariationOrderForChange } from '@/services/variation-order.service';
+import { subtractDecimals, sumDecimals } from '@/lib/money';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { getProjectRoles } from '@/services/project-access.service';
 import { isAppError } from '@/lib/errors';
@@ -27,6 +29,7 @@ import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
 import { NoticePanel, type NoticeView } from './notice-panel';
+import { MoneyPanel, type VoView } from './money-panel';
 import { EditPanel } from './edit-panel';
 import { CasePanel } from './case-panel';
 import { PricingPanel } from './pricing-panel';
@@ -172,6 +175,91 @@ export default async function PotentialChangeDetailPage({
     hasCapability(user.systemRole, projectRoles, 'notice.draft'),
     hasCapability(user.systemRole, projectRoles, 'notice.acknowledge'),
   ]);
+
+  /*
+    The money end.
+
+    Read for every change that has a variation order, at every stage. The
+    figures are assembled here, on the server, from frozen columns — the panel
+    adds nothing up, so a number can only be wrong in one place.
+  */
+  const voRecord = await getVariationOrderForChange(change.id);
+  const [mayManageVo, mayInvoice, mayRecordPayment] = await Promise.all([
+    hasCapability(user.systemRole, projectRoles, 'variationOrder.manage'),
+    hasCapability(user.systemRole, projectRoles, 'invoice.manage'),
+    hasCapability(user.systemRole, projectRoles, 'payment.record'),
+  ]);
+
+  const today = todayUtc();
+
+  const vo: VoView | null = voRecord
+    ? (() => {
+        const live = voRecord.invoices.filter((invoice) => invoice.status !== 'cancelled');
+        const applied = sumDecimals(live.map((invoice) => invoice.grossThisPeriod.toString()));
+        const approvedValue = voRecord.approvedValue?.toString() ?? null;
+        const submittedValue = voRecord.submittedValue?.toString() ?? null;
+
+        const shortfall =
+          submittedValue && approvedValue
+            ? subtractDecimals(submittedValue, approvedValue)
+            : null;
+        const unbilled = approvedValue ? subtractDecimals(approvedValue, applied) : null;
+
+        return {
+          id: voRecord.id,
+          voNumber: voRecord.voNumber,
+          status: voRecord.status,
+          clientResponse: voRecord.clientResponse,
+          submittedValue,
+          submittedAt: voRecord.submittedAt ? formatDate(voRecord.submittedAt) : null,
+          submittedByName: voRecord.submittedBy?.fullName ?? null,
+          approvedValue,
+          shortfall: shortfall && !shortfall.startsWith('-') ? shortfall : null,
+          clientResponseAt: voRecord.clientResponseAt
+            ? formatDate(voRecord.clientResponseAt)
+            : null,
+          clientReference: voRecord.clientReference,
+          clientResponseNotes: voRecord.clientResponseNotes,
+          unbilled: unbilled && !unbilled.startsWith('-') ? unbilled : null,
+          invoices: voRecord.invoices.map((invoice) => {
+            const paidTotal = sumDecimals(
+              invoice.payments.map((payment) => payment.amount.toString()),
+            );
+            const outstanding = subtractDecimals(invoice.totalDue.toString(), paidTotal);
+            return {
+              id: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              status: invoice.status,
+              periodEnd: formatDate(invoice.periodEnd),
+              cumulativePercent: invoice.cumulativePercent.toString(),
+              grossThisPeriod: invoice.grossThisPeriod.toString(),
+              retentionAmount: invoice.retentionAmount.toString(),
+              netValue: invoice.netValue.toString(),
+              vatAmount: invoice.vatAmount.toString(),
+              totalDue: invoice.totalDue.toString(),
+              issuedAt: invoice.issuedAt ? formatDate(invoice.issuedAt) : null,
+              dueAt: invoice.dueAt ? formatDate(invoice.dueAt) : null,
+              // Derived here, never stored: an "overdue" column would need a
+              // nightly job to stay true, and a stale one is worse than none.
+              overdue:
+                (invoice.status === 'issued' || invoice.status === 'part_paid') &&
+                invoice.dueAt !== null &&
+                invoice.dueAt.getTime() < today.getTime() &&
+                !outstanding.startsWith('-') &&
+                outstanding !== '0.00',
+              paidTotal,
+              outstanding,
+              payments: invoice.payments.map((payment) => ({
+                id: payment.id,
+                amount: payment.amount.toString(),
+                receivedAt: formatDate(payment.receivedAt),
+                reference: payment.reference,
+              })),
+            };
+          }),
+        };
+      })()
+    : null;
 
   const notice: NoticeView | null = noticeRecord
     ? {
@@ -422,6 +510,17 @@ export default async function PotentialChangeDetailPage({
           </Card>
 
           {notice ? <NoticePanel potentialChangeId={change.id} notice={notice} /> : null}
+
+          <MoneyPanel
+            potentialChangeId={change.id}
+            currency={change.project.currency ?? 'AED'}
+            vo={vo}
+            canManageVo={mayManageVo}
+            canInvoice={mayInvoice}
+            canRecordPayment={mayRecordPayment}
+            changeIsApproved={change.currentStatus === 'variation_approved'}
+            approvedInternalValue={change.submittedValue?.toString() ?? null}
+          />
 
           {gateState && activeGate ? (
             <ApprovalPanel

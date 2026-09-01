@@ -130,6 +130,20 @@ because the one document in this system that may end up in front of a tribunal
 should have nothing between the text and the bytes. The cost of that choice is
 real and stated: base-14 WinAnsi fonts only, so **no Arabic**.
 
+**The money is integer arithmetic, in one file.** `src/lib/money.ts` works in
+whole fils and every figure on an invoice comes out of it. Each amount is
+rounded once and the next is built on the rounded one — VAT is charged on the
+rounded net, and the total is the sum of the two figures printed above it.
+Otherwise an invoice shows three numbers where the first two do not make the
+third, and no explanation of floating point will make that acceptable to the
+person deciding whether to pay it. It throws rather than clamping: a silently
+corrected figure is a wrong invoice nobody notices.
+
+**Derived commercial figures are never stored.** Approved-but-unbilled,
+outstanding, overdue and retention held are computed on read from rows that
+cannot go stale. A cached total needs a job to maintain it; the day that job
+fails, the number is wrong and confident, and a director acts on it.
+
 ## Reusability per client
 
 Nothing is hardcoded to ABC Fit-Out. A new deployment is a new database, a new

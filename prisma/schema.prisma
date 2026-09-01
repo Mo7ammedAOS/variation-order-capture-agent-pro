@@ -256,6 +256,12 @@ enum BottleneckType {
   client_requested_information
   client_rejected
   work_started_without_approval
+  /// Approved internally weeks ago and never put to the client.
+  vo_not_submitted
+  /// The client agreed it and nobody has applied for the money.
+  approved_not_invoiced
+  /// Past its payment terms and unpaid.
+  invoice_overdue
   other
 }
 
@@ -364,6 +370,44 @@ enum PricingStatus {
   approved
 }
 
+/// Where a variation order has got to with the client.
+enum VariationOrderStatus {
+  draft
+  submitted
+  /// The client agreed the figure we put to them.
+  approved
+  /// The client agreed a LOWER figure. Not the same thing, and kept apart so
+  /// the shortfall stays countable.
+  part_approved
+  rejected
+  withdrawn
+}
+
+/// What the client actually said. Separate from the status because "no answer
+/// for six weeks" is the most commercially important response there is, and
+/// folding it into `submitted` would make it invisible.
+enum ClientResponse {
+  awaiting
+  approved
+  approved_with_adjustment
+  rejected
+  more_information_requested
+}
+
+/// A progress application, not a sales invoice. `part_paid` is a real resting
+/// state in fit-out and is not an error.
+///
+/// `overdue` is deliberately ABSENT: it is `due_at < today AND status <> paid`,
+/// and storing it would need a nightly job to keep true. A derived fact that
+/// can go stale is worse than one computed on read.
+enum InvoiceStatus {
+  draft
+  issued
+  part_paid
+  paid
+  cancelled
+}
+
 enum NotificationKind {
   task_assigned
   task_reminder
@@ -419,6 +463,10 @@ model CompanySettings {
   defaultEscalationRulesJson Json?   @map("default_escalation_rules_json")
   /// RAG thresholds in days remaining. Defaults documented in ARCHITECTURE.md.
   riskAmberThresholdDays    Int      @default(7) @map("risk_amber_threshold_days")
+  /// UAE VAT, 5% since 2018. Held as a setting rather than a constant because
+  /// a rate change must not require a deploy, and because a zero-rated or
+  /// exempt deployment is a real case.
+  vatPercent                Decimal  @default(5) @map("vat_percent") @db.Decimal(6, 3)
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
@@ -473,6 +521,10 @@ model User {
   noticesDrafted       Notice[]         @relation("NoticeDraftedBy")
   noticesIssued        Notice[]         @relation("NoticeIssuedBy")
   noticesAcknowledged  Notice[]         @relation("NoticeAcknowledgedBy")
+  vosSubmitted         VariationOrder[] @relation("VoSubmittedBy")
+  vosResponseRecorded  VariationOrder[] @relation("VoResponseRecordedBy")
+  invoicesIssued       Invoice[]        @relation("InvoiceIssuedBy")
+  paymentsRecorded     Payment[]        @relation("PaymentRecordedBy")
 
   @@index([systemRole])
   @@index([active])
@@ -506,6 +558,12 @@ model Project {
   /// must not move because a change was renumbered, and it must not imply that
   /// PC-0042 produced notice 0042 when most changes never produce one at all.
   noticeSequence Int    @default(0) @map("notice_sequence")
+  /// And again for variation orders. Three series, because a VO number is the
+  /// one the client quotes on a payment certificate and it must never move.
+  voSequence     Int    @default(0) @map("vo_sequence")
+  /// Invoice numbers are a per-project series too. A company-wide series would
+  /// leak how much work the contractor has on, to every client who sees a gap.
+  invoiceSequence Int   @default(0) @map("invoice_sequence")
   /// Google Drive folder for this project. Ids are authoritative; folder names
   /// are cosmetic, so renaming in Drive never breaks the app.
   driveFolderId String? @map("drive_folder_id")
@@ -527,6 +585,9 @@ model Project {
   activityLogs     ActivityLog[]
   documentChunks   DocumentChunk[]
   notices          Notice[]
+  variationOrders  VariationOrder[]
+  invoices         Invoice[]
+  payments         Payment[]
 
   @@index([projectStatus])
   @@index([clientName])
@@ -591,6 +652,15 @@ model ProjectContractRule {
   approvalThresholdCommercialDirector Decimal? @map("approval_threshold_commercial_director") @db.Decimal(18, 2)
   approvalThresholdManagingDirector  Decimal? @map("approval_threshold_managing_director") @db.Decimal(18, 2)
   highRiskVoValue                    Decimal? @map("high_risk_vo_value") @db.Decimal(18, 2)
+
+  /// Held back from every progress application until practical completion.
+  /// 5% and 10% are both ordinary in UAE fit-out, so it is per project, never
+  /// a global default.
+  retentionPercent       Decimal @default(5) @map("retention_percent") @db.Decimal(6, 3)
+  /// Days from the invoice date to the date it falls due.
+  paymentTermsDays       Int     @default(30) @map("payment_terms_days")
+  /// How long the client gets before an unanswered VO is a bottleneck.
+  voResponseDays         Int     @default(14) @map("vo_response_days")
 
   clientFollowUpDays     Int @default(3) @map("client_follow_up_days")
   qsPricingDueDays       Int @default(7) @map("qs_pricing_due_days")
@@ -668,6 +738,7 @@ model ProjectDocument {
   uploadedBy      User?            @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
   chunks          DocumentChunk[]
   noticeRecord    Notice?
+  variationOrder  VariationOrder?
 
   @@index([projectId, documentType])
   @@index([potentialChangeId])
@@ -769,6 +840,7 @@ model PotentialChange {
   embedding         PotentialChangeEmbedding?
   notifications     NotificationLog[]
   notices           Notice[]
+  variationOrder    VariationOrder?
 
   @@unique([projectId, pcNumber])
   @@index([projectId, currentStatus])
@@ -1048,6 +1120,178 @@ model Notice {
   @@unique([projectId, reference])
   @@index([projectId, status])
   @@map("notices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  The money end
+//
+//  Everything below answers one question a director asks and nothing else can:
+//  how much work have we agreed, and how much of it have we actually been paid
+//  for. The gap between those two numbers is what this product is for.
+//
+//  Three rules hold throughout, and each of them was a decision:
+//
+//  1. VALUES ARE FROZEN WHEN THEY ARE PUT TO SOMEBODY. A submitted VO carries
+//     the figure that was submitted, not a figure recomputed from today's line
+//     items. An invoice carries the arithmetic as it stood the day it was
+//     issued. Recomputing on read means a document quietly disagreeing with the
+//     paper copy the client is holding.
+//
+//  2. NOTHING DERIVED IS STORED. "Overdue", "approved but unbilled", "retention
+//     held" are computed on read from rows that cannot go stale. A stored total
+//     needs a job to maintain it, and the day that job fails is the day the
+//     number is wrong AND confident.
+//
+//  3. ONE VO PER CHANGE. Osman's decision, 2026-09-01. A rejected VO drags
+//     nothing else down with it, and a partial approval never has to be
+//     apportioned back across changes by somebody guessing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// What we put to the client, and what they said back.
+model VariationOrder {
+  id                String @id @default(uuid()) @db.Uuid
+  projectId         String @map("project_id") @db.Uuid
+  /// One per change. The unique index is the rule, not a convention.
+  potentialChangeId String @unique @map("potential_change_id") @db.Uuid
+
+  /// VO-{PROJECT_CODE}-{sequence:0000}
+  voNumber String               @map("vo_number")
+  status   VariationOrderStatus @default(draft)
+
+  title       String
+  description String
+
+  /// The figure we asked for, frozen at submission. Copied from the pricing
+  /// build-up ONCE; later edits to the build-up never move it.
+  submittedValue   Decimal?  @map("submitted_value") @db.Decimal(18, 2)
+  submittedAt      DateTime? @map("submitted_at")
+  submittedByUserId String?  @map("submitted_by_user_id") @db.Uuid
+  timeImpactDaysClaimed Int? @map("time_impact_days_claimed")
+
+  clientResponse       ClientResponse @default(awaiting) @map("client_response")
+  clientResponseAt     DateTime?      @map("client_response_at")
+  /// What they agreed to pay. Null until they answer. When it is lower than
+  /// `submittedValue` the difference is a real, unagreed shortfall and stays
+  /// visible — it is never written off by overwriting the submitted figure.
+  approvedValue        Decimal?  @map("approved_value") @db.Decimal(18, 2)
+  approvedTimeImpactDays Int?    @map("approved_time_impact_days")
+  /// Their letter or certificate reference. The proof.
+  clientReference      String?   @map("client_reference")
+  clientResponseNotes  String?   @map("client_response_notes")
+  recordedByUserId     String?   @map("recorded_by_user_id") @db.Uuid
+
+  /// The submitted document, filed in `09 Variation Orders`.
+  documentId String? @unique @map("document_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  potentialChange PotentialChange  @relation(fields: [potentialChangeId], references: [id], onDelete: Cascade)
+  document        ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  submittedBy     User?            @relation("VoSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  recordedBy      User?            @relation("VoResponseRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  invoices        Invoice[]
+
+  @@unique([projectId, voNumber])
+  @@index([projectId, status])
+  @@index([clientResponse, submittedAt])
+  @@map("variation_orders")
+}
+
+/// A progress application against one variation order.
+///
+/// Osman's decision, 2026-09-01: fit-out is billed monthly against a
+/// percentage of the agreed value, with retention held back, not as one
+/// invoice per VO. So this is an APPLICATION, and several of them add up to
+/// the VO.
+///
+/// `cumulativePercent` is what a person enters, because that is what a
+/// valuation states: "we are 75% complete". Everything else on the row is
+/// derived from it ONCE, at issue, and then frozen — including
+/// `previouslyApplied`, so the arithmetic on the paper can always be
+/// reproduced even if an earlier application is later cancelled.
+model Invoice {
+  id               String @id @default(uuid()) @db.Uuid
+  projectId        String @map("project_id") @db.Uuid
+  variationOrderId String @map("variation_order_id") @db.Uuid
+
+  /// INV-{PROJECT_CODE}-{sequence:0000}
+  invoiceNumber String        @map("invoice_number")
+  status        InvoiceStatus @default(draft)
+
+  /// The valuation date. What period this application covers up to.
+  periodEnd DateTime @map("period_end") @db.Date
+
+  /// Cumulative completion of the VO at `periodEnd`, 0 to 100.
+  cumulativePercent Decimal @map("cumulative_percent") @db.Decimal(6, 3)
+  /// The agreed VO value this application was calculated against, frozen.
+  /// If the client later revises the VO, old applications keep their basis.
+  basisValue        Decimal @map("basis_value") @db.Decimal(18, 2)
+  /// Gross certified by every earlier application, frozen at issue.
+  previouslyApplied Decimal @map("previously_applied") @db.Decimal(18, 2)
+  /// basisValue * cumulativePercent - previouslyApplied. This period only.
+  grossThisPeriod   Decimal @map("gross_this_period") @db.Decimal(18, 2)
+
+  retentionPercent Decimal @map("retention_percent") @db.Decimal(6, 3)
+  retentionAmount  Decimal @map("retention_amount") @db.Decimal(18, 2)
+  /// grossThisPeriod - retentionAmount
+  netValue         Decimal @map("net_value") @db.Decimal(18, 2)
+  vatPercent       Decimal @map("vat_percent") @db.Decimal(6, 3)
+  vatAmount        Decimal @map("vat_amount") @db.Decimal(18, 2)
+  /// netValue + vatAmount. What the client owes on this application.
+  totalDue         Decimal @map("total_due") @db.Decimal(18, 2)
+
+  issuedAt        DateTime? @map("issued_at")
+  issuedByUserId  String?   @map("issued_by_user_id") @db.Uuid
+  /// issuedAt + paymentTermsDays, frozen, because the terms may change later
+  /// and this invoice fell due when it fell due.
+  dueAt           DateTime? @map("due_at") @db.Date
+  clientReference String?   @map("client_reference")
+  notes           String?
+
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelledReason String?   @map("cancelled_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  variationOrder VariationOrder @relation(fields: [variationOrderId], references: [id], onDelete: Cascade)
+  issuedBy       User?          @relation("InvoiceIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  payments       Payment[]
+
+  @@unique([projectId, invoiceNumber])
+  @@index([projectId, status])
+  @@index([variationOrderId, periodEnd])
+  @@index([status, dueAt])
+  @@map("invoices")
+}
+
+/// Money actually received. Many per invoice, because part payment is normal
+/// and pretending otherwise would force somebody to round.
+model Payment {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  invoiceId String @map("invoice_id") @db.Uuid
+
+  amount     Decimal  @db.Decimal(18, 2)
+  receivedAt DateTime @map("received_at") @db.Date
+  /// Cheque number, transfer reference, certificate number. The proof.
+  reference  String?
+  method     String?
+  notes      String?
+
+  recordedByUserId String?  @map("recorded_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, receivedAt])
+  @@index([invoiceId])
+  @@map("payments")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

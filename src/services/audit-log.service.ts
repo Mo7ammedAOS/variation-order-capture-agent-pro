@@ -28,7 +28,10 @@ export type RecordType =
   | 'notification'
   | 'role_permission'
   | 'approval'
-  | 'notice';
+  | 'notice'
+  | 'variation_order'
+  | 'invoice'
+  | 'payment';
 
 export type ActionType =
   | 'created'
@@ -58,7 +61,8 @@ export type ActionType =
   | 'issued'
   | 'sent'
   | 'acknowledged'
-  | 'superseded';
+  | 'superseded'
+  | 'submitted';
 
 export interface AuditInput {
   db?: Db;

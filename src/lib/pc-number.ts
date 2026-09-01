@@ -73,3 +73,40 @@ export function formatNoticeReference(projectCode: string, sequence: number): st
 
   return `NOT-${code}-${String(sequence).padStart(PC_SEQUENCE_PAD, '0')}`;
 }
+
+/**
+ * VO-{PROJECT_CODE}-{SEQUENCE} and INV-{PROJECT_CODE}-{SEQUENCE}.
+ *
+ * Three series on a project, all separate: a VO number is quoted on a payment
+ * certificate and an invoice number on a bank transfer, so neither may move
+ * because something upstream was renumbered. Per project rather than
+ * company-wide, because a company-wide invoice series tells every client how
+ * much work the contractor has on from the size of the gaps.
+ */
+export function formatVoNumber(projectCode: string, sequence: number): string {
+  return formatSeries('VO', projectCode, sequence, 'VO');
+}
+
+export function formatInvoiceNumber(projectCode: string, sequence: number): string {
+  return formatSeries('INV', projectCode, sequence, 'Invoice');
+}
+
+function formatSeries(
+  prefix: string,
+  projectCode: string,
+  sequence: number,
+  label: string,
+): string {
+  const code = projectCode.trim().toUpperCase();
+
+  if (!PROJECT_CODE_PATTERN.test(code)) {
+    throw new ValidationError(
+      `Project code "${projectCode}" must be upper-case alphanumerics and hyphens, e.g. DXB-001`,
+    );
+  }
+  if (!Number.isInteger(sequence) || sequence < 1) {
+    throw new ValidationError(`${label} sequence must be a positive integer`);
+  }
+
+  return `${prefix}-${code}-${String(sequence).padStart(PC_SEQUENCE_PAD, '0')}`;
+}

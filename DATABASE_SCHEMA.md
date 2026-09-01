@@ -11,7 +11,7 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 |---|---|
 | `company_settings` | One row per deployment (`singleton` unique). Branding, timezone, workweek, RAG threshold |
 | `users` | Profile. `id` = the Supabase `auth.users` UUID |
-| `projects` | Project register, contract value, and the PC and notice counters |
+| `projects` | Project register, contract value, and four separate number series |
 | `project_members` | Who may do what on which project. **The grant** |
 | `project_contract_rules` | The contractual clock and approval thresholds |
 | `contacts` | Authority register — was this person allowed to ask? |
@@ -23,6 +23,9 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 | `integration_events` | Inbound event log + idempotency |
 | `notification_logs` | Delivery state machine |
 | `notices` | The notice document: draft, issued, served, acknowledged, superseded |
+| `variation_orders` | What we put to the client, and what they said back. One per change |
+| `invoices` | Monthly progress applications against an agreed VO |
+| `payments` | Money received. Many per invoice |
 | `document_chunks` | pgvector chunks (Phase 2 RAG) |
 | `potential_change_embeddings` | pgvector, for duplicate detection |
 
@@ -119,21 +122,55 @@ a status of `sent` and a null message id are raised as `notice_sent_no_proof`,
 because a notice you cannot prove you served is, in an argument, a notice you
 did not serve.
 
-## Deliberately absent in Phase 1
+**The money end** — `variation_orders`, `invoices`, `payments`, added
+2026-09-01 with stage 6. Three of Osman's decisions are baked into their shape:
 
-Variation Orders, invoices and payments have **no tables yet**, per the spec.
-Their service stubs exist. The intended shape:
+**One VO per change.** `variation_orders.potential_change_id` is UNIQUE, and
+that index is the rule rather than a convention. A rejected VO drags nothing
+else down with it, and a partial approval never has to be apportioned back
+across bundled changes by somebody guessing which one lost the money.
 
-```text
-variation_orders    potential_change_id, vo_number, submitted_value,
-                    approved_value, submitted_at, client_response_at, status
-invoices            variation_order_id, invoice_number, invoiced_value,
-                    issued_at, due_at, status
-payments            invoice_id, amount, received_at, reference
-```
+**`invoices` are progress applications, not sales invoices.** Fit-out is billed
+monthly against a cumulative percentage, with retention held back. A person
+enters `cumulative_percent` and nothing else; `basis_value`,
+`previously_applied`, `gross_this_period`, `retention_amount`, `net_value`,
+`vat_amount` and `total_due` are computed once and **frozen onto the row** —
+including the history, so the arithmetic on an issued invoice can be reproduced
+line for line even if the VO is later revised or an earlier application
+cancelled. That is the paper the client is holding.
 
-`potential_changes` already carries `estimated_value` and the status enum has
-room, so adding these is additive — no migration of existing rows.
+**`submitted_value` and `approved_value` are separate columns**, and the lower
+figure never overwrites the higher. The difference is what the company
+conceded, and a contractor who cannot say what it conceded cannot learn to
+concede less.
+
+Three further rules hold across all three tables:
+
+- Every money column is `NUMERIC(18,2)`, never a float, and the arithmetic runs
+  in whole fils through `src/lib/money.ts`. `0.1 + 0.2` is a curiosity in most
+  software and a wrong invoice here.
+- **Nothing derived is stored.** "Overdue", "approved but unbilled" and
+  "retention held" are computed on read. A stored total needs a job to maintain
+  it, and the day that job fails the number is wrong *and* confident.
+- `invoices.status` is never typed by a person. It is recomputed from the sum of
+  its payments on every write, so the register cannot say paid while the bank
+  says otherwise.
+
+Four number series per project, all separate — `pc_sequence`,
+`notice_sequence`, `vo_sequence`, `invoice_sequence`. A VO number is quoted on
+a payment certificate and an invoice number on a bank transfer, so neither may
+move because something upstream was renumbered. Per project rather than
+company-wide, because a company-wide invoice series tells every client how much
+work the contractor has on, from the size of the gaps.
+
+## Deliberately absent
+
+Retention release, credit notes, and EOT valuation. Retention is withheld
+correctly at every application and reported as held; the separate application
+that releases it at practical completion is not built. A credit note is the
+right answer to an over-certification and to a payment against a wrong invoice,
+and the system currently refuses those cases rather than inventing a document
+for them.
 
 ## Migrations
 

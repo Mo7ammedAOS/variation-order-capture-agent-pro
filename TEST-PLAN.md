@@ -190,7 +190,6 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 
 | | |
 |---|---|
-| **Variation orders, invoices, payments** | The lifecycle stops at `variation_approved`. No VO number, no billing, no *approved-but-unbilled* figure. |
 | **Document register** | No upload panel. The Documents tab is read-only, and revisions do not supersede. |
 | **Document intelligence** | Nothing reads a PDF. No drawing versions, no "not in scope" detection, no document search. |
 | **AI** | A mock that matches keywords. No vision, no OCR, no real extraction. |
@@ -205,6 +204,7 @@ Turn Wi-Fi **off**. This is how a site engineer actually uses it.
 | **Capture inbox** | `/inbox`, for messages that could not be placed. Section 11. |
 | **WhatsApp and email capture** | The n8n lanes exist and are built. Not activated. |
 | **The notice** | Drafted, approved, filed as a PDF, queued to the client, and only "served" when the courier says so. Section 12. |
+| **The money end** | Variation orders, monthly progress applications with retention and VAT, payments, and the approved-but-unbilled figure. Section 13. |
 
 ---
 
@@ -288,6 +288,55 @@ The two things to try to break:
 What you cannot test yet: an actual email leaving. That waits on the lane B
 mailbox decision, because the capture mailbox and the admin's address are
 currently the same account.
+
+---
+
+## 13 · The money, end to end
+
+The one to check with a calculator in your hand. If a figure here disagrees
+with your own sum, the software is wrong.
+
+**Set up first.** On the project's contract rules, set **retention** and
+**payment terms**. Defaults are 5% and 30 days.
+
+**As Osman**, take a change all the way through pricing and both approvals so
+it reaches *Variation approved*.
+
+- [ ] A **Put it to the client** panel appears. Raise the VO
+- [ ] It is numbered `VO-<project>-0001` — its **own** series, not the PC number
+- [ ] The value is the figure the two seats approved, unchanged
+- [ ] Record the submission with **yesterday's date**
+
+Now record the client's answer. Do this twice, on two different changes:
+
+- [ ] **Agreed in full** → the agreed value equals what you submitted
+- [ ] **Agreed at a lower figure**, say 95,000 against 120,000 → it shows
+      **Conceded 25,000**, and the submitted figure is still there
+- [ ] Either way, someone gets a task to invoice it
+
+Then apply for the money. Enter **40%** for the first period.
+
+- [ ] Check the build-up against your own arithmetic. On 120,000 at 5%
+      retention and 5% VAT: gross 48,000, retention 2,400, net 45,600,
+      VAT 2,280, **total 47,880**
+- [ ] Issue it. The due date should be the issue date plus your payment terms
+- [ ] Apply again at **75%**. It should claim **42,000**, not 90,000
+- [ ] Record a **part payment**. It should say *Part paid*
+- [ ] Record the balance. It should say *Paid*
+
+The four things to try to break:
+
+- [ ] Apply for money on a VO the client has **not** answered → refused
+- [ ] Apply at **30%** after 40% was already certified → refused, going backwards
+- [ ] Record a payment **larger** than what is outstanding → refused
+- [ ] Record the client agreeing **more** than you submitted → refused
+
+Finally, open the **dashboard**.
+
+- [ ] **Approved, not invoiced** matches what you have agreed and not yet
+      applied for
+- [ ] **Overdue payment** is zero, until you issue an invoice dated far enough
+      back to be past its terms
 
 ---
 

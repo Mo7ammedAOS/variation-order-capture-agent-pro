@@ -201,8 +201,8 @@ equal, which silently discarded every `.default()` and handed services
 ## What is left, 2026-09-01
 
 Stages 1 to 3 are done: the build, the deployment, and the decision spine
-(two approval gates, QS pricing, reporter edits, cancel, the chase). Stage 5,
-the notice, is done as of 2026-09-01.
+(two approval gates, QS pricing, reporter edits, cancel, the chase). Stages 5
+and 6 — the notice, and the money end — are done as of 2026-09-01.
 
 **Stage 4 — n8n becomes the nervous system.** In progress.
 `n8n-workflows/master.json` is built and validated: lanes A, B, C (capture in),
@@ -237,10 +237,38 @@ The three notice bottleneck types that have existed since the first migration
 now have detection behind them: required-not-drafted (only reachable after a
 rejection), drafted-not-sent, and sent-without-proof.
 
-**Stage 6 — the money end.** `variation-order`, `invoice` and `payment` are
-`export {}` and the tables do not exist. The lifecycle stops at
-`variation_approved`, so approved-but-unbilled — the number that justifies the
-product — cannot be produced.
+**Stage 6 — the money end.** Built, 2026-09-01. The lifecycle now runs past
+`variation_approved` to money in the bank.
+
+| Step | What happens |
+|---|---|
+| Raise | `VO-DXB-001-0001`, one per approved change, carrying the frozen price |
+| Submit | A person records the date it went. The client clock runs from that date |
+| The answer | Agreed in full, agreed lower, rejected, or more information |
+| Apply | A monthly progress application: one percentage in, the whole build-up out |
+| Issue | Figures freeze, `dueAt` freezes from today's payment terms |
+| Payment | Many per invoice. The status is recomputed, never typed |
+
+Three decisions of Osman's, 2026-09-01, are in the tables rather than the code:
+
+- **One VO per change**, enforced by a unique index.
+- **Progress applications with retention**, not one invoice per VO.
+- **A partial approval leaves a visible shortfall.** Submitted and approved are
+  separate columns and the lower never overwrites the higher.
+
+The dashboard gained four figures: approved-but-unbilled, invoiced-unpaid,
+overdue, and conceded. The first is the number the product exists to produce
+and could not be produced before these tables existed.
+
+Four SOPs that were "Not yet specified" stubs are now written to match what was
+built: `client_vo_submission`, `invoice_tracking`, `payment_collection`,
+`approved_but_unbilled`.
+
+Not built, and stated rather than implied: **retention release** (withheld
+correctly, reported as held, but the application that releases it at practical
+completion does not exist), **credit notes** (an over-certification and a
+payment against the wrong invoice are both refused rather than credited), and
+**EOT valuation**.
 
 **Stage 7 — AI for real.** The Claude adapter throws by design. No extraction,
 no scope check against contract or BOQ, no transcription. Duplicate detection
