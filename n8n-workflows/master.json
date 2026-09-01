@@ -511,8 +511,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        368,
-        624
+        752,
+        816
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -531,8 +531,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        592,
-        624
+        1104,
+        592
       ]
     },
     {
@@ -546,8 +546,8 @@
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        800,
-        624
+        1312,
+        592
       ],
       "credentials": {
         "crypto": {
@@ -592,8 +592,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1024,
-        624
+        1536,
+        592
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -608,8 +608,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        592,
-        832
+        1040,
+        864
       ]
     },
     {
@@ -730,7 +730,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $json.body.to, text: ($json.body.subject ? $json.body.subject + '\\n\\n' : '') + $json.body.body }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: String($json.body.to).replace(/\\D/g, ''), text: ($json.body.subject ? $json.body.subject + '\\n\\n' : '') + $json.body.body }) }}",
         "options": {}
       },
       "id": "964a605a-8236-5339-a945-7993776a3827",
@@ -1249,8 +1249,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        368,
-        448
+        752,
+        608
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -1261,6 +1261,9 @@
       "onError": "continueErrorOutput"
     },
     {
+      "parameters": {
+        "jsCode": "// The app signs the EXACT BYTES it sent: HMAC over `timestamp.rawBody`.\n// So this lane has to hash those same bytes, and nothing else.\n//\n// The webhook runs with `rawBody: true`, which puts the raw bytes in the\n// BINARY property `data` and leaves `$json.body` as n8n's own PARSED copy of\n// them. D2 used to hash `$json.body.toString()` — and `.toString()` on an\n// object is the literal text \"[object Object]\". Every signature was therefore\n// computed over the same eleven wrong characters, and the only symptom was\n// \"signature did not verify\", which is true and points at the wrong thing:\n// three people would check the secret before anyone checked the string.\n//\n// The bytes are read through getBinaryDataBuffer, not off `binary.data.data`,\n// because this instance runs `binaryMode: separate` where that field is not\n// reliably present — and a silently empty body would hash cleanly to the\n// wrong digest, which is worse than an error.\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\n// Everything downstream reads `body` and `headers`, so they pass through\n// untouched. Only `toSign` is added.\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
+      },
       "id": "8ee7d6f3-75ae-4442-b8a6-e78bdc22433f",
       "name": "D2a · Rebuild Raw Body",
       "type": "n8n-nodes-base.code",
@@ -1268,12 +1271,12 @@
       "position": [
         -192,
         624
-      ],
-      "parameters": {
-        "jsCode": "// The app signs the EXACT BYTES it sent: HMAC over `timestamp.rawBody`.\n// So this lane has to hash those same bytes, and nothing else.\n//\n// The webhook runs with `rawBody: true`, which puts the raw bytes in the\n// BINARY property `data` and leaves `$json.body` as n8n's own PARSED copy of\n// them. D2 used to hash `$json.body.toString()` — and `.toString()` on an\n// object is the literal text \"[object Object]\". Every signature was therefore\n// computed over the same eleven wrong characters, and the only symptom was\n// \"signature did not verify\", which is true and points at the wrong thing:\n// three people would check the secret before anyone checked the string.\n//\n// The bytes are read through getBinaryDataBuffer, not off `binary.data.data`,\n// because this instance runs `binaryMode: separate` where that field is not\n// reliably present — and a silently empty body would hash cleanly to the\n// wrong digest, which is worse than an error.\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\n// Everything downstream reads `body` and `headers`, so they pass through\n// untouched. Only `toSign` is added.\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
-      }
+      ]
     },
     {
+      "parameters": {
+        "jsCode": "// Lane E has the identical contract and had the identical fault as lane D.\n// See the note on `D2a · Rebuild Raw Body`: `$json.body` is n8n's parsed copy,\n// and hashing it stringifies an object to \"[object Object]\".\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
+      },
       "id": "7e543c26-023e-42c8-afd1-a9e9c48312f1",
       "name": "E2a · Rebuild Raw Body",
       "type": "n8n-nodes-base.code",
@@ -1281,10 +1284,7 @@
       "position": [
         -192,
         1072
-      ],
-      "parameters": {
-        "jsCode": "// Lane E has the identical contract and had the identical fault as lane D.\n// See the note on `D2a · Rebuild Raw Body`: `$json.body` is n8n's parsed copy,\n// and hashing it stringifies an object to \"[object Object]\".\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
-      }
+      ]
     }
   ],
   "connections": {
