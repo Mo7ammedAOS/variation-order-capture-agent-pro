@@ -7,7 +7,7 @@ import {
   recordDirectNotifications,
 } from '@/services/notification.service';
 import { codePattern, describeMatch, type ProjectMatch } from '@/lib/project-match';
-import { briefOf, matchChangeInText } from '@/lib/change-brief';
+import { briefOf, matchChangeByWords, matchChangeInText } from '@/lib/change-brief';
 import {
   closingLine,
   isNewChangeRequest,
@@ -874,13 +874,14 @@ async function interpret(
 
     const changes = await prisma.potentialChange.findMany({
       where: { id: { in: question.candidateChangeIds } },
-      select: { id: true, pcNumber: true },
+      select: { id: true, pcNumber: true, title: true, summary: true },
     });
     // Restored to the order they were offered in, so "2" means the second line
     // of the message they are looking at.
+    type Offered = { id: string; pcNumber: string; title: string; summary: string | null };
     const ordered = question.candidateChangeIds
       .map((id) => changes.find((c) => c.id === id))
-      .filter((c): c is { id: string; pcNumber: string } => Boolean(c));
+      .filter((c): c is Offered => Boolean(c));
 
     const named = matchChangeInText(body, ordered);
     if (named) {
@@ -900,6 +901,19 @@ async function interpret(
     }
 
     if (isNewChangeRequest(body)) return { outcome: 'attach_new', ...none };
+
+    // "the ceiling one", "reception marble" — how anybody actually answers a
+    // list on a phone. A reference is what the database calls it; this is what
+    // the reporter calls it. Only answers when a distinctive word lands on
+    // exactly one option, so a reply that narrows nothing narrows nothing.
+    const described = matchChangeByWords(body, ordered);
+    if (described) {
+      return {
+        outcome: 'attach_existing',
+        projectId: question.projectId,
+        potentialChangeId: described.id,
+      };
+    }
 
     // Prose while files are waiting is the description of what they are of.
     // That is what a person would do — send the photos, then say what they

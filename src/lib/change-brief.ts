@@ -78,3 +78,59 @@ export function matchChangeInText<T extends SelectableChange>(
   const unique = [...new Set(hits)];
   return unique.length === 1 ? (unique[0] ?? null) : null;
 }
+
+/**
+ * Words too common on a fit-out job to tell two changes apart.
+ *
+ * Every one of these appears in half the register. Matching on them would make
+ * "the ceiling one" resolve to whichever change happened to be listed first,
+ * which is a guess wearing the clothes of an answer.
+ */
+const GENERIC_WORDS = new Set([
+  'THE', 'THIS', 'THAT', 'THOSE', 'THESE', 'ONE', 'ONES', 'AND', 'FOR', 'WITH',
+  'FROM', 'INTO', 'ONTO', 'ABOUT', 'THEM', 'THEY', 'ITS', 'YOUR', 'OUR',
+  'CHANGE', 'CHANGES', 'VARIATION', 'VARIATIONS', 'WORK', 'WORKS', 'SITE',
+  'LEVEL', 'AREA', 'NEW', 'OLD', 'ADDITIONAL', 'EXTRA', 'CLIENT', 'PROJECT',
+  'PLEASE', 'ATTACH', 'ATTACHED', 'PHOTO', 'PHOTOS', 'PICTURE', 'PICTURES',
+  'FILE', 'FILES', 'DRAWING', 'DRAWINGS', 'BELONG', 'BELONGS', 'REPORT',
+]);
+
+const MIN_DISTINCTIVE_LENGTH = 4;
+
+/**
+ * The change somebody meant when they described it instead of numbering it.
+ *
+ * "the ceiling one", "reception marble" — the way anybody actually answers a
+ * list on a phone. A reference is what the database calls it; this is what the
+ * reporter calls it.
+ *
+ * Answers only when a distinctive word lands on EXACTLY ONE of the options.
+ * Two candidates sharing the word means the reply did not narrow anything, and
+ * attaching to the first of them would put evidence on the wrong claim
+ * silently — the one failure this whole exchange exists to prevent. Null then,
+ * and the caller asks again or opens something new.
+ */
+export function matchChangeByWords<T extends SelectableChange & BriefableChange>(
+  text: string,
+  changes: T[],
+): T | null {
+  const spoken = new Set(
+    text
+      .toUpperCase()
+      .split(/[^A-Z0-9]+/)
+      .filter((word) => word.length >= MIN_DISTINCTIVE_LENGTH && !GENERIC_WORDS.has(word)),
+  );
+  if (spoken.size === 0) return null;
+
+  const hits = changes.filter((change) => {
+    const haystack = `${change.title} ${change.summary ?? ''}`.toUpperCase();
+    const own = new Set(
+      haystack
+        .split(/[^A-Z0-9]+/)
+        .filter((word) => word.length >= MIN_DISTINCTIVE_LENGTH && !GENERIC_WORDS.has(word)),
+    );
+    return [...spoken].some((word) => own.has(word));
+  });
+
+  return hits.length === 1 ? (hits[0] ?? null) : null;
+}

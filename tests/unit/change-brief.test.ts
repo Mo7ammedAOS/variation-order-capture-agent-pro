@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOf, matchChangeInText } from '@/lib/change-brief';
+import { briefOf, matchChangeByWords, matchChangeInText } from '@/lib/change-brief';
 
 const CHANGES = [
   { id: 'pc-1', pcNumber: 'PC-DXB-001-0001' },
@@ -60,5 +60,37 @@ describe('naming a change, however it is written', () => {
   it('says nothing when nothing is named', () => {
     expect(matchChangeInText('the ceiling one', CHANGES)).toBeNull();
     expect(matchChangeInText('', CHANGES)).toBeNull();
+  });
+});
+
+describe('naming a change the way a person would', () => {
+  const OPTIONS = [
+    { id: 'pc-1', pcNumber: 'PC-DXB-001-0001', title: 'Reception ceiling grid lowered 300mm', summary: null },
+    { id: 'pc-2', pcNumber: 'PC-DXB-001-0002', title: 'Lift lobby marble swapped for porcelain', summary: null },
+    { id: 'pc-3', pcNumber: 'PC-DXB-001-0003', title: 'Extra sockets in the meeting room', summary: null },
+  ];
+
+  it('reads "the ceiling one"', () => {
+    expect(matchChangeByWords('the ceiling one', OPTIONS)?.id).toBe('pc-1');
+  });
+
+  it('refuses a reply that points at two of them', () => {
+    // "reception" is in the first and "marble" in the second. A reply that
+    // points at two options has narrowed nothing, and picking the earlier one
+    // would put evidence on the wrong claim silently.
+    expect(matchChangeByWords('reception marble', OPTIONS)).toBeNull();
+  });
+
+  it('reads "the sockets"', () => {
+    expect(matchChangeByWords('the sockets', OPTIONS)?.id).toBe('pc-3');
+  });
+
+  it('ignores words that are on half the register', () => {
+    expect(matchChangeByWords('the new change please', OPTIONS)).toBeNull();
+    expect(matchChangeByWords('these files belong to that one', OPTIONS)).toBeNull();
+  });
+
+  it('says nothing when nothing distinctive was said', () => {
+    expect(matchChangeByWords('yes ok', OPTIONS)).toBeNull();
   });
 });

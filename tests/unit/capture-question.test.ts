@@ -366,8 +366,8 @@ describe('"are these files a new change, or one of these?"', () => {
     state.questions = [attachQuestion()];
     state.projects = [{ id: 'proj-a', projectCode: 'DXB-001' }];
     state.changes = [
-      { id: 'pc-1', pcNumber: 'PC-DXB-001-0001' },
-      { id: 'pc-2', pcNumber: 'PC-DXB-001-0002' },
+      { id: 'pc-1', pcNumber: 'PC-DXB-001-0001', title: 'Reception ceiling grid lowered', summary: null },
+      { id: 'pc-2', pcNumber: 'PC-DXB-001-0002', title: 'Lift lobby marble swapped for porcelain', summary: null },
     ];
     state.claimed = [];
     state.claimCount = 1;
@@ -391,13 +391,36 @@ describe('"are these files a new change, or one of these?"', () => {
     expect(answered?.projectId).toBe('proj-a');
   });
 
-  it('takes prose as the description of what the files show', async () => {
+  it('reads the change the way a person names it, not the way the database does', async () => {
+    const answered = await tryAnswerQuestion(attempt('the marble one'));
+    expect(answered?.outcome).toBe('attach_existing');
+    expect(answered?.potentialChangeId).toBe('pc-2');
+  });
+
+  it('attaches when the prose describes a change already on the list', async () => {
+    // "the ceiling grid at reception is 300mm low" is almost word for word an
+    // option we just offered, so it attaches rather than opening a second
+    // claim for the same event.
+    //
+    // It could be a NEW ceiling problem, and then this is wrong. That trade is
+    // taken on purpose: a duplicate splits the evidence across two claims and
+    // both get priced on half the story, whereas attaching to the wrong one is
+    // quoted straight back — "2 files added to PC-DXB-001-0001 — Reception
+    // ceiling grid lowered" — and can be said so in the next message.
+    const answered = await tryAnswerQuestion(attempt('the ceiling grid at reception is 300mm low'));
+    expect(answered?.outcome).toBe('attach_existing');
+    expect(answered?.potentialChangeId).toBe('pc-1');
+  });
+
+  it('takes prose that matches nothing on the list as a new change to open', async () => {
     // Sending the photos and then saying what they are of is what a person
     // does. Reading that as a separate report would file a change with no
     // evidence and leave the evidence attached to nothing.
-    const answered = await tryAnswerQuestion(attempt('the ceiling grid at reception is 300mm low'));
+    const answered = await tryAnswerQuestion(
+      attempt('client wants two more power points behind the credenza'),
+    );
     expect(answered?.outcome).toBe('described');
-    expect(answered?.replyText).toContain('300mm low');
+    expect(answered?.replyText).toContain('power points');
   });
 
   it('still lets them withdraw it', async () => {
