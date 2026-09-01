@@ -8,6 +8,7 @@ import { subtractDecimals, sumDecimals, toFils } from '@/lib/money';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit } from '@/services/audit-log.service';
 import { assertProjectAccess, scopeToUser } from '@/services/project-access.service';
+import { issuedCredits } from '@/services/credit-note.service';
 
 /**
  * Money actually received.
@@ -44,7 +45,10 @@ export async function recordPayment(user: AuthenticatedUser, input: PaymentInput
 
   const invoice = await prisma.invoice.findUnique({
     where: { id: parsed.invoiceId },
-    include: { payments: { select: { amount: true } } },
+    include: {
+      payments: { select: { amount: true } },
+      creditNotes: { select: { status: true, totalCredited: true } },
+    },
   });
   if (!invoice) throw new NotFoundError('Invoice not found');
 
@@ -69,12 +73,23 @@ export async function recordPayment(user: AuthenticatedUser, input: PaymentInput
   }
 
   const alreadyPaid = sumDecimals(invoice.payments.map((payment) => payment.amount.toString()));
-  const outstanding = subtractDecimals(invoice.totalDue.toString(), alreadyPaid);
+  // What the client actually owes, which is the invoice less anything credited
+  // back. Without this a fully credited invoice would still accept a payment
+  // for its original face value, and the money would sit against a demand that
+  // no longer exists.
+  const credited = sumDecimals(
+    issuedCredits(invoice.creditNotes).map((note) => note.totalCredited.toString()),
+  );
+  const demand = subtractDecimals(invoice.totalDue.toString(), credited);
+  const outstanding = subtractDecimals(demand, alreadyPaid);
 
   if (amountFils > toFils(outstanding)) {
     throw new ValidationError(
-      `Only ${outstanding} is outstanding on this application. ` +
-        'A larger receipt belongs to another invoice, or this one was wrong.',
+      toFils(credited) > 0
+        ? `Only ${outstanding} is outstanding on this application after credits of ${credited}. ` +
+          'A larger receipt belongs to another invoice.'
+        : `Only ${outstanding} is outstanding on this application. ` +
+          'A larger receipt belongs to another invoice, or this one was wrong.',
     );
   }
 
@@ -165,13 +180,25 @@ async function refreshInvoiceStatus(
 ): Promise<'issued' | 'part_paid' | 'paid'> {
   const invoice = await tx.invoice.findUnique({
     where: { id: invoiceId },
-    include: { payments: { select: { amount: true } } },
+    include: {
+      payments: { select: { amount: true } },
+      creditNotes: { select: { status: true, totalCredited: true } },
+    },
   });
   if (!invoice) throw new NotFoundError('Invoice not found');
 
   const paid = toFils(sumDecimals(invoice.payments.map((payment) => payment.amount.toString())));
-  const due = toFils(invoice.totalDue.toString());
+  const credited = toFils(
+    sumDecimals(issuedCredits(invoice.creditNotes).map((note) => note.totalCredited.toString())),
+  );
+  // Settled against what is actually owed, not the face value. An invoice
+  // half of which was credited is paid when the other half arrives.
+  const due = toFils(invoice.totalDue.toString()) - credited;
 
+  // Still driven by money received. An invoice nobody has paid stays `issued`
+  // even when a credit has taken the whole of it away — calling that "paid"
+  // would put a receipt in the ledger that never happened. What the credit
+  // changes is the outstanding figure, which is computed on read.
   const status = paid <= 0 ? 'issued' : paid >= due ? 'paid' : 'part_paid';
 
   await tx.invoice.update({ where: { id: invoiceId }, data: { status } });

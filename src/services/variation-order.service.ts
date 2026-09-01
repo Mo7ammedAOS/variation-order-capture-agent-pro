@@ -36,12 +36,31 @@ import { loadRecipients, recordTaskNotifications } from '@/services/notification
  * lane D's job and its result is lane D's report. Same rule as the notice.
  */
 
-export const voSubmissionSchema = z.object({
-  variationOrderId: z.string().uuid(),
-  submittedOn: z.coerce.date(),
-  timeImpactDaysClaimed: z.coerce.number().int().min(0).max(999).optional().nullable(),
-  clientReference: z.string().trim().max(200).optional().nullable(),
-});
+export const voSubmissionSchema = z
+  .object({
+    variationOrderId: z.string().uuid(),
+    submittedOn: z.coerce.date(),
+    timeImpactDaysClaimed: z.coerce.number().int().min(0).max(999).optional().nullable(),
+    /** Which activity was delayed, and why it is on the critical path. */
+    timeImpactBasis: z.string().trim().max(4000).optional().nullable(),
+    clientReference: z.string().trim().max(200).optional().nullable(),
+  })
+  // Days with no basis are refused by every engineer who has ever assessed an
+  // extension of time, so the system refuses them first. A claim for 21 days
+  // that cannot say which activity moved is not a claim, it is a number, and
+  // submitting one costs the credibility of the next claim that is sound.
+  .refine(
+    (value) =>
+      !value.timeImpactDaysClaimed ||
+      value.timeImpactDaysClaimed === 0 ||
+      (value.timeImpactBasis?.trim().length ?? 0) >= 10,
+    {
+      message:
+        'Say which activity was delayed and why it is on the critical path. ' +
+        'Days without a basis will be rejected.',
+      path: ['timeImpactBasis'],
+    },
+  );
 
 export type VoSubmissionInput = z.infer<typeof voSubmissionSchema>;
 
@@ -173,6 +192,7 @@ export async function recordSubmission(user: AuthenticatedUser, input: VoSubmiss
         submittedByUserId: user.id,
         clientResponse: 'awaiting',
         timeImpactDaysClaimed: parsed.timeImpactDaysClaimed ?? vo.timeImpactDaysClaimed,
+        timeImpactBasis: parsed.timeImpactBasis?.trim() || vo.timeImpactBasis,
         clientReference: parsed.clientReference || vo.clientReference,
       },
     });
@@ -373,7 +393,10 @@ export async function getVariationOrderForChange(potentialChangeId: string) {
       recordedBy: { select: { fullName: true } },
       invoices: {
         orderBy: { periodEnd: 'asc' },
-        include: { payments: { orderBy: { receivedAt: 'asc' } } },
+        include: {
+          payments: { orderBy: { receivedAt: 'asc' } },
+          creditNotes: { orderBy: { createdAt: 'asc' } },
+        },
       },
     },
   });

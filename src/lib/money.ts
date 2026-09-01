@@ -158,3 +158,100 @@ export function decimalToNumber(value: string | number | null | undefined): numb
   if (value === null || value === undefined || value === '') return 0;
   return toFils(value) / SCALE;
 }
+
+export interface CreditInput {
+  /** The gross being taken back off an application. */
+  grossAmount: string;
+  /** The rate that was withheld on the invoice being credited. */
+  retentionPercent: string;
+  /** The rate that was charged on it. */
+  vatPercent: string;
+}
+
+export interface CreditLines {
+  grossAmount: string;
+  retentionAmount: string;
+  netValue: string;
+  vatAmount: string;
+  totalCredited: string;
+}
+
+/**
+ * A credit note, computed exactly as the application it reverses.
+ *
+ *   gross being credited
+ *   less the retention that was withheld on it   = net
+ *   plus VAT on the net                          = total credited
+ *
+ * The retention line is the one people get wrong. Crediting an
+ * over-certification of 10,000 does not put 10,000 back on the client's
+ * account: 500 of it was never billed to them, it was withheld. Returning the
+ * net while quietly keeping the retention would leave the company reporting
+ * money it is no longer entitled to hold, and that error compounds every time
+ * a figure is corrected.
+ *
+ * The rates come from the INVOICE being credited, never from today's contract
+ * rules. A retention percentage renegotiated next year must not change what
+ * was withheld last year.
+ */
+export function calculateCredit(input: CreditInput): CreditLines {
+  const gross = toFils(input.grossAmount);
+
+  if (gross <= 0) {
+    throw new ValidationError('A credit must be more than zero');
+  }
+
+  const retentionAmount = percentOf(gross, input.retentionPercent);
+  if (retentionAmount > gross) {
+    throw new ValidationError('Retention cannot exceed the amount being credited');
+  }
+
+  const netValue = gross - retentionAmount;
+  const vatAmount = percentOf(netValue, input.vatPercent);
+
+  return {
+    grossAmount: fromFils(gross),
+    retentionAmount: fromFils(retentionAmount),
+    netValue: fromFils(netValue),
+    vatAmount: fromFils(vatAmount),
+    totalCredited: fromFils(netValue + vatAmount),
+  };
+}
+
+export interface RetentionReleaseInput {
+  /** How much retention is coming back. */
+  amount: string;
+  vatPercent: string;
+}
+
+export interface RetentionReleaseLines {
+  retentionReleased: string;
+  netValue: string;
+  vatAmount: string;
+  totalDue: string;
+}
+
+/**
+ * Retention coming back at a contractual milestone.
+ *
+ * There is no gross and no percentage of completion here, which is the whole
+ * reason a release is not just another application: no new work has been done.
+ * The money was earned when the work was done and has been sitting with the
+ * client ever since. VAT applies, because the release is an invoice like any
+ * other.
+ */
+export function calculateRetentionRelease(
+  input: RetentionReleaseInput,
+): RetentionReleaseLines {
+  const amount = toFils(input.amount);
+  if (amount <= 0) throw new ValidationError('A retention release must be more than zero');
+
+  const vatAmount = percentOf(amount, input.vatPercent);
+
+  return {
+    retentionReleased: fromFils(amount),
+    netValue: fromFils(amount),
+    vatAmount: fromFils(vatAmount),
+    totalDue: fromFils(amount + vatAmount),
+  };
+}

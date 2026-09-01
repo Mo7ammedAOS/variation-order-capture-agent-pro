@@ -182,11 +182,12 @@ equal, which silently discarded every `.default()` and handed services
 
 ## Known limitations
 
-- **Nothing has run against a database.** Migrations, seed, integration tests
-  and deploy are all unexercised.
-- **Contract rules are read-only in the UI.** Seeded and displayed; no edit form.
-- **Project / contact / member creation is API-only.** No forms yet — the
-  services and routes exist.
+- **The integration tests fail until the next deploy.** They run against the
+  shared Supabase, which does not have `20260902100000_credit_notes_and_retention_release`
+  yet. Unit tests, lint, typecheck and build are all clean.
+- **Contract rules are read-only in the UI.** Seeded and displayed; no edit
+  form — which now also covers the retention release split and the defects
+  liability period.
 - **Rate limiting is per-container.** Move to Redis before scaling past one.
 - **RLS covers reads only**, deliberately — writes must go through the app.
 - **Arabic is structural only.** `dir`, logical properties, language fields. No
@@ -356,11 +357,32 @@ Four SOPs that were "Not yet specified" stubs are now written to match what was
 built: `client_vo_submission`, `invoice_tracking`, `payment_collection`,
 `approved_but_unbilled`.
 
-Not built, and stated rather than implied: **retention release** (withheld
-correctly, reported as held, but the application that releases it at practical
-completion does not exist), **credit notes** (an over-certification and a
-payment against the wrong invoice are both refused rather than credited), and
-**EOT valuation**.
+**Stage 6b — the three holes in the money loop.** Built, 2026-09-02.
+
+- **Credit notes.** The system used to refuse every correction: completion
+  could not go backwards, an invoice with money against it could not be
+  cancelled, a receipt above the invoice was rejected. Each refusal is right
+  alone; together they meant a wrong figure that reached the client could never
+  be put right. A credit is now its own document, with its own series, reason
+  and narrative. It mirrors the application it reverses — including the
+  retention, so crediting 10,000 returns 9,975 and stops holding the 500. An
+  issued credit frees the work to be applied for again, which is why the
+  "cannot go backwards" guard is now measured in money rather than in the
+  percentage on the paper.
+- **Retention release.** `invoices.kind` separates an application from a
+  release. A release carries no work value and no percentage — the money was
+  earned months ago — and names its moiety, so practical completion cannot be
+  released twice. Half at practical completion and the rest at the end of the
+  defects liability period, both from the contract rules.
+- **Extension of time**, recorded and never valued, per Osman's decision of
+  2026-09-02. The days and the client's answer were already stored; what was
+  missing was the **basis**. A claim with days and no stated critical path is
+  now refused, and claimed / approved / conceded days are totalled on the
+  dashboard beside the money.
+
+Not built, and stated rather than implied: **prolongation cost** — an EOT
+carries days and a basis, no money. Valuing one needs an agreed daily prelims
+rate per project and a rule for who agrees it.
 
 **Stage 7 — AI for real.** Built, 2026-09-01, for capture extraction.
 

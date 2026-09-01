@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPcNumber, isValidPcNumber, parsePcNumber } from '@/lib/pc-number';
+import { formatCreditNoteNumber, formatPcNumber, isValidPcNumber, parsePcNumber } from '@/lib/pc-number';
 import { ValidationError } from '@/lib/errors';
 
 describe('PC number', () => {
@@ -39,5 +39,16 @@ describe('PC number', () => {
     expect(parsePcNumber('PC-DXB-001-abcd')).toBeNull();
     expect(parsePcNumber('PC-0042')).toBeNull();
     expect(isValidPcNumber('nonsense')).toBe(false);
+  });
+});
+
+describe('credit note numbers', () => {
+  it('carry their own series, so a credit never shares a reference with an invoice', () => {
+    expect(formatCreditNoteNumber('DXB-001', 1)).toBe('CN-DXB-001-0001');
+    expect(formatCreditNoteNumber('DXB-001', 42)).toBe('CN-DXB-001-0042');
+  });
+
+  it('refuse a malformed project code, like every other series', () => {
+    expect(() => formatCreditNoteNumber('dxb 001', 1)).toThrow();
   });
 });

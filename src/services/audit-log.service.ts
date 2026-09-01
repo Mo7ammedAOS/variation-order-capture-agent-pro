@@ -31,6 +31,7 @@ export type RecordType =
   | 'notice'
   | 'variation_order'
   | 'invoice'
+  | 'credit_note'
   | 'payment';
 
 export type ActionType =

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import {
   AlertOctagon, CalendarClock, CalendarX2, ClipboardList,
-  FileWarning, FolderKanban, Gavel, HandCoins, Landmark, ReceiptText, Timer, Wallet,
+  FileWarning, FolderKanban, Gavel, HandCoins, Landmark, PiggyBank, ReceiptText,
+  RotateCcw, Timer, Wallet,
 } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { getOverview } from '@/services/dashboard.service';
@@ -136,6 +137,53 @@ export default async function DashboardPage() {
           value={formatMoney(Number(money.shortfallValue), 'AED', { abbreviate: true })}
           icon={Wallet}
           hint="Submitted less what the client agreed"
+        />
+      </section>
+
+      {/*
+        Retention and time — the two things a fit-out contractor loses without
+        ever deciding to.
+
+        Retention is money already earned that somebody else is holding, and it
+        comes back only if a person remembers to ask. Days are the second
+        currency on a job: conceding ninety of them across eleven variations is
+        giving away the programme, and until the figure is added up nobody in
+        the company can see it happening.
+      */}
+      <section aria-label="Retention and time" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Retention held"
+          value={formatMoney(Number(money.retentionHeld), 'AED', { abbreviate: true })}
+          icon={PiggyBank}
+          tone={Number(money.retentionHeld) > 0 ? 'amber' : 'green'}
+          hint={
+            Number(money.retentionReleasedTotal) > 0
+              ? `${formatMoney(Number(money.retentionReleasedTotal), 'AED', { abbreviate: true })} already released`
+              : 'Earned, withheld, not yet asked back'
+          }
+        />
+        <StatCard
+          label="Credited back"
+          value={formatMoney(Number(money.creditedTotal), 'AED', { abbreviate: true })}
+          icon={RotateCcw}
+          hint="Issued credit notes against applications"
+        />
+        <StatCard
+          label="Days claimed"
+          value={String(money.time.daysClaimed)}
+          icon={CalendarClock}
+          hint={
+            money.time.awaitingCount > 0
+              ? `${money.time.awaitingCount} time claim${money.time.awaitingCount === 1 ? '' : 's'} unanswered`
+              : `${money.time.daysApproved} agreed by the client`
+          }
+        />
+        <StatCard
+          label="Days conceded"
+          value={String(money.time.daysConceded)}
+          icon={CalendarX2}
+          tone={money.time.daysConceded > 0 ? 'red' : 'green'}
+          hint="Claimed less what the client agreed"
         />
       </section>
 

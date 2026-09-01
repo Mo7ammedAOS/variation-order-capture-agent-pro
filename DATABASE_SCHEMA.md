@@ -24,7 +24,8 @@ Source of truth: `prisma/schema.prisma`. This file explains the decisions.
 | `notification_logs` | Delivery state machine |
 | `notices` | The notice document: draft, issued, served, acknowledged, superseded |
 | `variation_orders` | What we put to the client, and what they said back. One per change |
-| `invoices` | Monthly progress applications against an agreed VO |
+| `invoices` | Monthly progress applications, and retention releases, against an agreed VO |
+| `credit_notes` | Corrections to an invoice the client already has |
 | `payments` | Money received. Many per invoice |
 | `document_chunks` | pgvector chunks (Phase 2 RAG) |
 | `potential_change_embeddings` | pgvector, for duplicate detection |
@@ -210,21 +211,62 @@ Three further rules hold across all three tables:
   its payments on every write, so the register cannot say paid while the bank
   says otherwise.
 
-Four number series per project, all separate — `pc_sequence`,
-`notice_sequence`, `vo_sequence`, `invoice_sequence`. A VO number is quoted on
-a payment certificate and an invoice number on a bank transfer, so neither may
-move because something upstream was renumbered. Per project rather than
-company-wide, because a company-wide invoice series tells every client how much
-work the contractor has on, from the size of the gaps.
+Five number series per project, all separate — `pc_sequence`,
+`notice_sequence`, `vo_sequence`, `invoice_sequence`, `credit_note_sequence`. A
+VO number is quoted on a payment certificate and an invoice number on a bank
+transfer, so neither may move because something upstream was renumbered. Per
+project rather than company-wide, because a company-wide invoice series tells
+every client how much work the contractor has on, from the size of the gaps.
+
+**`invoices.kind` separates an application from a retention release.** Both ask
+the client for money, attract VAT, fall due on the payment terms and go overdue
+the same way, which is why they share a table. Only an application carries work
+value: a release has `gross_this_period` and `cumulative_percent` of zero, and
+its amount sits in `retention_released`. Counting a release as turnover would
+bill the same job twice. `retention_stage` names which moiety it is, and the
+same moiety cannot be released twice on one variation.
+
+Retention held is `sum(retention_amount) - sum(retention_released)` over live
+rows, less the retention on any issued credit. It is computed on read like
+every other total here.
+
+**`credit_notes` correct a figure that already reached the client.** A separate
+document rather than a negative invoice and rather than an edit, because the
+client is holding an invoice that says a number and that number has to stay
+reproducible line for line. A credit mirrors the application it reverses —
+gross, retention, net, VAT — so crediting an over-certification gives back the
+retention withheld on it too; returning the net while keeping the retention
+would leave the company reporting money it no longer holds.
+
+Draft and issued are different states with different consequences. A draft
+moves no figure anywhere and can be discarded. An issued credit reduces what
+the client owes, what has been applied for (so the work can be billed again),
+and the retention held. Only a draft can be cancelled: once the client has a
+credit note, taking it back is a new invoice, not an undo.
+
+Because a credit frees work to be re-applied for, the "completion cannot go
+backwards" guard is measured in **money**, not in the highest percentage
+anybody typed — after a credit the paper still says 75% and the money behind it
+does not.
+
+**Extension of time is recorded, never valued.** `time_impact_days_claimed`,
+`time_impact_basis` and `approved_time_impact_days` on the variation order.
+Submitting a claim with days but no basis is refused: days with no stated
+critical path are rejected by every engineer who assesses one, and a rejected
+claim makes the next sound one harder. Claimed, approved and conceded days are
+added up beside the money, because conceding ninety days across eleven
+variations is giving away the programme and nobody can see it until it is
+totalled.
 
 ## Deliberately absent
 
-Retention release, credit notes, and EOT valuation. Retention is withheld
-correctly at every application and reported as held; the separate application
-that releases it at practical completion is not built. A credit note is the
-right answer to an over-certification and to a payment against a wrong invoice,
-and the system currently refuses those cases rather than inventing a document
-for them.
+**Prolongation cost.** An extension of time carries days and a basis, and no
+money. Valuing one needs an agreed daily prelims rate per project and a rule
+for who agrees it, and inventing either would produce a confident figure
+nobody had signed off.
+
+**Subcontractor quotations and procurement**, and **document intelligence** —
+nothing reads a drawing or a PDF. Both wait on a real contractor.
 
 ## Migrations
 

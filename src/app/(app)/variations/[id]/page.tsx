@@ -16,6 +16,8 @@ import { hasCapability, listMembersWithCapability } from '@/services/permissions
 import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
 import { getCurrentNotice } from '@/services/notice-document.service';
 import { getVariationOrderForChange } from '@/services/variation-order.service';
+import { retentionOn } from '@/services/invoice.service';
+import { creditableGross, issuedCredits } from '@/services/credit-note.service';
 import { subtractDecimals, sumDecimals } from '@/lib/money';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { getProjectRoles } from '@/services/project-access.service';
@@ -205,6 +207,19 @@ export default async function PotentialChangeDetailPage({
             : null;
         const unbilled = approvedValue ? subtractDecimals(approvedValue, applied) : null;
 
+        // Retention held on this variation, net of anything credited back and
+        // anything already released. Assembled here from the same frozen
+        // columns the service uses, so the panel and the position agree.
+        const retention = retentionOn(voRecord.invoices);
+        const releasedStages = voRecord.invoices
+          .filter(
+            (invoice) =>
+              invoice.status !== 'cancelled' &&
+              invoice.kind === 'retention_release' &&
+              invoice.retentionStage !== null,
+          )
+          .map((invoice) => invoice.retentionStage!);
+
         return {
           id: voRecord.id,
           voNumber: voRecord.voNumber,
@@ -221,15 +236,45 @@ export default async function PotentialChangeDetailPage({
           clientReference: voRecord.clientReference,
           clientResponseNotes: voRecord.clientResponseNotes,
           unbilled: unbilled && !unbilled.startsWith('-') ? unbilled : null,
+          timeImpactDaysClaimed: voRecord.timeImpactDaysClaimed,
+          timeImpactBasis: voRecord.timeImpactBasis,
+          approvedTimeImpactDays: voRecord.approvedTimeImpactDays,
+          retentionHeld: retention.held,
+          releasedStages,
           invoices: voRecord.invoices.map((invoice) => {
             const paidTotal = sumDecimals(
               invoice.payments.map((payment) => payment.amount.toString()),
             );
-            const outstanding = subtractDecimals(invoice.totalDue.toString(), paidTotal);
+            // Credits come off before anything else. An invoice half credited
+            // is not half outstanding, it is half owed, and a chase against
+            // the face value would be a demand for money already given back.
+            const creditedTotal = sumDecimals(
+              issuedCredits(invoice.creditNotes).map((note) => note.totalCredited.toString()),
+            );
+            const demand = subtractDecimals(invoice.totalDue.toString(), creditedTotal);
+            const outstanding = subtractDecimals(demand, paidTotal);
             return {
               id: invoice.id,
               invoiceNumber: invoice.invoiceNumber,
               status: invoice.status,
+              kind: invoice.kind,
+              retentionStage: invoice.retentionStage,
+              retentionReleased: invoice.retentionReleased.toString(),
+              creditedTotal,
+              creditableGross: creditableGross(
+                invoice.grossThisPeriod.toString(),
+                invoice.creditNotes,
+              ),
+              creditNotes: invoice.creditNotes.map((note) => ({
+                id: note.id,
+                creditNoteNumber: note.creditNoteNumber,
+                status: note.status,
+                reason: note.reason,
+                narrative: note.narrative,
+                grossAmount: note.grossAmount.toString(),
+                totalCredited: note.totalCredited.toString(),
+                issuedAt: note.issuedAt ? formatDate(note.issuedAt) : null,
+              })),
               periodEnd: formatDate(invoice.periodEnd),
               cumulativePercent: invoice.cumulativePercent.toString(),
               grossThisPeriod: invoice.grossThisPeriod.toString(),
@@ -248,7 +293,7 @@ export default async function PotentialChangeDetailPage({
                 !outstanding.startsWith('-') &&
                 outstanding !== '0.00',
               paidTotal,
-              outstanding,
+              outstanding: outstanding.startsWith('-') ? '0.00' : outstanding,
               payments: invoice.payments.map((payment) => ({
                 id: payment.id,
                 amount: payment.amount.toString(),

@@ -91,6 +91,18 @@ export function formatInvoiceNumber(projectCode: string, sequence: number): stri
   return formatSeries('INV', projectCode, sequence, 'Invoice');
 }
 
+/**
+ * Its own series, not a suffix on the invoice it credits.
+ *
+ * A credit note is quoted in correspondence and reconciled against a client's
+ * own ledger. Sharing a number with the invoice would mean two documents with
+ * the same reference and opposite signs, which is exactly the confusion the
+ * document exists to remove.
+ */
+export function formatCreditNoteNumber(projectCode: string, sequence: number): string {
+  return formatSeries('CN', projectCode, sequence, 'Credit note');
+}
+
 function formatSeries(
   prefix: string,
   projectCode: string,

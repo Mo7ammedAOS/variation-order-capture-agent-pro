@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateApplication,
+  calculateCredit,
+  calculateRetentionRelease,
   fromFils,
   percentOf,
   subtractDecimals,
@@ -165,5 +167,60 @@ describe('the three number series', () => {
   it('refuse a sequence that was never allocated', () => {
     expect(() => formatVoNumber('DXB-001', 0)).toThrow();
     expect(() => formatInvoiceNumber('DXB-001', -1)).toThrow();
+  });
+});
+
+describe('a credit note reverses an application exactly', () => {
+  it('gives back the retention that was withheld, not just the net', () => {
+    // The line people get wrong. Crediting 10,000 of over-certification does
+    // not put 10,000 on the client's account: 500 was never billed to them.
+    const credit = calculateCredit({
+      grossAmount: '10000.00',
+      retentionPercent: '5',
+      vatPercent: '5',
+    });
+    expect(credit.retentionAmount).toBe('500.00');
+    expect(credit.netValue).toBe('9500.00');
+    expect(credit.vatAmount).toBe('475.00');
+    expect(credit.totalCredited).toBe('9975.00');
+  });
+
+  it('mirrors the application it reverses, line for line', () => {
+    const application = calculateApplication({
+      basisValue: '40000.00',
+      cumulativePercent: '25',
+      previouslyApplied: '0.00',
+      retentionPercent: '10',
+      vatPercent: '5',
+    });
+    const credit = calculateCredit({
+      grossAmount: application.grossThisPeriod,
+      retentionPercent: '10',
+      vatPercent: '5',
+    });
+
+    expect(credit.grossAmount).toBe(application.grossThisPeriod);
+    expect(credit.retentionAmount).toBe(application.retentionAmount);
+    expect(credit.netValue).toBe(application.netValue);
+    expect(credit.totalCredited).toBe(application.totalDue);
+  });
+
+  it('refuses a credit of nothing', () => {
+    expect(() => calculateCredit({ grossAmount: '0', retentionPercent: '5', vatPercent: '5' })).toThrow();
+    expect(() => calculateCredit({ grossAmount: '-100', retentionPercent: '5', vatPercent: '5' })).toThrow();
+  });
+});
+
+describe('retention coming back', () => {
+  it('carries no gross and no percentage, because no new work was done', () => {
+    const release = calculateRetentionRelease({ amount: '12500.00', vatPercent: '5' });
+    expect(release.retentionReleased).toBe('12500.00');
+    expect(release.netValue).toBe('12500.00');
+    expect(release.vatAmount).toBe('625.00');
+    expect(release.totalDue).toBe('13125.00');
+  });
+
+  it('refuses to release nothing', () => {
+    expect(() => calculateRetentionRelease({ amount: '0', vatPercent: '5' })).toThrow();
   });
 });

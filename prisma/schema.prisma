@@ -408,6 +408,45 @@ enum InvoiceStatus {
   cancelled
 }
 
+/// What an invoice row IS. Both kinds ask the client for money and both are
+/// paid the same way, which is why they share a table — but only an
+/// application carries new work value, and conflating the two would double
+/// count a job's turnover at the moment retention comes back.
+enum InvoiceKind {
+  /// A monthly progress application against an agreed variation.
+  application
+  /// Retention coming back at a contractual milestone. No new work value.
+  retention_release
+}
+
+/// When retention falls due. UAE fit-out almost always releases in two
+/// moieties, and the second one is a year after the first.
+enum RetentionStage {
+  practical_completion
+  defects_liability_end
+}
+
+/// Why money is going back. Recorded as an enum and not as prose, because
+/// "how much did we credit, and what for" is a question a director asks once a
+/// quarter and prose cannot answer.
+enum CreditNoteReason {
+  /// We applied for more than was actually complete.
+  over_certification
+  /// It was billed against the wrong variation or the wrong period.
+  wrong_invoice
+  /// The client certified less and we have accepted it.
+  client_deduction
+  /// The same work was billed twice.
+  duplicate
+  other
+}
+
+enum CreditNoteStatus {
+  draft
+  issued
+  cancelled
+}
+
 enum NotificationKind {
   task_assigned
   task_reminder
@@ -524,6 +563,7 @@ model User {
   vosSubmitted         VariationOrder[] @relation("VoSubmittedBy")
   vosResponseRecorded  VariationOrder[] @relation("VoResponseRecordedBy")
   invoicesIssued       Invoice[]        @relation("InvoiceIssuedBy")
+  creditNotesIssued     CreditNote[]      @relation("CreditNoteIssuedBy")
   paymentsRecorded     Payment[]        @relation("PaymentRecordedBy")
 
   @@index([systemRole])
@@ -564,6 +604,9 @@ model Project {
   /// Invoice numbers are a per-project series too. A company-wide series would
   /// leak how much work the contractor has on, to every client who sees a gap.
   invoiceSequence Int   @default(0) @map("invoice_sequence")
+  /// Credit notes carry their own series. A credit quoted in correspondence
+  /// must not share a number with an invoice.
+  creditNoteSequence Int @default(0) @map("credit_note_sequence")
   /// Google Drive folder for this project. Ids are authoritative; folder names
   /// are cosmetic, so renaming in Drive never breaks the app.
   driveFolderId String? @map("drive_folder_id")
@@ -587,6 +630,7 @@ model Project {
   notices          Notice[]
   variationOrders  VariationOrder[]
   invoices         Invoice[]
+  creditNotes      CreditNote[]
   payments         Payment[]
 
   @@index([projectStatus])
@@ -659,6 +703,12 @@ model ProjectContractRule {
   retentionPercent       Decimal @default(5) @map("retention_percent") @db.Decimal(6, 3)
   /// Days from the invoice date to the date it falls due.
   paymentTermsDays       Int     @default(30) @map("payment_terms_days")
+  /// How much of the retention comes back at practical completion. The rest
+  /// follows at the end of the defects liability period. Half and half is the
+  /// UAE fit-out norm, and both moieties are contractual, not discretionary.
+  retentionReleasePercentAtPc Decimal @default(50) @map("retention_release_percent_at_pc") @db.Decimal(6, 3)
+  /// How long after practical completion the second moiety falls due.
+  defectsLiabilityDays   Int     @default(365) @map("defects_liability_days")
   /// How long the client gets before an unanswered VO is a bottleneck.
   voResponseDays         Int     @default(14) @map("vo_response_days")
 
@@ -1222,6 +1272,11 @@ model VariationOrder {
   submittedAt      DateTime? @map("submitted_at")
   submittedByUserId String?  @map("submitted_by_user_id") @db.Uuid
   timeImpactDaysClaimed Int? @map("time_impact_days_claimed")
+  /// WHY those days are owed: which activity was delayed and why it is on the
+  /// critical path. A number of days with no basis is refused by every
+  /// engineer who has ever assessed one, so the field is the claim, not
+  /// decoration.
+  timeImpactBasis       String? @map("time_impact_basis")
 
   clientResponse       ClientResponse @default(awaiting) @map("client_response")
   clientResponseAt     DateTime?      @map("client_response_at")
@@ -1274,6 +1329,10 @@ model Invoice {
   /// INV-{PROJECT_CODE}-{sequence:0000}
   invoiceNumber String        @map("invoice_number")
   status        InvoiceStatus @default(draft)
+  /// An application, or retention coming back. Defaulted so every row written
+  /// before retention release existed is still an application, which is what
+  /// they all were.
+  kind          InvoiceKind   @default(application)
 
   /// The valuation date. What period this application covers up to.
   periodEnd DateTime @map("period_end") @db.Date
@@ -1290,7 +1349,14 @@ model Invoice {
 
   retentionPercent Decimal @map("retention_percent") @db.Decimal(6, 3)
   retentionAmount  Decimal @map("retention_amount") @db.Decimal(18, 2)
-  /// grossThisPeriod - retentionAmount
+  /// Retention coming BACK on this row. Always zero on an application, and the
+  /// whole of a release. Held as its own column rather than as a negative
+  /// `retentionAmount`, because "retention held" is a sum a commercial manager
+  /// reads and a sign flip hidden inside it is a number nobody can check.
+  retentionReleased Decimal @default(0) @map("retention_released") @db.Decimal(18, 2)
+  /// Which moiety this release is. Null on an application.
+  retentionStage    RetentionStage? @map("retention_stage")
+  /// grossThisPeriod - retentionAmount, or the retention released
   netValue         Decimal @map("net_value") @db.Decimal(18, 2)
   vatPercent       Decimal @map("vat_percent") @db.Decimal(6, 3)
   vatAmount        Decimal @map("vat_amount") @db.Decimal(18, 2)
@@ -1315,6 +1381,7 @@ model Invoice {
   variationOrder VariationOrder @relation(fields: [variationOrderId], references: [id], onDelete: Cascade)
   issuedBy       User?          @relation("InvoiceIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
   payments       Payment[]
+  creditNotes    CreditNote[]
 
   @@unique([projectId, invoiceNumber])
   @@index([projectId, status])
@@ -1325,6 +1392,63 @@ model Invoice {
 
 /// Money actually received. Many per invoice, because part payment is normal
 /// and pretending otherwise would force somebody to round.
+/// Money going back to the client against an invoice already issued.
+///
+/// A separate document rather than a negative invoice, and separate rows
+/// rather than an edit to the invoice. Two reasons, both of them about the
+/// paper: the client is holding an invoice that says a number, and that number
+/// must still be reproducible line for line a year later; and a credit is
+/// approved by a person, on a date, for a stated reason, which an edit records
+/// nowhere.
+///
+/// It mirrors the application arithmetic exactly — gross, retention, net, VAT —
+/// because crediting an over-certification has to give back the retention that
+/// was withheld on it too. A credit that returns the net but keeps the
+/// retention quietly overstates what the company is still holding.
+model CreditNote {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  /// The invoice being credited. A credit always points at a document the
+  /// client can find in their own files.
+  invoiceId String @map("invoice_id") @db.Uuid
+
+  /// CN-{PROJECT_CODE}-{sequence:0000}
+  creditNoteNumber String           @map("credit_note_number")
+  status           CreditNoteStatus @default(draft)
+  reason           CreditNoteReason
+  /// Why, in words, for the person reading it in two years. Required — a
+  /// credit with no explanation is indistinguishable from a mistake.
+  narrative        String
+
+  /// The gross being taken back off the application.
+  grossAmount     Decimal @map("gross_amount") @db.Decimal(18, 2)
+  /// Retention that was withheld on that gross and is no longer held.
+  retentionAmount Decimal @map("retention_amount") @db.Decimal(18, 2)
+  netValue        Decimal @map("net_value") @db.Decimal(18, 2)
+  vatPercent      Decimal @map("vat_percent") @db.Decimal(6, 3)
+  vatAmount       Decimal @map("vat_amount") @db.Decimal(18, 2)
+  /// netValue + vatAmount. What comes off what the client owes.
+  totalCredited   Decimal @map("total_credited") @db.Decimal(18, 2)
+
+  issuedAt       DateTime? @map("issued_at")
+  issuedByUserId String?   @map("issued_by_user_id") @db.Uuid
+
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelledReason String?   @map("cancelled_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoice  Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  issuedBy User?   @relation("CreditNoteIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, creditNoteNumber])
+  @@index([projectId, status])
+  @@index([invoiceId])
+  @@map("credit_notes")
+}
+
 model Payment {
   id        String @id @default(uuid()) @db.Uuid
   projectId String @map("project_id") @db.Uuid
