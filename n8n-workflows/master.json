@@ -172,8 +172,8 @@
           "readStatus": "unread"
         },
         "options": {
-          "downloadAttachments": true,
-          "dataPropertyAttachmentsPrefixName": "attachment_"
+          "dataPropertyAttachmentsPrefixName": "attachment_",
+          "downloadAttachments": true
         }
       },
       "id": "b50cf4e9-9340-5a64-ae28-655a2c6eff9e",
@@ -432,7 +432,7 @@
     {
       "parameters": {
         "action": "hmac",
-        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
+        "value": "={{ $json.toSign }}",
         "dataPropertyName": "expected"
       },
       "id": "434e8719-39f6-5e3a-9beb-7f463561cc8f",
@@ -649,7 +649,7 @@
     {
       "parameters": {
         "action": "hmac",
-        "value": "={{ $json.headers['x-vo-timestamp'] + '.' + $json.body.toString() }}",
+        "value": "={{ $json.toSign }}",
         "dataPropertyName": "expected"
       },
       "id": "3f2e1ff7-7e58-5b2b-9dae-2bc948d10aa4",
@@ -842,7 +842,7 @@
     {
       "parameters": {
         "content": "### Lane S · The schedules\nEverything this system does on a clock lives here, so it can be seen, paused\nand proved from one screen.\n\n| When | Job |\n|---|---|\n| Hourly, 07-19 | `reminder_sweep` — who is late, who gets chased, who gets escalated |\n| Every 30 min, 07–19 | `notification_dispatch` — messages a lane could not take earlier |\n| 06:00 daily | `bottleneck_sweep` — what is blocked and how much is waiting on it |\n\n**What did NOT move here: deciding who is owed what.** That stays in the app,\nwhere the escalation ladder and the dedupe key are tested. As n8n nodes it\nwould be a diagram nobody can run twice safely, and a retried execution would\nchase the same project manager twice. A system that double-chases gets muted.\n\n**The chase runs hourly, not once.** This instance's Schedule Trigger is 1.3,\nwhich has no \"If Execution Is Missed\" setting, so a single daily fire landing\nduring a deploy would cost a whole day of chasing with no sign of it. Thirteen\nruns a day, of which twelve write nothing.\n\n**Safe to fire twice.** Each job reads current state and works out what is owed\nnow; the dedupe key covers task, kind, day, channel and recipient.",
-        "height": 480,
+        "height": 640,
         "width": 520,
         "color": 7
       },
@@ -1202,21 +1202,13 @@
       ]
     },
     {
-      "id": "9877cc46-1fa9-44f0-99d9-67c96bfd88a5",
-      "name": "D3a · Is a Reply?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        256,
-        624
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "loose"
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "and",
           "conditions": [
@@ -1232,19 +1224,18 @@
           ]
         },
         "options": {}
-      }
+      },
+      "id": "9877cc46-1fa9-44f0-99d9-67c96bfd88a5",
+      "name": "D3a · Is a Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        256,
+        624
+      ]
     },
     {
-      "id": "06d1ce4d-d890-4511-82e1-d906f3d438da",
-      "name": "D4b · Reply On Thread",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        368,
-        448
-      ],
       "parameters": {
-        "resource": "message",
         "operation": "reply",
         "messageId": "={{ $json.body.reply_to_message_id.replace('gmail:', '') }}",
         "emailType": "text",
@@ -1253,6 +1244,14 @@
           "appendAttribution": false
         }
       },
+      "id": "06d1ce4d-d890-4511-82e1-d906f3d438da",
+      "name": "D4b · Reply On Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        368,
+        448
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "nYohZIRCus2816jl",
@@ -1260,6 +1259,32 @@
         }
       },
       "onError": "continueErrorOutput"
+    },
+    {
+      "id": "8ee7d6f3-75ae-4442-b8a6-e78bdc22433f",
+      "name": "D2a · Rebuild Raw Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        624
+      ],
+      "parameters": {
+        "jsCode": "// The app signs the EXACT BYTES it sent: HMAC over `timestamp.rawBody`.\n// So this lane has to hash those same bytes, and nothing else.\n//\n// The webhook runs with `rawBody: true`, which puts the raw bytes in the\n// BINARY property `data` and leaves `$json.body` as n8n's own PARSED copy of\n// them. D2 used to hash `$json.body.toString()` — and `.toString()` on an\n// object is the literal text \"[object Object]\". Every signature was therefore\n// computed over the same eleven wrong characters, and the only symptom was\n// \"signature did not verify\", which is true and points at the wrong thing:\n// three people would check the secret before anyone checked the string.\n//\n// The bytes are read through getBinaryDataBuffer, not off `binary.data.data`,\n// because this instance runs `binaryMode: separate` where that field is not\n// reliably present — and a silently empty body would hash cleanly to the\n// wrong digest, which is worse than an error.\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\n// Everything downstream reads `body` and `headers`, so they pass through\n// untouched. Only `toSign` is added.\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
+      }
+    },
+    {
+      "id": "7e543c26-023e-42c8-afd1-a9e9c48312f1",
+      "name": "E2a · Rebuild Raw Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        1072
+      ],
+      "parameters": {
+        "jsCode": "// Lane E has the identical contract and had the identical fault as lane D.\n// See the note on `D2a · Rebuild Raw Body`: `$json.body` is n8n's parsed copy,\n// and hashing it stringifies an object to \"[object Object]\".\nconst item = $input.first();\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst timestamp = item.json.headers['x-vo-timestamp'];\n\nreturn [{ json: { ...item.json, toSign: timestamp + '.' + raw } }];"
+      }
     }
   ],
   "connections": {
@@ -1362,17 +1387,6 @@
         ]
       ]
     },
-    "D1 · Webhook: Notify Email": {
-      "main": [
-        [
-          {
-            "node": "D2 · Recompute Signature",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "D2 · Recompute Signature": {
       "main": [
         [
@@ -1447,17 +1461,6 @@
         [
           {
             "node": "D8 · Sign Delivery Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "E1 · Webhook: Notify WhatsApp": {
-      "main": [
-        [
-          {
-            "node": "E2 · Recompute Signature",
             "type": "main",
             "index": 0
           }
@@ -1684,6 +1687,50 @@
         [
           {
             "node": "D6 · Email Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1 · Webhook: Notify Email": {
+      "main": [
+        [
+          {
+            "node": "D2a · Rebuild Raw Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2a · Rebuild Raw Body": {
+      "main": [
+        [
+          {
+            "node": "D2 · Recompute Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E1 · Webhook: Notify WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "E2a · Rebuild Raw Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2a · Rebuild Raw Body": {
+      "main": [
+        [
+          {
+            "node": "E2 · Recompute Signature",
             "type": "main",
             "index": 0
           }
