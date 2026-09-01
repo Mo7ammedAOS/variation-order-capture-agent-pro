@@ -26,6 +26,13 @@ const state = {
   eventPayload: null as unknown,
   senders: null as Record<string, unknown>[] | null,
   acknowledged: [] as Record<string, unknown>[],
+  askedWhichChange: [] as Record<string, unknown>[],
+  askedToDescribe: [] as Record<string, unknown>[],
+  askedForDetail: [] as Record<string, unknown>[],
+  detailFields: [] as string[],
+  recentExchange: false,
+  updated: [] as Record<string, unknown>[],
+  change: null as Record<string, unknown> | null,
 };
 
 vi.mock('server-only', () => ({}));
@@ -65,6 +72,13 @@ vi.mock('@/lib/prisma', () => ({
       },
     },
     integrationEvent: { findUnique: async () => ({ payloadJson: state.eventPayload }) },
+    potentialChange: {
+      findUnique: async () => state.change,
+      update: async (args: { data: Record<string, unknown> }) => {
+        state.updated.push(args.data);
+        return { id: 'pc-1', ...args.data };
+      },
+    },
     $transaction: async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
   },
 }));
@@ -82,6 +96,22 @@ vi.mock('@/services/capture-question.service', () => ({
   acknowledgeCapture: async (input: Record<string, unknown>) => {
     state.acknowledged.push(input);
   },
+  askWhichChange: async (input: Record<string, unknown>) => {
+    state.askedWhichChange.push(input);
+    return { token: 'ATT1', offered: 2 };
+  },
+  askForDescription: async (input: Record<string, unknown>) => {
+    state.askedToDescribe.push(input);
+    return { token: 'DSC1' };
+  },
+  askForDetail: async (input: Record<string, unknown>) => {
+    state.askedForDetail.push(input);
+    return { token: 'DTL1' };
+  },
+  // The real one is pure, and these tests care about WHETHER a follow-up was
+  // asked for, not which fields it named.
+  plannedDetailFields: () => state.detailFields,
+  hadRecentExchange: async () => state.recentExchange,
 }));
 
 vi.mock('@/services/document.service', () => ({
@@ -161,6 +191,11 @@ describe('choosing the project a captured message belongs to', () => {
     state.eventPayload = null;
     state.senders = null;
     state.acknowledged = [];
+    state.askedWhichChange = [];
+    state.askedToDescribe = [];
+    state.askedForDetail = [];
+    state.detailFields = [];
+    state.recentExchange = false;
   });
 
   it('files straight away when the sender is on exactly one live project', async () => {
@@ -344,5 +379,268 @@ describe('evidence that arrived with the message', () => {
     expect(state.asked[0]?.candidateProjectIds).toEqual(['proj-a', 'proj-b', 'proj-c']);
     // Still on the same email thread as the question they answered.
     expect(state.asked[0]?.sourceMessageId).toBe('msg-original');
+  });
+});
+
+/**
+ * The exchange as a conversation rather than a form.
+ *
+ * Everything below is about the messages that are NOT reports: the courtesy at
+ * the end, the photographs with no words, the one line that follows a filing.
+ * Each of them used to become a Potential Change, and each of those was a junk
+ * record somebody had to close by hand.
+ */
+describe('the rest of the conversation', () => {
+  beforeEach(() => {
+    state.user = { id: 'ahmed', fullName: 'Ahmed' };
+    state.memberships = memberOf('proj-a');
+    state.allProjects = PROJECTS;
+    state.asked = [];
+    state.confirmed = [];
+    state.created = [];
+    state.evidence = [];
+    state.answer = null;
+    state.eventPayload = null;
+    state.senders = null;
+    state.acknowledged = [];
+    state.askedWhichChange = [];
+    state.askedToDescribe = [];
+    state.askedForDetail = [];
+    state.detailFields = [];
+    state.recentExchange = false;
+    state.updated = [];
+    state.change = null;
+  });
+
+  it('answers "thanks" instead of filing a Potential Change called "thanks"', async () => {
+    state.recentExchange = true;
+    const outcome = await capture('thanks');
+    expect(outcome.kind).toBe('closed');
+    expect(state.created).toHaveLength(0);
+    expect(state.acknowledged).toHaveLength(1);
+  });
+
+  it('says what the number is for when the courtesy came out of the blue', async () => {
+    state.recentExchange = false;
+    await capture('ok');
+    expect(String(state.acknowledged[0]?.text)).toContain('Send a line');
+  });
+
+  it('still files a report that merely opens politely', async () => {
+    const outcome = await capture('thanks, and the client wants the ceiling grid lowered');
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('a photograph captioned "thanks" is still a photograph', async () => {
+    const outcome = await capture('thanks', {
+      attachments: [{ externalId: 'a', fileName: 'a.jpg', mimeType: 'image/jpeg' }],
+    });
+    expect(outcome.kind).not.toBe('closed');
+  });
+
+  it('asks what files with no message are OF, rather than opening a change titled "[media only]"', async () => {
+    const outcome = await capture('[media only]', {
+      channel: 'whatsapp',
+      attachments: [
+        { externalId: 'a', fileName: 'a.jpg', mimeType: 'image/jpeg' },
+        { externalId: 'b', fileName: 'b.jpg', mimeType: 'image/jpeg' },
+      ],
+    });
+    expect(outcome.kind).toBe('needs_triage');
+    expect(state.created).toHaveLength(0);
+    expect(state.askedWhichChange[0]?.projectId).toBe('proj-a');
+    expect(state.askedWhichChange[0]?.evidenceCount).toBe(2);
+  });
+
+  it('files a captioned photo straight away, because a caption says what it is', async () => {
+    // The caption is the report. Asking a man who has just told you what a
+    // photo is to tell you again is how a system teaches people to stop
+    // replying to it.
+    const outcome = await capture('reception ceiling grid is 300mm low', {
+      attachments: [{ externalId: 'a', fileName: 'a.jpg', mimeType: 'image/jpeg' }],
+    });
+    expect(outcome.kind).toBe('created');
+    expect(state.askedWhichChange).toHaveLength(0);
+  });
+
+  it('puts the files on the change they name, and opens nothing new', async () => {
+    state.change = {
+      id: 'pc-7',
+      pcNumber: 'PC-DXB-001-0007',
+      projectId: 'proj-a',
+      title: 'Reception ceiling grid lowered',
+      summary: null,
+      description: 'Reception ceiling grid lowered',
+    };
+    state.answer = {
+      outcome: 'attach_existing',
+      kind: 'attach',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: 'pc-7',
+      originalText: '[media only]',
+      replyText: '0007',
+      candidateProjectIds: ['proj-a'],
+      detailFields: [],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+    state.eventPayload = {
+      attachments: [
+        { external_id: 'att-9', file_name: 'ceiling.jpg', mime_type: 'image/jpeg', content_base64: 'AAA=' },
+      ],
+    };
+
+    const outcome = await capture('0007');
+    expect(outcome.kind).toBe('evidence_filed');
+    // A second change for the same event splits the evidence across two
+    // claims, and both get priced on half the story.
+    expect(state.created).toHaveLength(0);
+    expect(state.evidence[0]?.potentialChangeId).toBe('pc-7');
+    expect(String(state.acknowledged[0]?.text)).toContain('PC-DXB-001-0007');
+  });
+
+  it('asks what changed when the files turn out to be something new', async () => {
+    state.answer = {
+      outcome: 'attach_new',
+      kind: 'attach',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: null,
+      originalText: '[media only]',
+      replyText: 'new one',
+      candidateProjectIds: ['proj-a'],
+      detailFields: [],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+    state.eventPayload = {
+      attachments: [{ external_id: 'att-9', file_name: 'a.jpg', mime_type: 'image/jpeg' }],
+    };
+
+    const outcome = await capture('new one');
+    expect(outcome.kind).toBe('needs_triage');
+    // A change with photographs and no description is not a claim, it is a
+    // puzzle for whoever opens it.
+    expect(state.created).toHaveLength(0);
+    expect(state.askedToDescribe[0]?.projectId).toBe('proj-a');
+  });
+
+  it('opens the change on the line they send back, with the waiting files on it', async () => {
+    state.answer = {
+      outcome: 'described',
+      kind: 'describe',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: null,
+      originalText: '[media only]',
+      replyText: 'client asked for the reception ceiling grid to be reset 300mm lower',
+      candidateProjectIds: ['proj-a'],
+      detailFields: [],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+    state.eventPayload = {
+      attachments: [{ external_id: 'att-9', file_name: 'a.jpg', mime_type: 'image/jpeg' }],
+    };
+
+    const outcome = await capture('client asked for the reception ceiling grid to be reset 300mm lower');
+    expect(outcome.kind).toBe('created');
+    expect(String(state.created[0]?.description)).toContain('300mm lower');
+    expect(state.evidence[0]?.attachments).toHaveLength(1);
+  });
+
+  it('moves the notice deadline when the follow-up says when it actually happened', async () => {
+    // The point of asking. The deadline counts from the day it happened, so a
+    // change reported late has fewer days left than the contract's full period
+    // — and a system that silently assumes today says otherwise.
+    state.change = {
+      id: 'pc-7',
+      pcNumber: 'PC-DXB-001-0007',
+      projectId: 'proj-a',
+      description: 'Reception ceiling grid lowered',
+      eventDate: new Date(Date.UTC(2026, 8, 1)),
+      sourceReference: null,
+      workStatus: 'not_started',
+      project: { projectCode: 'DXB-001', contractRules: { noticePeriodDays: 28 } },
+    };
+    state.answer = {
+      outcome: 'detailed',
+      kind: 'detail',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: 'pc-7',
+      originalText: 'Reception ceiling grid lowered',
+      replyText: 'it happened 3 days ago, drawing AR-201 Rev C, work already started',
+      candidateProjectIds: ['proj-a'],
+      detailFields: ['event_date', 'document_reference'],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('it happened 3 days ago, drawing AR-201 Rev C, work already started');
+    expect(outcome.kind).toBe('updated');
+    expect(state.created).toHaveLength(0);
+
+    const patch = state.updated[0] ?? {};
+    expect(patch.eventDate).toBeInstanceOf(Date);
+    expect(patch.noticeDueDate).toBeInstanceOf(Date);
+    expect(String(patch.sourceReference)).toContain('AR-201');
+    expect(patch.workStatus).toBe('in_progress');
+    // The reporter's extra words are kept verbatim, whether or not anything
+    // parsed out of them.
+    expect(String(patch.description)).toContain('AR-201 Rev C');
+  });
+
+  it('leaves the change alone when the follow-up is declined', async () => {
+    state.answer = {
+      outcome: 'declined',
+      kind: 'detail',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: 'pc-7',
+      originalText: 'Reception ceiling grid lowered',
+      replyText: 'skip',
+      candidateProjectIds: ['proj-a'],
+      detailFields: ['event_date'],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('skip');
+    expect(outcome.kind).toBe('closed');
+    expect(state.updated).toHaveLength(0);
+    expect(state.created).toHaveLength(0);
+  });
+
+  it('reads the event date out of the report itself, so the deadline is right without asking', async () => {
+    await capture('client instructed the ceiling change 3 days ago');
+    const eventDate = state.created[0]?.eventDate as Date;
+    const daysAgo = Math.round((Date.now() - eventDate.getTime()) / 86_400_000);
+    expect(daysAgo).toBeGreaterThanOrEqual(3);
+  });
+
+  it('asks the follow-up only AFTER the change exists', async () => {
+    state.detailFields = ['event_date'];
+    const outcome = await capture('client wants the wall moved');
+    // The clock is already running. The question can only make it sharper, and
+    // must never be the reason a deadline was missed.
+    expect(outcome.kind).toBe('created');
+    expect(state.askedForDetail[0]?.pcNumber).toBe('PC-DXB-001-0007');
   });
 });

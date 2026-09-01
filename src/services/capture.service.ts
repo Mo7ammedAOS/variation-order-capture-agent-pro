@@ -1,7 +1,12 @@
 import 'server-only';
-import type { IntegrationEventStatus, IntegrationSource, SourceType } from '@prisma/client';
+import type {
+  IntegrationEventStatus,
+  IntegrationSource,
+  Prisma,
+  SourceType,
+} from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { todayUtc } from '@/lib/dates';
+import { formatDate, todayUtc } from '@/lib/dates';
 import { calculateNoticeDueDate } from '@/lib/dates';
 import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
@@ -16,12 +21,26 @@ import { assertCapability, assertProjectAccess } from '@/services/project-access
 import { closeEvent, listUnprocessedEvents } from '@/services/integration.service';
 import {
   acknowledgeCapture,
+  askForDescription,
+  askForDetail,
+  askWhichChange,
   askWhichProject,
   confirmProject,
+  hadRecentExchange,
+  plannedDetailFields,
   tryAnswerQuestion,
+  type QuestionReply,
 } from '@/services/capture-question.service';
 import { matchProjectsInText } from '@/lib/project-match';
 import { cleanCapturedText } from '@/lib/email-cleanup';
+import { briefOf } from '@/lib/change-brief';
+import {
+  isPleasantry,
+  looksEvidenceOnly,
+  parseDocumentReference,
+  parseEventDate,
+  parseWorkStatus,
+} from '@/lib/reply-intent';
 import {
   ambiguousSenderReason,
   resolveSender,
@@ -57,9 +76,15 @@ import { storeCaptureEvidence, type CaptureAttachment } from '@/services/documen
 
 export type CaptureOutcome =
   | { kind: 'created'; potentialChangeId: string; pcNumber: string; projectId: string }
+  /** Files landed on a change that already existed. Nothing new was opened. */
+  | { kind: 'evidence_filed'; potentialChangeId: string; pcNumber: string; projectId: string; stored: number }
+  /** A follow-up answer sharpened a change that was already on file. */
+  | { kind: 'updated'; potentialChangeId: string; pcNumber: string; projectId: string; applied: string[] }
   | { kind: 'needs_triage'; reason: string; candidateProjectIds: string[] }
   /** The reporter withdrew it. Nothing was filed, and that was the right answer. */
-  | { kind: 'cancelled'; reason: string };
+  | { kind: 'cancelled'; reason: string }
+  /** Courtesy, or a declined follow-up. There was never anything to file. */
+  | { kind: 'closed'; reason: string };
 
 export interface CaptureInput {
   channel: Extract<SourceType, 'whatsapp' | 'email'>;
@@ -90,6 +115,8 @@ export async function captureFromChannel(
   // Deletion only. Nothing here rewrites a word the reporter wrote.
   const cleaned = cleanCapturedText(rawInput.text);
   const input: CaptureInput = { ...rawInput, text: cleaned.text };
+  const attachments = input.attachments ?? [];
+
   // Is this an ANSWER to a question we already asked? Checked first, because
   // "2" from someone with a question outstanding is not a new change, and
   // treating it as one would file a Potential Change titled "2" and leave the
@@ -100,105 +127,9 @@ export async function captureFromChannel(
     text: input.text,
   });
 
-  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
-  // Nothing is filed and the message leaves the inbox, because a withdrawn
-  // report waiting on a coordinator is worse than no report at all: somebody
-  // spends time on it and finds there was nothing there.
-  if (answer?.outcome === 'cancelled') {
-    await closeEvent(answer.integrationEventId, 'ignored', {
-      cancelledByUserId: answer.userId,
-      cancelledAt: new Date().toISOString(),
-      reason: 'Withdrawn by the reporter',
-      via: input.channel,
-    });
-
-    await acknowledgeCapture({
-      userId: answer.userId,
-      token: `${answer.questionId.slice(0, 4).toUpperCase()}X`,
-      text: 'Cancelled. Nothing has been recorded against any project.',
-      sourceMessageId: answer.sourceMessageId,
-      sourceSubject: answer.sourceSubject,
-    });
-
-    return { kind: 'cancelled', reason: `${answer.userName} withdrew it` };
-  }
-
-  if (answer?.outcome === 'answered' && answer.projectId) {
-    // The attachments came with the ORIGINAL message, not with the word "yes".
-    // Reading them off this reply alone would file the change and quietly lose
-    // the photographs it was reported with.
-    const original = await attachmentsForEvent(answer.integrationEventId);
-
-    const outcome = await createChangeFromCapture({
-      projectId: answer.projectId,
-      reporterId: answer.userId,
-      reporterName: answer.userName,
-      input: {
-        ...input,
-        text: answer.originalText || input.text,
-        attachments: mergeAttachments(original, input.attachments ?? []),
-      },
-    });
-
-    if (outcome.kind === 'created') {
-      await closeEvent(answer.integrationEventId, 'processed', {
-        answeredBy: answer.userId,
-        answeredAt: new Date().toISOString(),
-        projectId: answer.projectId,
-        pcNumber: outcome.pcNumber,
-        via: input.channel,
-      });
-
-      // Tell them it landed, and where. Without this the exchange just stops,
-      // and a reporter who is not told assumes he was not heard.
-      // QUOTES THE REPORT IT FILED, and that is load bearing.
-      //
-      // A token-less reply is applied to the most recent open question. That is
-      // right almost always and wrong occasionally, and this line is what makes
-      // the occasional case survivable: the reporter reads back his own words
-      // and knows within seconds whether the right thing was filed. Without the
-      // quote, answering the wrong question is invisible.
-      const filed = answer.originalText.trim();
-      const excerpt = filed.length > 100 ? `${filed.slice(0, 100).trimEnd()}…` : filed;
-
-      await acknowledgeCapture({
-        userId: answer.userId,
-        token: outcome.pcNumber,
-        text:
-          `Filed as ${outcome.pcNumber}.\n\n"${excerpt}"\n\n` +
-          `A notice assessment has been raised and the contractual clock is ` +
-          `running from the date of the event. Reply CANCEL if that is the wrong report.`,
-        sourceMessageId: answer.sourceMessageId,
-        sourceSubject: answer.sourceSubject,
-      });
-    }
-    return outcome;
-  }
-
-  // "No, wrong project." Put the full list back to them on the same thread,
-  // rather than leaving someone who answered correctly with nothing to do.
-  if (answer?.outcome === 'rejected') {
-    const reAsked =
-      answer.candidateProjectIds.length >= 2
-        ? await askWhichProject({
-            integrationEventId: answer.integrationEventId,
-            userId: answer.userId,
-            userName: answer.userName,
-            channel: input.channel,
-            originalText: answer.originalText || input.text,
-            candidateProjectIds: answer.candidateProjectIds,
-            sourceMessageId: answer.sourceMessageId,
-            sourceSubject: answer.sourceSubject,
-          })
-        : null;
-
-    return {
-      kind: 'needs_triage',
-      reason: reAsked
-        ? `${answer.userName} said that was the wrong project. Asked which of ${answer.candidateProjectIds.length} instead (${reAsked.token}).`
-        : `${answer.userName} said that was the wrong project, and has no other live project to move it to.`,
-      candidateProjectIds: answer.candidateProjectIds,
-    };
+  if (answer) {
+    const handled = await applyAnswer(answer, input, attachments);
+    if (handled) return handled;
   }
 
   const identity = await resolveSender(input.channel, input.senderIdentifier);
@@ -223,6 +154,16 @@ export async function captureFromChannel(
   }
 
   const sender = { id: identity.userId, fullName: identity.fullName };
+
+  // "Thanks", "ok", "no that's all" — the end of an exchange, not the start of
+  // a claim. Nothing here can ever be a change: a Potential Change titled
+  // "thanks" is a junk record somebody has to close, and it used to be created
+  // every single time anyone was polite to the system.
+  //
+  // Files override it. A photograph captioned "thanks" is still a photograph.
+  if (attachments.length === 0 && isPleasantry(input.text)) {
+    return closeCourteously(sender, input);
+  }
 
   const memberships = await prisma.projectMember.findMany({
     where: { userId: sender.id, active: true, project: { projectStatus: { in: ['active', 'awarded'] } } },
@@ -265,17 +206,47 @@ export async function captureFromChannel(
     };
   }
 
+  // Files and nothing else. There is no report here to file, so the question
+  // is not "which project" alone but "what are these of" — and the cheapest
+  // form of that question is a list of what is already open on the job.
+  const evidenceOnly = attachments.length > 0 && looksEvidenceOnly(input.text);
+
   // Only one live job: there is nothing to be wrong about.
   if (memberships.length === 1) {
     const only = memberships[0];
     if (!only) {
       return { kind: 'needs_triage', reason: 'No candidate project', candidateProjectIds: [] };
     }
-    return createChangeFromCapture({
+
+    if (evidenceOnly && integrationEventId) {
+      const asked = await askWhichChange({
+        integrationEventId,
+        userId: sender.id,
+        projectId: only.projectId,
+        channel: input.channel,
+        evidenceCount: attachments.length,
+        originalText: input.text,
+        sourceMessageId: input.externalMessageId,
+        sourceSubject: input.sourceSubject ?? null,
+      });
+      if (asked) {
+        return {
+          kind: 'needs_triage',
+          reason:
+            `${sender.fullName} sent ${attachments.length} file(s) with no message. ` +
+            `Asked whether they belong to one of ${asked.offered} open changes on ` +
+            `${only.project.projectCode} (${asked.token}).`,
+          candidateProjectIds: [only.projectId],
+        };
+      }
+    }
+
+    return fileAndFollowUp({
       projectId: only.projectId,
       reporterId: sender.id,
       reporterName: sender.fullName,
       input,
+      integrationEventId: integrationEventId ?? null,
     });
   }
 
@@ -291,7 +262,7 @@ export async function captureFromChannel(
 
   // The text pointed at exactly one of their jobs. Propose it and ask for one
   // word back, instead of making them read a list they already answered.
-  const proposal = matches.length === 1 ? matches[0] : null;
+  const proposal = !evidenceOnly && matches.length === 1 ? matches[0] : null;
   if (proposal && integrationEventId) {
     const confirmed = await confirmProject({
       integrationEventId,
@@ -334,6 +305,7 @@ export async function captureFromChannel(
         candidateProjectIds,
         sourceMessageId: input.externalMessageId,
         sourceSubject: input.sourceSubject ?? null,
+        evidenceCount: evidenceOnly ? attachments.length : 0,
       })
     : null;
 
@@ -344,6 +316,520 @@ export async function captureFromChannel(
       : `${sender.fullName} is on ${candidateProjectIds.length} active projects — cannot determine which`,
     candidateProjectIds,
   };
+}
+
+/* ─── Answers to questions we already asked ──────────────────────────────── */
+
+/**
+ * Acts on a reply, or hands the message back to be read as a new report.
+ *
+ * Returns null only when the reply settled nothing, which cannot currently
+ * happen — `tryAnswerQuestion` returns null rather than an outcome it cannot
+ * act on. The nullable return keeps that contract explicit rather than relying
+ * on it.
+ */
+async function applyAnswer(
+  answer: QuestionReply,
+  input: CaptureInput,
+  attachments: CaptureAttachment[],
+): Promise<CaptureOutcome | null> {
+  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
+  // Nothing is filed and the message leaves the inbox, because a withdrawn
+  // report waiting on a coordinator is worse than no report at all: somebody
+  // spends time on it and finds there was nothing there.
+  if (answer.outcome === 'cancelled') {
+    await closeEvent(answer.integrationEventId, 'ignored', {
+      cancelledByUserId: answer.userId,
+      cancelledAt: new Date().toISOString(),
+      reason: 'Withdrawn by the reporter',
+      via: input.channel,
+    });
+
+    await acknowledgeCapture({
+      userId: answer.userId,
+      token: ackToken(answer),
+      text: 'Cancelled. Nothing has been recorded against any project.',
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+
+    return { kind: 'cancelled', reason: `${answer.userName} withdrew it` };
+  }
+
+  // They declined the follow-up. The change stands exactly as it was; the only
+  // thing that closes is the question.
+  if (answer.outcome === 'declined') {
+    await acknowledgeCapture({
+      userId: answer.userId,
+      token: ackToken(answer),
+      text: 'No problem, leaving it as it is.',
+      potentialChangeId: answer.potentialChangeId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+    return { kind: 'closed', reason: `${answer.userName} skipped the follow-up` };
+  }
+
+  if (answer.outcome === 'detailed' && answer.potentialChangeId) {
+    return applyCaptureDetails(answer, input, attachments);
+  }
+
+  // The files belong to a change that already exists. Nothing new is opened,
+  // which is the whole reason the question was asked: a second Potential
+  // Change for the same event splits the evidence across two claims and both
+  // of them get priced short.
+  if (answer.outcome === 'attach_existing' && answer.potentialChangeId && answer.projectId) {
+    return attachEvidenceToChange(answer, input, attachments);
+  }
+
+  // "New one." We have the project and the files but still no statement of
+  // what changed, and a Potential Change with photographs and no description
+  // is not a claim, it is a puzzle.
+  if (answer.outcome === 'attach_new' && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    const asked = await askForDescription({
+      integrationEventId: answer.integrationEventId,
+      userId: answer.userId,
+      projectId: answer.projectId,
+      evidenceCount: pending.length || attachments.length,
+      originalText: answer.originalText,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+
+    return {
+      kind: 'needs_triage',
+      reason: asked
+        ? `${answer.userName} says the files are a new change. Asked what changed (${asked.token}).`
+        : `${answer.userName} says the files are a new change, but we could not ask what changed.`,
+      candidateProjectIds: answer.projectId ? [answer.projectId] : [],
+    };
+  }
+
+  // The line we were waiting for. File it, with the files that were waiting
+  // on it.
+  if (answer.outcome === 'described' && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: answer.replyText,
+        attachments: mergeAttachments(pending, attachments),
+      },
+      integrationEventId: answer.integrationEventId,
+      closeEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+  }
+
+  if (answer.outcome === 'answered' && answer.projectId) {
+    // The attachments came with the ORIGINAL message, not with the word "yes".
+    // Reading them off this reply alone would file the change and quietly lose
+    // the photographs it was reported with.
+    const original = await attachmentsForEvent(answer.integrationEventId);
+    const carried = mergeAttachments(original, attachments);
+
+    // The project is settled, but the original message was files and nothing
+    // else — so there is still no report to file. Ask what they are of.
+    if (looksEvidenceOnly(answer.originalText) && carried.length > 0) {
+      const asked = await askWhichChange({
+        integrationEventId: answer.integrationEventId,
+        userId: answer.userId,
+        projectId: answer.projectId,
+        channel: input.channel,
+        evidenceCount: carried.length,
+        originalText: answer.originalText,
+        sourceMessageId: answer.sourceMessageId,
+        sourceSubject: answer.sourceSubject,
+      });
+
+      return {
+        kind: 'needs_triage',
+        reason: asked
+          ? `Project settled. Asked ${answer.userName} what the ${carried.length} file(s) are of (${asked.token}).`
+          : `Project settled, but we could not ask what the files are of.`,
+        candidateProjectIds: [answer.projectId],
+      };
+    }
+
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: answer.originalText || input.text,
+        attachments: carried,
+      },
+      integrationEventId: answer.integrationEventId,
+      closeEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+  }
+
+  // "No, wrong project." Put the full list back to them on the same thread,
+  // rather than leaving someone who answered correctly with nothing to do.
+  if (answer.outcome === 'rejected') {
+    const reAsked =
+      answer.candidateProjectIds.length >= 2
+        ? await askWhichProject({
+            integrationEventId: answer.integrationEventId,
+            userId: answer.userId,
+            userName: answer.userName,
+            channel: input.channel,
+            originalText: answer.originalText || input.text,
+            candidateProjectIds: answer.candidateProjectIds,
+            sourceMessageId: answer.sourceMessageId,
+            sourceSubject: answer.sourceSubject,
+          })
+        : null;
+
+    return {
+      kind: 'needs_triage',
+      reason: reAsked
+        ? `${answer.userName} said that was the wrong project. Asked which of ${answer.candidateProjectIds.length} instead (${reAsked.token}).`
+        : `${answer.userName} said that was the wrong project, and has no other live project to move it to.`,
+      candidateProjectIds: answer.candidateProjectIds,
+    };
+  }
+
+  return null;
+}
+
+/** Unique per question, so a retried delivery writes one acknowledgement. */
+function ackToken(answer: QuestionReply): string {
+  return answer.questionId.replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+/**
+ * Files the change, tells the reporter, then asks for what is still missing.
+ *
+ * The order is the whole design. The change exists — and the notice clock with
+ * it — before any follow-up is sent, so an unanswered question can never be
+ * the reason a deadline passed. Everything after the filing is improvement.
+ */
+async function fileAndFollowUp(args: {
+  projectId: string;
+  reporterId: string;
+  reporterName: string;
+  input: CaptureInput;
+  integrationEventId: string | null;
+  closeEventId?: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+}): Promise<CaptureOutcome> {
+  const outcome = await createChangeFromCapture({
+    projectId: args.projectId,
+    reporterId: args.reporterId,
+    reporterName: args.reporterName,
+    input: args.input,
+  });
+
+  if (outcome.kind !== 'created') return outcome;
+
+  if (args.closeEventId) {
+    await closeEvent(args.closeEventId, 'processed', {
+      answeredBy: args.reporterId,
+      answeredAt: new Date().toISOString(),
+      projectId: args.projectId,
+      pcNumber: outcome.pcNumber,
+      via: args.input.channel,
+    });
+  }
+
+  // Tell them it landed, and where. Without this the exchange just stops, and
+  // a reporter who is not told assumes he was not heard.
+  //
+  // QUOTES THE REPORT IT FILED, and that is load bearing. A token-less reply
+  // is applied to the most recent open question, which is right almost always
+  // and wrong occasionally; this line is what makes the occasional case
+  // survivable. The reporter reads back his own words and knows within seconds
+  // whether the right thing was filed.
+  const filed = args.input.text.trim();
+  const excerpt = filed.length > 100 ? `${filed.slice(0, 100).trimEnd()}…` : filed;
+  const files = args.input.attachments?.length ?? 0;
+  const evidenceLine = files > 0 ? `\n${files} ${files === 1 ? 'file' : 'files'} attached as evidence.` : '';
+
+  await acknowledgeCapture({
+    userId: args.reporterId,
+    token: outcome.pcNumber,
+    potentialChangeId: outcome.potentialChangeId,
+    text:
+      `Filed as ${outcome.pcNumber}.\n\n"${excerpt}"\n${evidenceLine}\n` +
+      `A notice assessment has been raised and the contractual clock is ` +
+      `running from the date of the event. Reply CANCEL if that is the wrong report.`,
+    sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
+    sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
+    // The follow-up below carries the invitation instead, so the reporter is
+    // not asked two different questions in two messages seconds apart.
+    invite: false,
+  });
+
+  // What is still missing, and worth one more message.
+  const fields = plannedDetailFields({
+    text: args.input.text,
+    eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
+    documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
+    workStatusKnown: parseWorkStatus(args.input.text) !== null,
+  });
+
+  if (fields.length > 0 && args.integrationEventId) {
+    await askForDetail({
+      integrationEventId: args.integrationEventId,
+      userId: args.reporterId,
+      projectId: args.projectId,
+      potentialChangeId: outcome.potentialChangeId,
+      pcNumber: outcome.pcNumber,
+      fields,
+      originalText: args.input.text,
+      sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
+      sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
+    });
+  }
+
+  return outcome;
+}
+
+/**
+ * Files new evidence on a change that already exists.
+ *
+ * No new Potential Change, deliberately. Two changes describing one event is
+ * the failure this question exists to prevent: the evidence splits across
+ * them, each is priced on half the story, and the duplicate is closed months
+ * later by somebody who cannot tell which one the client actually saw.
+ */
+async function attachEvidenceToChange(
+  answer: QuestionReply,
+  input: CaptureInput,
+  attachments: CaptureAttachment[],
+): Promise<CaptureOutcome> {
+  const change = await prisma.potentialChange.findUnique({
+    where: { id: answer.potentialChangeId! },
+    select: { id: true, pcNumber: true, projectId: true, title: true, summary: true, description: true },
+  });
+  if (!change) {
+    return {
+      kind: 'needs_triage',
+      reason: 'The change those files were for no longer exists',
+      candidateProjectIds: answer.projectId ? [answer.projectId] : [],
+    };
+  }
+
+  const pending = await attachmentsForEvent(answer.integrationEventId);
+  const all = mergeAttachments(pending, attachments);
+
+  const filed = await storeCaptureEvidence({
+    projectId: change.projectId,
+    potentialChangeId: change.id,
+    uploadedByUserId: answer.userId,
+    channel: input.channel,
+    attachments: all,
+  });
+
+  await recordAudit({
+    db: prisma,
+    projectId: change.projectId,
+    userId: answer.userId,
+    recordType: 'potential_change',
+    recordId: change.id,
+    actionType: 'uploaded',
+    newValue: { attachments: all.length, stored: filed.stored },
+    source: input.channel === 'whatsapp' ? 'whatsapp' : 'email',
+    // What did NOT stick, and why. A silent skip is how a claim arrives at
+    // adjudication with the one photograph that proved it simply absent.
+    metadata: { skipped: filed.skipped, attachedByReply: true },
+  });
+
+  await closeEvent(answer.integrationEventId, 'processed', {
+    attachedToPotentialChangeId: change.id,
+    pcNumber: change.pcNumber,
+    stored: filed.stored,
+    answeredBy: answer.userId,
+    answeredAt: new Date().toISOString(),
+  });
+
+  const noun = filed.stored === 1 ? 'file' : 'files';
+  await acknowledgeCapture({
+    userId: answer.userId,
+    token: ackToken(answer),
+    potentialChangeId: change.id,
+    text:
+      `${filed.stored} ${noun} added to ${change.pcNumber} — ${briefOf(change)}.` +
+      (filed.skipped.length > 0
+        ? `\n\n${filed.skipped.length} could not be stored: ${filed.skipped.map((s) => s.fileName).join(', ')}.`
+        : ''),
+    sourceMessageId: answer.sourceMessageId,
+    sourceSubject: answer.sourceSubject,
+  });
+
+  return {
+    kind: 'evidence_filed',
+    potentialChangeId: change.id,
+    pcNumber: change.pcNumber,
+    projectId: change.projectId,
+    stored: filed.stored,
+  };
+}
+
+/**
+ * Applies a follow-up answer to a change that is already on file.
+ *
+ * The event date is the one that matters. It is not a tidy-up field: the
+ * notice deadline is the event date plus the contract's notice period, so
+ * moving it moves the deadline and the risk colour with it. A change reported
+ * nine days after it happened has nineteen days left and not twenty eight, and
+ * a system that never asks quietly tells the commercial manager otherwise.
+ *
+ * The reply is also appended to the description verbatim, whether or not
+ * anything parsed out of it. The description is the reporter's own words and
+ * this is more of them; dropping the half we could not read would lose the
+ * sentence that turns out to matter.
+ */
+async function applyCaptureDetails(
+  answer: QuestionReply,
+  input: CaptureInput,
+  attachments: CaptureAttachment[],
+): Promise<CaptureOutcome> {
+  const change = await prisma.potentialChange.findUnique({
+    where: { id: answer.potentialChangeId! },
+    select: {
+      id: true,
+      pcNumber: true,
+      projectId: true,
+      description: true,
+      eventDate: true,
+      sourceReference: true,
+      workStatus: true,
+      project: { select: { projectCode: true, contractRules: { select: { noticePeriodDays: true } } } },
+    },
+  });
+  if (!change) {
+    return {
+      kind: 'needs_triage',
+      reason: 'The change that follow-up was about no longer exists',
+      candidateProjectIds: answer.projectId ? [answer.projectId] : [],
+    };
+  }
+
+  const reply = answer.replyText.trim();
+  const applied: string[] = [];
+  const data: Prisma.PotentialChangeUpdateInput = {};
+
+  const dated = parseEventDate(reply, todayUtc());
+  if (dated && dated.date.getTime() !== change.eventDate.getTime()) {
+    const noticePeriodDays = change.project.contractRules?.noticePeriodDays ?? 28;
+    const noticeDueDate = calculateNoticeDueDate(dated.date, noticePeriodDays);
+    data.eventDate = dated.date;
+    data.noticeDueDate = noticeDueDate;
+    data.riskLevel = calculateNoticeCountdown(noticeDueDate).riskLevel;
+    // Echoed as "28 Aug 2026", never as digits. This project has already had
+    // one document misread day-for-month, and the only defence that works is
+    // showing the reader a date that cannot be read two ways.
+    applied.push(`event date ${formatDate(dated.date)}, notice due ${formatDate(noticeDueDate)}`);
+  }
+
+  const reference = parseDocumentReference(reply, [change.project.projectCode]);
+  if (reference && reference !== change.sourceReference) {
+    data.sourceReference = reference;
+    applied.push(`reference ${reference}`);
+  }
+
+  const work = parseWorkStatus(reply);
+  if (work && work !== change.workStatus) {
+    data.workStatus = work;
+    applied.push(`work ${work.replace(/_/g, ' ')}`);
+  }
+
+  data.description = `${change.description}\n\nFollow-up from ${answer.userName}: ${reply}`;
+
+  await prisma.potentialChange.update({ where: { id: change.id }, data });
+
+  await recordAudit({
+    db: prisma,
+    projectId: change.projectId,
+    userId: answer.userId,
+    recordType: 'potential_change',
+    recordId: change.id,
+    actionType: 'updated',
+    oldValue: {
+      eventDate: change.eventDate,
+      sourceReference: change.sourceReference,
+      workStatus: change.workStatus,
+    },
+    newValue: { reply, applied },
+    source: input.channel === 'whatsapp' ? 'whatsapp' : 'email',
+    metadata: { askedFor: answer.detailFields },
+  });
+
+  // Files sent with the follow-up are evidence on the same change — a drawing
+  // sent in answer to "which drawing?" is exactly the document the claim needs.
+  let stored = 0;
+  if (attachments.length > 0) {
+    const evidence = await storeCaptureEvidence({
+      projectId: change.projectId,
+      potentialChangeId: change.id,
+      uploadedByUserId: answer.userId,
+      channel: input.channel,
+      attachments,
+    });
+    stored = evidence.stored;
+  }
+
+  const filesLine = stored > 0 ? ` ${stored} ${stored === 1 ? 'file' : 'files'} attached.` : '';
+  await acknowledgeCapture({
+    userId: answer.userId,
+    token: ackToken(answer),
+    potentialChangeId: change.id,
+    text:
+      applied.length > 0
+        ? `${change.pcNumber} updated: ${applied.join('; ')}.${filesLine}`
+        : `Noted on ${change.pcNumber}.${filesLine}`,
+    sourceMessageId: answer.sourceMessageId,
+    sourceSubject: answer.sourceSubject,
+  });
+
+  return {
+    kind: 'updated',
+    potentialChangeId: change.id,
+    pcNumber: change.pcNumber,
+    projectId: change.projectId,
+    applied,
+  };
+}
+
+/**
+ * Answers courtesy with courtesy, and files nothing.
+ *
+ * Two shapes, because "thanks" means different things depending on whether
+ * anything just happened. Mid-conversation it is the end of one, and the right
+ * reply invites the next report. Out of the blue it is more likely somebody
+ * testing whether the number is alive, and the right reply tells them what it
+ * is for.
+ */
+async function closeCourteously(
+  sender: { id: string; fullName: string },
+  input: CaptureInput,
+): Promise<CaptureOutcome> {
+  const recent = await hadRecentExchange(sender.id);
+  const token = `HI${input.externalMessageId.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+
+  await acknowledgeCapture({
+    userId: sender.id,
+    token,
+    text: recent
+      ? 'Any time.'
+      : 'Nothing to file from that. Send a line about what changed, or a photo, and I will log it.',
+    sourceMessageId: input.externalMessageId,
+    sourceSubject: input.sourceSubject ?? null,
+    invite: recent,
+  });
+
+  return { kind: 'closed', reason: `${sender.fullName} sent a courtesy reply — nothing to file` };
 }
 
 /**
@@ -414,7 +900,14 @@ export async function createChangeFromCapture(args: {
     senderName: input.senderName ?? reporterName,
   });
 
-  const eventDate = input.eventDate ?? todayUtc();
+  // When it HAPPENED, if the report says so — not when the message arrived.
+  //
+  // The notice deadline counts from this date, so a change reported nine days
+  // late has nineteen days left and not twenty eight. Reading "yesterday" out
+  // of the message costs nothing and is right far more often than assuming
+  // today, and where it cannot be read the follow-up asks.
+  const reportedDate = parseEventDate(input.text, todayUtc());
+  const eventDate = reportedDate?.date ?? input.eventDate ?? todayUtc();
 
   // Asked as a capability, and asked out here rather than inside the
   // transaction, which holds a row lock on the project's PC counter.
@@ -480,6 +973,14 @@ export async function createChangeFromCapture(args: {
         // with no location at all.
         location: extraction.extractedData.location,
         trade: extraction.extractedData.affectedTrade[0] ?? null,
+        // The drawing, RFI or site instruction the change hangs off, when the
+        // report names one. Excluded from matching against the project's own
+        // code, because "AR-201" and "DXB-001" are the same shape and a
+        // plausible wrong reference on a claim is worse than none.
+        sourceReference: parseDocumentReference(input.text, [project.projectCode]),
+        // Work already under way on an uninstructed change is the expensive
+        // case, and it changes how the assessment is read.
+        workStatus: parseWorkStatus(input.text) ?? 'not_started',
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
         currentOwnerUserId: noticeOwner,
@@ -801,7 +1302,8 @@ export async function fileTriagedEvent(
   });
 
   if (outcome.kind !== 'created') {
-    throw new ValidationError(`Could not file it: ${outcome.reason}`);
+    const why = 'reason' in outcome ? outcome.reason : `it came back as ${outcome.kind}`;
+    throw new ValidationError(`Could not file it: ${why}`);
   }
 
   await closeEvent(event.id, 'processed', {

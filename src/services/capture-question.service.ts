@@ -1,5 +1,5 @@
 import 'server-only';
-import type { CaptureQuestionKind, Prisma, SourceType } from '@prisma/client';
+import type { CaptureQuestion, CaptureQuestionKind, Prisma, SourceType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   dispatchNow,
@@ -7,11 +7,20 @@ import {
   recordDirectNotifications,
 } from '@/services/notification.service';
 import { codePattern, describeMatch, type ProjectMatch } from '@/lib/project-match';
+import { briefOf, matchChangeInText } from '@/lib/change-brief';
+import {
+  closingLine,
+  isNewChangeRequest,
+  isPleasantry,
+  mentionsDocument,
+  parseDocumentReference,
+  parseEventDate,
+  parseWorkStatus,
+} from '@/lib/reply-intent';
 import { resolveSender } from '@/services/sender-identity.service';
 
 /**
- * "Which project did you mean?" — and, when we think we already know,
- * "this is DXB-001, correct?"
+ * The conversation.
  *
  * ── Why the system asks instead of deciding ────────────────────────────────
  * A site engineer on four active jobs writes "client wants the wall moved" and
@@ -25,19 +34,17 @@ import { resolveSender } from '@/services/sender-identity.service';
  *   Drop it         — obviously not.
  *   Ask the person  — he is the only one who knows.
  *
- * So we ask, on both channels we can reach him on, and the message stays parked
- * until he answers. Triage remains for the cases asking cannot solve: an
- * unknown sender, or someone on no active project at all.
+ * ── Five shapes of question ────────────────────────────────────────────────
+ * CHOOSE   — nothing named a project. Here is your list, pick.
+ * CONFIRM  — the message named a code or the client, and one job fits.
+ * ATTACH   — files arrived with no words. New change, or one of these?
+ * DESCRIBE — they said "new", so ask for the one line we still need.
+ * DETAIL   — asked AFTER filing: when did it happen, which drawing.
  *
- * ── Two shapes of question ─────────────────────────────────────────────────
- * CHOOSE  — nothing in the message named a project. Here is your list, pick.
- * CONFIRM — the message named a project code or the client, and exactly one of
- *           your jobs fits. One word back and it is filed.
- *
- * A confirmation is not a formality. Reading "Emaar" out of a message and
- * filing on the strength of it is still a guess; the difference is that this
- * guess is shown to the one person who can tell it is wrong, before anything
- * is written. That is what makes it safe to be clever about matching.
+ * The first three block: nothing is written until they answer. DETAIL never
+ * blocks, and that ordering is the point. The notice clock starts the moment
+ * the change exists, so the change is created first and improved second — a
+ * follow-up question must never be the reason a deadline was missed.
  *
  * ── Why the candidates are frozen ──────────────────────────────────────────
  * The list is stored when the question is asked. Reading his memberships again
@@ -53,17 +60,41 @@ import { resolveSender } from '@/services/sender-identity.service';
 /** Ambiguous characters are omitted: no O/0, no I/1. People retype these. */
 const TOKEN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TOKEN_LENGTH = 4;
-const EXPIRES_AFTER_DAYS = 7;
+
+/**
+ * How long each shape of question stays answerable by its token.
+ *
+ * A parked report can wait a week, because nothing has been written and the
+ * reporter is the only person who can unpark it. A follow-up on a change that
+ * is already filed cannot: after two days the answer would be arriving into a
+ * notice assessment that has already been made on the facts as they stood.
+ */
+const EXPIRES_AFTER_DAYS: Record<CaptureQuestionKind, number> = {
+  choose: 7,
+  confirm: 7,
+  attach: 3,
+  describe: 3,
+  detail: 2,
+};
 
 /**
  * How long a token-less reply is still read as part of the conversation.
  *
- * A question stays answerable for seven days BY TOKEN, because somebody may
- * come back to a parked report. But a bare "2" only means "the thing you just
- * asked me". After this long it is far likelier to be a new report that starts
- * with a number, and reading it as an answer would throw that report away.
+ * A bare "2" only means "the thing you just asked me". After this long it is
+ * far likelier to be a new report that starts with a number, and reading it as
+ * an answer would throw that report away.
+ *
+ * Shorter for a follow-up, because a follow-up is competing with real reports:
+ * anything arriving hours after a change was filed is much more likely to be
+ * the next change than a belated answer about the last one.
  */
-const CONVERSATION_WINDOW_MS = 12 * 60 * 60 * 1000;
+const CONVERSATION_WINDOW_MS: Record<CaptureQuestionKind, number> = {
+  choose: 12 * 60 * 60 * 1000,
+  confirm: 12 * 60 * 60 * 1000,
+  attach: 12 * 60 * 60 * 1000,
+  describe: 12 * 60 * 60 * 1000,
+  detail: 6 * 60 * 60 * 1000,
+};
 
 /** Whole-reply agreement. Every word has to be one of these, or it is not a yes. */
 const AFFIRMATIVE = new Set([
@@ -92,6 +123,12 @@ const CANCEL = new Set([
   'MY', 'WAS', 'A', 'THIS', 'THAT',
 ]);
 
+/** Declining a follow-up, which is not the same as withdrawing a change. */
+const SKIP = new Set([
+  'SKIP', 'PASS', 'LATER', 'DONT', 'DO', 'NOT', 'KNOW', 'UNSURE', 'NA', 'N',
+  'A', 'NO', 'IDEA', 'SURE', 'CANT', 'SAY', 'I', 'DONT',
+]);
+
 /**
  * Words that can sit in front of a number without changing its meaning.
  *
@@ -100,6 +137,12 @@ const CANCEL = new Set([
  * which is the distinction the strict rule below exists to protect.
  */
 const NUMBER_PREFIXES = new Set(['NO', 'NUMBER', 'PROJECT', 'OPTION', 'ITS', 'IT', 'IS', 'THE']);
+
+/** Beyond this a follow-up reply is a new report, not an answer about the last one. */
+const DETAIL_ANSWER_MAX_WORDS = 25;
+
+/** Below this an unmatched reply to an ATTACH question is a typo, not a description. */
+const DESCRIPTION_MIN_WORDS = 3;
 
 export interface AskInput {
   integrationEventId: string;
@@ -111,6 +154,8 @@ export interface AskInput {
   /** The inbound message id, so the question goes back on its own thread. */
   sourceMessageId?: string | null;
   sourceSubject?: string | null;
+  /** Files that came with it, when the message was files and nothing else. */
+  evidenceCount?: number;
 }
 
 export interface ConfirmInput extends Omit<AskInput, 'candidateProjectIds'> {
@@ -128,23 +173,49 @@ export interface AnswerAttempt {
   text: string;
 }
 
+export type ReplyOutcome =
+  /** A project was settled, and the parked report can be filed. */
+  | 'answered'
+  /** Wrong project. The caller re-asks with the full list. */
+  | 'rejected'
+  /** Withdrawn. Nothing is filed. */
+  | 'cancelled'
+  /** These files belong to a change that already exists. */
+  | 'attach_existing'
+  /** These files are a new change, and we still need a line about it. */
+  | 'attach_new'
+  /** Here is that line. */
+  | 'described'
+  /** Here are the facts the follow-up asked for. */
+  | 'detailed'
+  /** They declined the follow-up. Nothing changes and the question closes. */
+  | 'declined';
+
 /**
  * What an incoming message turned out to be.
  *
  * One shape rather than a discriminated union, because callers read the same
- * fields either way and the only difference is whether a project was settled.
+ * fields either way and the only difference is which of them are populated.
  */
 export interface QuestionReply {
-  outcome: 'answered' | 'rejected' | 'cancelled';
+  outcome: ReplyOutcome;
+  kind: CaptureQuestionKind;
   questionId: string;
   integrationEventId: string;
   userId: string;
   userName: string;
-  /** Null when they told us we had the wrong project. */
+  /** The settled project. Null when they told us we had the wrong one. */
   projectId: string | null;
+  /** The change this reply is about, for an attach or a follow-up. */
+  potentialChangeId: string | null;
+  /** What was originally reported — the text the question was asked about. */
   originalText: string;
+  /** What they just said. */
+  replyText: string;
   /** Their live jobs as frozen when we asked, for the re-ask after a "no". */
   candidateProjectIds: string[];
+  /** Which facts the follow-up asked for. */
+  detailFields: string[];
   /** Carried so a re-ask stays on the same email thread as the first question. */
   sourceMessageId: string | null;
   sourceSubject: string | null;
@@ -158,8 +229,8 @@ function newToken(): string {
   return out;
 }
 
-function excerptOf(text: string): string {
-  return text.length > 160 ? `${text.slice(0, 160).trimEnd()}…` : text;
+function excerptOf(text: string, limit = 160): string {
+  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
 
 /** "Re:" on the original subject, so it reads as a reply and not as a robot. */
@@ -183,6 +254,10 @@ async function putQuestion(input: {
   userId: string;
   kind: CaptureQuestionKind;
   candidateProjectIds: string[];
+  candidateChangeIds?: string[];
+  projectId?: string | null;
+  potentialChangeId?: string | null;
+  detailFields?: string[];
   askedText: string;
   sourceMessageId: string | null;
   sourceSubject: string | null;
@@ -194,7 +269,7 @@ async function putQuestion(input: {
   if (recipients.length === 0) return;
 
   const expiresAt = new Date();
-  expiresAt.setUTCDate(expiresAt.getUTCDate() + EXPIRES_AFTER_DAYS);
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + EXPIRES_AFTER_DAYS[input.kind]);
 
   await prisma.$transaction(async (tx) => {
     const data = {
@@ -202,6 +277,10 @@ async function putQuestion(input: {
       kind: input.kind,
       token: input.token,
       candidateProjectIds: input.candidateProjectIds,
+      candidateChangeIds: input.candidateChangeIds ?? [],
+      projectId: input.projectId ?? null,
+      potentialChangeId: input.potentialChangeId ?? null,
+      detailFields: input.detailFields ?? [],
       askedText: input.askedText,
       sourceMessageId: input.sourceMessageId,
       sourceSubject: input.sourceSubject,
@@ -226,6 +305,7 @@ async function putQuestion(input: {
       dedupeSeed: `question:${input.token}`,
       on: new Date(),
       replyToMessageId: input.sourceMessageId,
+      potentialChangeId: input.potentialChangeId ?? null,
     });
   });
 
@@ -263,12 +343,19 @@ export async function askWhichProject(input: AskInput): Promise<{ token: string 
     .map((p, i) => `${i + 1}. ${p.projectCode} — ${p.projectName}`)
     .join('\n');
 
+  const files = input.evidenceCount ?? 0;
+  const opening =
+    files > 0
+      ? `You sent ${files} ${files === 1 ? 'file' : 'files'} with no message.\n\n` +
+        `Which project ${files === 1 ? 'is it' : 'are they'} for?\n\n`
+      : `You reported:\n"${excerptOf(input.originalText)}"\n\n` +
+        `You are on ${projects.length} live projects, so we could not tell which one this is.\n\n`;
+
   const body =
-    `You reported:\n"${excerptOf(input.originalText)}"\n\n` +
-    `You are on ${projects.length} live projects, so we could not tell which one this is.\n\n` +
+    opening +
     `${list}\n\n` +
-    `Reply with the number — for example: ${token} 1\n` +
-    `Or reply with the project code, e.g. ${token} ${projects[0]?.projectCode}.\n\n` +
+    `Reply with the number, the project code, or anything that names it.\n` +
+    `For example: 1, or ${projects[0]?.projectCode}.\n\n` +
     `Nothing is recorded against any project until you answer.`;
 
   await putQuestion({
@@ -321,7 +408,7 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
   const otherLine =
     alternatives.length > 0
       ? `\nIf not, reply with the right code instead:\n` +
-        alternatives.map((p) => `  ${token} ${p.projectCode} — ${p.projectName}`).join('\n') +
+        alternatives.map((p) => `  ${p.projectCode} — ${p.projectName}`).join('\n') +
         '\n'
       : '';
 
@@ -329,7 +416,7 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
     `You reported:\n"${excerptOf(input.originalText)}"\n\n` +
     `This looks like ${proposed.projectCode} — ${proposed.projectName} ` +
     `(${proposed.clientName}), because ${describeMatch(input.match)}.\n\n` +
-    `Reply YES to file it there — for example: ${token} YES\n` +
+    `Reply YES to file it there.\n` +
     otherLine +
     `\nNothing is recorded against any project until you answer.`;
 
@@ -347,6 +434,273 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
   });
 
   return { token };
+}
+
+/**
+ * "These photos: a new change, or one of these?"
+ *
+ * Asked when files arrive with no words of their own, once the project is
+ * settled. Files with a caption never reach here — a caption is a statement of
+ * what happened, and asking a man who has just told you what a photo is to
+ * tell you again is how a system teaches people to stop replying to it.
+ *
+ * Each option carries a few words of what that change is about, because
+ * `PC-DXB-001-0002` means nothing to the person who reported it three weeks
+ * ago, and a list of references is a list nobody can answer.
+ */
+export async function askWhichChange(input: {
+  integrationEventId: string;
+  userId: string;
+  projectId: string;
+  channel: Extract<SourceType, 'whatsapp' | 'email'>;
+  evidenceCount: number;
+  originalText: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+  limit?: number;
+}): Promise<{ token: string; offered: number } | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: { projectCode: true, projectName: true },
+  });
+  if (!project) return null;
+
+  // Live changes only, newest first. A change already found to be within the
+  // contract, or withdrawn, does not want new evidence quietly appearing on it
+  // months later — and offering it would invite somebody to reopen a decision
+  // by attaching a photograph to it.
+  const changes = await prisma.potentialChange.findMany({
+    where: {
+      projectId: input.projectId,
+      currentStatus: { notIn: ['included_scope', 'cancelled'] },
+    },
+    select: { id: true, pcNumber: true, title: true, summary: true, description: true },
+    orderBy: { createdAt: 'desc' },
+    take: input.limit ?? 5,
+  });
+
+  const token = newToken();
+  const files = input.evidenceCount;
+  const noun = files === 1 ? 'file' : 'files';
+
+  const list = changes
+    .map((c, i) => `${i + 1}. ${c.pcNumber} — ${briefOf(c)}`)
+    .join('\n');
+
+  const body =
+    changes.length > 0
+      ? `${files} ${noun} for ${project.projectCode} — ${project.projectName}.\n\n` +
+        `Do ${files === 1 ? 'it' : 'they'} belong to one of these?\n\n` +
+        `${list}\n\n` +
+        `Reply with the number or the reference. If this is something new, ` +
+        `reply NEW and tell me in a line what changed.`
+      : `${files} ${noun} for ${project.projectCode} — ${project.projectName}.\n\n` +
+        `There is nothing open on that project yet, so tell me in a line what ` +
+        `changed and I will open it with ${files === 1 ? 'this file' : 'these files'} attached.`;
+
+  await putQuestion({
+    integrationEventId: input.integrationEventId,
+    userId: input.userId,
+    kind: changes.length > 0 ? 'attach' : 'describe',
+    candidateProjectIds: [input.projectId],
+    candidateChangeIds: changes.map((c) => c.id),
+    projectId: input.projectId,
+    askedText: input.originalText,
+    sourceMessageId: input.sourceMessageId ?? null,
+    sourceSubject: input.sourceSubject ?? null,
+    subject: replySubject(input.sourceSubject, token),
+    body,
+    token,
+  });
+
+  return { token, offered: changes.length };
+}
+
+/** "Tell me in a line what changed." Asked after they say the files are new. */
+export async function askForDescription(input: {
+  integrationEventId: string;
+  userId: string;
+  projectId: string;
+  evidenceCount: number;
+  originalText: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+}): Promise<{ token: string } | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: { projectCode: true, projectName: true },
+  });
+  if (!project) return null;
+
+  const token = newToken();
+  const files = input.evidenceCount;
+
+  const body =
+    `New change on ${project.projectCode} — ${project.projectName}.\n\n` +
+    `Tell me in one line what changed and I will open it with ` +
+    `${files === 1 ? 'the file' : `the ${files} files`} attached.\n\n` +
+    `For example: "client asked for the reception ceiling grid to be reset ` +
+    `300mm lower".`;
+
+  await putQuestion({
+    integrationEventId: input.integrationEventId,
+    userId: input.userId,
+    kind: 'describe',
+    candidateProjectIds: [input.projectId],
+    projectId: input.projectId,
+    askedText: input.originalText,
+    sourceMessageId: input.sourceMessageId ?? null,
+    sourceSubject: input.sourceSubject ?? null,
+    subject: replySubject(input.sourceSubject, token),
+    body,
+    token,
+  });
+
+  return { token };
+}
+
+export type DetailField = 'event_date' | 'document_reference' | 'work_status';
+
+/**
+ * Which facts are worth one more message, and which are not.
+ *
+ * Ordered by what they are worth. The event date comes first because it is the
+ * only one that moves a deadline: the notice period runs from the day the
+ * thing happened, so a change reported a week late has twenty one days left
+ * and not twenty eight, and a system that silently assumes today tells the
+ * commercial manager he has a week he does not have.
+ *
+ * A drawing reference is asked for only when the report is already talking
+ * about a drawing. Asking every reporter for a drawing number teaches them
+ * that most of the questions do not apply to them, and then they stop reading
+ * the ones that do.
+ *
+ * Two at most, in one message. This is a man on a ladder with one hand free.
+ */
+export function plannedDetailFields(input: {
+  text: string;
+  eventDateKnown: boolean;
+  documentReferenceKnown: boolean;
+  workStatusKnown: boolean;
+}): DetailField[] {
+  const fields: DetailField[] = [];
+  if (!input.eventDateKnown) fields.push('event_date');
+  if (!input.documentReferenceKnown && mentionsDocument(input.text)) {
+    fields.push('document_reference');
+  }
+  if (!input.workStatusKnown) fields.push('work_status');
+  return fields.slice(0, 2);
+}
+
+const DETAIL_PROMPTS: Record<DetailField, string> = {
+  event_date: 'When did this happen? A date, or just say "yesterday".',
+  document_reference: 'Which drawing, RFI or instruction does it come from? Send it if you have it.',
+  work_status: 'Has the work started on site yet?',
+};
+
+/**
+ * The follow-up, sent AFTER the change is filed.
+ *
+ * Never before. The change is the thing that starts the contractual clock, and
+ * a question about a detail must not be able to hold that up — if this message
+ * is never answered, the change is still on file, still owned, still counting
+ * down. The follow-up only makes it sharper.
+ */
+export async function askForDetail(input: {
+  integrationEventId: string;
+  userId: string;
+  projectId: string;
+  potentialChangeId: string;
+  pcNumber: string;
+  fields: DetailField[];
+  originalText: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+}): Promise<{ token: string } | null> {
+  if (input.fields.length === 0) return null;
+
+  const token = newToken();
+
+  const asked =
+    input.fields.length === 1
+      ? DETAIL_PROMPTS[input.fields[0]!]
+      : input.fields.map((field, i) => `${i + 1}. ${DETAIL_PROMPTS[field]}`).join('\n');
+
+  const body =
+    `${input.pcNumber} is on file and the assessment is with the commercial team.\n\n` +
+    `${input.fields.length === 1 ? 'One thing' : 'Two things'} that would make it stronger:\n\n` +
+    `${asked}\n\n` +
+    `Reply in one message, or reply SKIP and it stays as it is.`;
+
+  await putQuestion({
+    integrationEventId: input.integrationEventId,
+    userId: input.userId,
+    kind: 'detail',
+    candidateProjectIds: [input.projectId],
+    projectId: input.projectId,
+    potentialChangeId: input.potentialChangeId,
+    detailFields: input.fields,
+    askedText: input.originalText,
+    sourceMessageId: input.sourceMessageId ?? null,
+    sourceSubject: input.sourceSubject ?? null,
+    subject: replySubject(input.sourceSubject, token),
+    body,
+    token,
+  });
+
+  return { token };
+}
+
+/**
+ * The last message in the exchange.
+ *
+ * A conversation that ends without a reply does not feel finished, and a
+ * reporter who is never told his change was filed has no way to know whether
+ * the system heard him — so he tells his PM again, by hand, which is the
+ * behaviour this product exists to replace.
+ *
+ * Sent on the same request, like the question itself. Best effort: failing to
+ * say "filed" must never unfile anything.
+ */
+export async function acknowledgeCapture(input: {
+  userId: string;
+  token: string;
+  text: string;
+  potentialChangeId?: string | null;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+  /** Appends "anything else?", varied by token so it does not read like a bot. */
+  invite?: boolean;
+}): Promise<void> {
+  const recipients = await loadRecipients([input.userId]);
+  if (recipients.length === 0) return;
+
+  const seed = `ack:${input.token}`;
+  const body = input.invite === false ? input.text : `${input.text}\n\n${closingLine(input.token)}`;
+
+  await prisma.$transaction(async (tx) => {
+    await recordDirectNotifications(tx as Prisma.TransactionClient, {
+      kind: 'capture_question',
+      subject: replySubject(input.sourceSubject, input.token),
+      body,
+      recipients,
+      dedupeSeed: seed,
+      on: new Date(),
+      replyToMessageId: input.sourceMessageId ?? null,
+      potentialChangeId: input.potentialChangeId ?? null,
+    });
+  });
+
+  await dispatchNow(seed);
+}
+
+/** True when EVERY word of the reply is in `vocabulary`. A partial is not an answer. */
+function isWholly(text: string, vocabulary: Set<string>, maxWords = 4): boolean {
+  // Digits are split out as their own words and are in neither vocabulary, so
+  // "YES 2" is not a yes. Two different answers in one reply is not an answer.
+  const words = text.split(/[^A-Z0-9]+/).filter(Boolean);
+  if (words.length === 0 || words.length > maxWords) return false;
+  return words.every((word) => vocabulary.has(word));
 }
 
 /**
@@ -373,51 +727,15 @@ function bareNumber(text: string): number | null {
   return found;
 }
 
-/**
- * The last message in the exchange.
- *
- * A conversation that ends without a reply does not feel finished, and a
- * reporter who is never told his change was filed has no way to know whether
- * the system heard him — so he tells his PM again, by hand, which is the
- * behaviour this product exists to replace. Two sentences close the loop.
- *
- * Sent on the same request, like the question itself. Best effort: failing to
- * say "filed" must never unfile anything.
- */
-export async function acknowledgeCapture(input: {
-  userId: string;
-  token: string;
-  text: string;
-  sourceMessageId?: string | null;
-  sourceSubject?: string | null;
-}): Promise<void> {
-  const recipients = await loadRecipients([input.userId]);
-  if (recipients.length === 0) return;
-
-  const seed = `ack:${input.token}`;
-
-  await prisma.$transaction(async (tx) => {
-    await recordDirectNotifications(tx as Prisma.TransactionClient, {
-      kind: 'capture_question',
-      subject: replySubject(input.sourceSubject, input.token),
-      body: input.text,
-      recipients,
-      dedupeSeed: seed,
-      on: new Date(),
-      replyToMessageId: input.sourceMessageId ?? null,
-    });
-  });
-
-  await dispatchNow(seed);
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
-/** True when EVERY word of the reply is in `vocabulary`. A partial is not an answer. */
-function isWholly(text: string, vocabulary: Set<string>): boolean {
-  // Digits are split out as their own words and are in neither vocabulary, so
-  // "YES 2" is not a yes. Two different answers in one reply is not an answer.
-  const words = text.split(/[^A-Z0-9]+/).filter(Boolean);
-  if (words.length === 0 || words.length > 4) return false;
-  return words.every((word) => vocabulary.has(word));
+/** What a single open question makes of a reply, or null if it makes nothing. */
+interface Interpretation {
+  outcome: ReplyOutcome;
+  projectId: string | null;
+  potentialChangeId: string | null;
 }
 
 /**
@@ -448,38 +766,155 @@ export async function tryAnswerQuestion(
 
   const text = attempt.text.trim();
   const upper = text.toUpperCase();
+  const now = Date.now();
 
   // A token in the text names the question outright.
   //
-  // Without one, the answer belongs to the MOST RECENT open question — which
-  // is how a conversation works: you answer the last thing you were asked.
-  // This used to refuse whenever two were outstanding, which was safe and
-  // useless: someone with three parked reports could not answer any of them
-  // without copying a code out of an old message.
+  // Without one, the reply is offered to each open question NEWEST FIRST, and
+  // the first one that can make sense of it takes it — which is how a
+  // conversation works: you answer the last thing you were asked, and if that
+  // makes no sense you must have meant the one before.
   //
-  // What makes the looser rule acceptable is that a mistake is now VISIBLE
-  // within seconds. The acknowledgement quotes the report it filed, so
-  // answering the wrong question is something the reporter sees immediately
-  // and can correct, instead of a silent wrong filing nobody ever looks at.
-  //
-  // The staleness guard is the remaining protection: a "2" arriving a day
-  // later is not a reply to anything, and is treated as a new report.
+  // What makes the loose rule acceptable is that a mistake is now VISIBLE
+  // within seconds: every acknowledgement quotes what it acted on, so a reply
+  // landing on the wrong question is something the reporter sees immediately
+  // and can correct, instead of a silent wrong filing nobody looks at again.
   const byToken = open.find((q) => new RegExp(`\\b${q.token}\\b`).test(upper));
-  const newest = open[0];
-  const question =
-    byToken ??
-    (newest && Date.now() - newest.askedAt.getTime() < CONVERSATION_WINDOW_MS ? newest : null);
-  if (!question) return null;
+  const tryable = byToken
+    ? [byToken]
+    : open.filter((q) => now - q.askedAt.getTime() < CONVERSATION_WINDOW_MS[q.kind]);
 
+  for (const question of tryable) {
+    // An email reply quotes the message it answers, and the quoted text
+    // contains every project code and reference we listed. Reading past the
+    // first quote line would let our own question answer itself.
+    const body = firstReplyBlock(upper).replace(question.token, ' ').trim();
+
+    const reading = await interpret(question, body, text);
+    if (!reading) continue;
+
+    // Claim it atomically. Two replies racing — the email and the WhatsApp both
+    // answered — must settle one question, not two.
+    const settled =
+      reading.outcome === 'rejected' || reading.outcome === 'cancelled'
+        // A rejection CANCELS the question. The caller then re-asks, which
+        // reopens this same row with a fresh token — so a second "no" arriving
+        // from the other channel finds nothing open and does not re-ask twice.
+        ? { status: 'cancelled' as const, answeredAt: new Date() }
+        : {
+            status: 'answered' as const,
+            answeredAt: new Date(),
+            chosenProjectId: reading.projectId,
+          };
+
+    const claimed = await prisma.captureQuestion.updateMany({
+      where: { id: question.id, status: 'open' },
+      data: settled,
+    });
+    if (claimed.count === 0) continue;
+
+    return {
+      outcome: reading.outcome,
+      kind: question.kind,
+      questionId: question.id,
+      integrationEventId: question.integrationEventId,
+      userId: user.id,
+      userName: user.fullName,
+      projectId: reading.projectId,
+      potentialChangeId: reading.potentialChangeId,
+      originalText: question.askedText ?? '',
+      replyText: text,
+      candidateProjectIds: question.candidateProjectIds,
+      detailFields: question.detailFields,
+      sourceMessageId: question.sourceMessageId,
+      sourceSubject: question.sourceSubject,
+    };
+  }
+
+  return null;
+}
+
+async function interpret(
+  question: CaptureQuestion,
+  body: string,
+  rawText: string,
+): Promise<Interpretation | null> {
+  const none: Pick<Interpretation, 'projectId' | 'potentialChangeId'> = {
+    projectId: question.projectId,
+    potentialChangeId: question.potentialChangeId,
+  };
+
+  if (question.kind === 'detail') {
+    // A follow-up competes with real reports, so it is the strictest of the
+    // five. Anything long, or anything that yields no fact at all, is a new
+    // report — and treating a new report as a follow-up answer would swallow
+    // it whole.
+    if (isWholly(body, SKIP, 6) || isPleasantry(rawText)) {
+      return { outcome: 'declined', ...none };
+    }
+    if (wordCount(rawText) > DETAIL_ANSWER_MAX_WORDS) return null;
+
+    const yieldsFact =
+      parseEventDate(rawText, new Date()) !== null ||
+      parseDocumentReference(rawText) !== null ||
+      parseWorkStatus(rawText) !== null;
+    if (!yieldsFact) return null;
+
+    return { outcome: 'detailed', ...none };
+  }
+
+  if (question.kind === 'describe') {
+    if (isWholly(body, CANCEL)) return { outcome: 'cancelled', ...none };
+    if (wordCount(rawText) === 0) return null;
+    return { outcome: 'described', ...none };
+  }
+
+  if (question.kind === 'attach') {
+    if (isWholly(body, CANCEL)) return { outcome: 'cancelled', ...none };
+
+    const changes = await prisma.potentialChange.findMany({
+      where: { id: { in: question.candidateChangeIds } },
+      select: { id: true, pcNumber: true },
+    });
+    // Restored to the order they were offered in, so "2" means the second line
+    // of the message they are looking at.
+    const ordered = question.candidateChangeIds
+      .map((id) => changes.find((c) => c.id === id))
+      .filter((c): c is { id: string; pcNumber: string } => Boolean(c));
+
+    const named = matchChangeInText(body, ordered);
+    if (named) {
+      return { outcome: 'attach_existing', projectId: question.projectId, potentialChangeId: named.id };
+    }
+
+    const index = bareNumber(body);
+    if (index !== null) {
+      const picked = ordered[index - 1];
+      if (picked) {
+        return {
+          outcome: 'attach_existing',
+          projectId: question.projectId,
+          potentialChangeId: picked.id,
+        };
+      }
+    }
+
+    if (isNewChangeRequest(body)) return { outcome: 'attach_new', ...none };
+
+    // Prose while files are waiting is the description of what they are of.
+    // That is what a person would do — send the photos, then say what they
+    // show — and reading it as a separate report would file a change with no
+    // evidence and leave the evidence attached to nothing.
+    if (wordCount(rawText) >= DESCRIPTION_MIN_WORDS) return { outcome: 'described', ...none };
+
+    return null;
+  }
+
+  // choose / confirm — the project questions.
   const projects = await prisma.project.findMany({
     where: { id: { in: question.candidateProjectIds } },
     select: { id: true, projectCode: true },
   });
-
-  // An email reply quotes the message it answers, and the quoted text contains
-  // every project code we listed. Reading past the first quote line would let
-  // our own question answer itself.
-  const withoutToken = firstReplyBlock(upper).replace(question.token, ' ').trim();
 
   // A project code is unambiguous and beats everything else, in case someone
   // writes both. It also survives the list being read out of order.
@@ -488,72 +923,45 @@ export async function tryAnswerQuestion(
   // `DXB-004`, `dxb004`, `dxb 004` and `DXB - 004` are one answer. Requiring
   // the exact punctuation of the list would park a conversation the reporter
   // had already settled, which is the most irritating possible way to fail.
-  const byCode = projects.find((p) => codePattern(p.projectCode).test(withoutToken));
-
-  let chosenProjectId: string | null = byCode?.id ?? null;
-  let rejected = false;
-  let cancelled = false;
-
-  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
-  // Checked before everything except a code, because someone who names a
-  // project has plainly not withdrawn it.
-  if (!chosenProjectId && isWholly(withoutToken, CANCEL)) {
-    cancelled = true;
+  const byCode = projects.find((p) => codePattern(p.projectCode).test(body));
+  if (byCode) {
+    return { outcome: 'answered', projectId: byCode.id, potentialChangeId: null };
   }
 
-  if (!chosenProjectId && !cancelled && question.kind === 'confirm') {
+  // "cancel", "ignore", "forget it" — the reporter closing their own loop.
+  // Checked after a code, because someone who names a project has plainly not
+  // withdrawn it.
+  if (isWholly(body, CANCEL)) return { outcome: 'cancelled', projectId: null, potentialChangeId: null };
+
+  if (question.kind === 'confirm') {
     // Element zero is the proposal — see the header note.
-    if (isWholly(withoutToken, AFFIRMATIVE)) {
-      chosenProjectId = question.candidateProjectIds[0] ?? null;
-    } else if (isWholly(withoutToken, NEGATIVE)) {
-      rejected = true;
+    if (isWholly(body, AFFIRMATIVE)) {
+      const chosen = question.candidateProjectIds[0] ?? null;
+      return chosen ? { outcome: 'answered', projectId: chosen, potentialChangeId: null } : null;
+    }
+    if (isWholly(body, NEGATIVE)) {
+      return { outcome: 'rejected', projectId: null, potentialChangeId: null };
     }
     // A bare number is NOT read here. No numbered list was ever sent for a
     // confirmation, so a "2" in the reply means something we cannot see.
+    return null;
   }
 
-  if (!chosenProjectId && !rejected && !cancelled && question.kind === 'choose') {
-    // A number, with or without the small words people put in front of it.
-    // "2", "no 2", "project 2", "#2", "its 2" are one answer.
-    //
-    // Still deliberately strict about everything else: "moving 2 sockets on
-    // level 2" is a REPORT, and reading it as an answer files it against a
-    // project nobody chose and throws the report away. That is the one failure
-    // here worth being pedantic about, so every other word in the reply has to
-    // be a permitted filler.
-    const index = bareNumber(withoutToken);
-    if (index !== null) {
-      chosenProjectId = question.candidateProjectIds[index - 1] ?? null;
-    }
+  // A number, with or without the small words people put in front of it.
+  // "2", "no 2", "project 2", "#2", "its 2" are one answer.
+  //
+  // Still deliberately strict about everything else: "moving 2 sockets on
+  // level 2" is a REPORT, and reading it as an answer files it against a
+  // project nobody chose and throws the report away. That is the one failure
+  // here worth being pedantic about, so every other word in the reply has to
+  // be a permitted filler.
+  const index = bareNumber(body);
+  if (index !== null) {
+    const chosen = question.candidateProjectIds[index - 1] ?? null;
+    if (chosen) return { outcome: 'answered', projectId: chosen, potentialChangeId: null };
   }
 
-  if (!chosenProjectId && !rejected && !cancelled) return null;
-
-  // Claim it atomically. Two replies racing — the email and the WhatsApp both
-  // answered — must file one change, not two.
-  const claimed = await prisma.captureQuestion.updateMany({
-    where: { id: question.id, status: 'open' },
-    // A rejection CANCELS the question. The caller then re-asks, which reopens
-    // this same row with a fresh token — so a second "no" arriving from the
-    // other channel finds nothing open and does not re-ask twice.
-    data: rejected || cancelled
-      ? { status: 'cancelled', answeredAt: new Date() }
-      : { status: 'answered', answeredAt: new Date(), chosenProjectId },
-  });
-  if (claimed.count === 0) return null;
-
-  return {
-    outcome: cancelled ? 'cancelled' : rejected ? 'rejected' : 'answered',
-    questionId: question.id,
-    integrationEventId: question.integrationEventId,
-    userId: user.id,
-    userName: user.fullName,
-    projectId: chosenProjectId,
-    originalText: question.askedText ?? '',
-    candidateProjectIds: question.candidateProjectIds,
-    sourceMessageId: question.sourceMessageId,
-    sourceSubject: question.sourceSubject,
-  };
+  return null;
 }
 
 /**
@@ -580,6 +988,26 @@ function firstReplyBlock(upperText: string): string {
     if (found?.index !== undefined && found.index < cut) cut = found.index;
   }
   return upperText.slice(0, cut).trim();
+}
+
+/**
+ * Whether this person was mid-conversation a moment ago.
+ *
+ * Decides how "thanks" is answered: warmly, as the end of an exchange, or with
+ * a nudge about what the number is for. Both are better than filing a
+ * Potential Change titled "thanks", which is what used to happen.
+ */
+export async function hadRecentExchange(
+  userId: string,
+  withinMs = CONVERSATION_WINDOW_MS.choose,
+): Promise<boolean> {
+  const last = await prisma.captureQuestion.findFirst({
+    where: { userId, answeredAt: { not: null } },
+    orderBy: { answeredAt: 'desc' },
+    select: { answeredAt: true },
+  });
+  if (!last?.answeredAt) return false;
+  return Date.now() - last.answeredAt.getTime() < withinMs;
 }
 
 /** Closes questions nobody answered, so a stale "2" cannot file anything. */

@@ -971,6 +971,15 @@ enum CaptureQuestionKind {
   /// "This is DXB-001, correct?" — we read it out of their message and they
   /// only have to agree.
   confirm
+  /// "These photos: a new change, or one of these?" — asked when files arrive
+  /// with no words, once the project is settled.
+  attach
+  /// "Tell me in one line what changed." — asked when files arrive with no
+  /// words and the reporter says they belong to nothing yet.
+  describe
+  /// "When did it happen, and which drawing?" — asked AFTER a change is filed,
+  /// so the follow-up never delays the notice clock it exists to correct.
+  detail
 }
 
 enum CaptureQuestionStatus {
@@ -1003,6 +1012,18 @@ model CaptureQuestion {
   /// same thread instead of arriving as a fresh email nobody connects to it.
   sourceMessageId     String?               @map("source_message_id")
   sourceSubject       String?               @map("source_subject")
+  /// The Potential Changes offered by an `attach` question, frozen at ask time
+  /// for the same reason the project list is: a number in the reply and a
+  /// number in the message have to mean the same thing an hour later.
+  candidateChangeIds  String[]              @default([]) @map("candidate_change_ids") @db.Uuid
+  /// The project once it is settled. An `attach` or `describe` question has
+  /// already had its project answered, and re-deriving it would let a later
+  /// membership change move where the files land.
+  projectId           String?               @map("project_id") @db.Uuid
+  /// The change a `detail` question is about.
+  potentialChangeId   String?               @map("potential_change_id") @db.Uuid
+  /// Which facts were asked for, so the reply is read for those and only those.
+  detailFields        String[]              @default([]) @map("detail_fields")
   status              CaptureQuestionStatus @default(open)
   chosenProjectId     String?               @map("chosen_project_id") @db.Uuid
   askedAt             DateTime              @default(now()) @map("asked_at")

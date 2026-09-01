@@ -42,10 +42,13 @@ export async function POST(request: Request) {
         }, eventId),
       // A parked message is not a processed one. Without this the triage inbox
       // is empty while messages quietly pile up inside result_json.
+      // A parked message is not a processed one, and a withdrawn or courteous
+      // one was never a change at all. Without this the triage inbox is either
+      // empty while messages pile up inside result_json, or full of "thanks".
       (outcome) =>
         outcome.kind === 'needs_triage'
           ? 'needs_triage'
-          : outcome.kind === 'cancelled'
+          : outcome.kind === 'cancelled' || outcome.kind === 'closed'
             ? 'ignored'
             : 'processed',
     );

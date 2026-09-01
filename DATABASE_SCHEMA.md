@@ -86,18 +86,46 @@ not evidence of what they said. `summary` is the model's standardised
 restatement, for scanning a register of forty. Null when the model added
 nothing. Nothing contractual reads it.
 
-**`capture_questions`** — the outstanding "which project?" and its answer.
+**`capture_questions`** — whatever the system is currently waiting to be told,
+and the answer when it comes.
 
-`kind` distinguishes the two shapes. A **choose** question lists the reporter's
-live jobs and is answered with a number or a code. A **confirm** question puts
-back the one project we read out of their own message, and is answered with a
-word. For a confirm, `candidate_project_ids[0]` **is the proposal** and the rest
-are their other live jobs, carried so that "no, it is DXB-002" resolves in one
-reply instead of being read as a brand new report. Nothing may reorder that
-array.
+`kind` distinguishes five shapes:
+
+| kind | asked when | answered with |
+|---|---|---|
+| `choose` | nothing in the message named a project | a number, or a project code |
+| `confirm` | the message named a code or the client, and one live job fits | a word |
+| `attach` | files arrived with no words, and the project is settled | a number, a PC reference, "new", or a line saying what they show |
+| `describe` | they said the files are a new change | one line about what changed |
+| `detail` | **after** a change is filed — when did it happen, which drawing | a short reply carrying at least one fact, or SKIP |
+
+The first four **block**: nothing is written until they answer. `detail` never
+blocks. The notice clock starts when the change is created, so the change is
+created first and improved second, and an unanswered follow-up can never be the
+reason a deadline passed.
+
+For a confirm, `candidate_project_ids[0]` **is the proposal** and the rest are
+their other live jobs, carried so that "no, it is DXB-002" resolves in one reply
+instead of being read as a brand new report. Nothing may reorder that array.
+`candidate_change_ids` is the same promise for an attach question.
+
+`project_id` holds the project once it is settled, and `potential_change_id` the
+change a `detail` question is about. Both are frozen rather than re-derived, for
+the same reason the lists are: re-reading memberships at answer time would let
+"2" quietly point somewhere else.
+
+`detail_fields` records which facts were asked for, so the reply is read for
+those and the audit trail says what the question was.
 
 `source_message_id` and `source_subject` are the message being answered, so the
 question goes back as a REPLY on the same thread rather than as a fresh email.
+
+**How a reply finds its question.** A token in the text names one outright.
+Without one, the reply is offered to each open question newest first and the
+first that can make sense of it takes it. That is loose on purpose — it used to
+refuse whenever two were outstanding, which was safe and useless. What makes it
+safe now is that every acknowledgement **quotes what it acted on**, so a reply
+landing on the wrong question is visible in seconds rather than silent for ever.
 
 **`notification_logs.reply_to_message_id`** — passed to n8n lane D, which uses
 it to reply in place of sending. Null on everything that is not answering an
