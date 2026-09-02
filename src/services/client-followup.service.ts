@@ -16,19 +16,35 @@ import { recordAudit } from '@/services/audit-log.service';
  *   1. It stops the moment they answer. The query, not a flag, is what stops
  *      it — a VO whose `clientResponse` has moved off `awaiting` cannot be
  *      selected, so there is no path where a stale flag keeps writing.
- *   2. One message per variation per week, enforced by the dedupe key. A
- *      sweep that runs twice on a Monday sends once.
+ *   2. One message per variation per interval, enforced by the dedupe key. A
+ *      sweep that runs twice in a day sends once.
  *   3. It states facts and asks a question. No pressure, no escalation
  *      language, no threat of a claim. The reference, the date, the value,
  *      and "please confirm". A contractor who receives a rude chase remembers
  *      it for the rest of the job.
  *
- * ── Why weekly, and why a fixed day ───────────────────────────────────────
- * Osman's call, 2026-09-02. Weekly is often enough to stay on the pile and
- * rare enough not to be filtered. A fixed day matters more than the interval:
- * a chase that lands every Monday morning becomes part of the recipient's
- * week, where one arriving at a random hour reads as an automated system
- * nobody is watching.
+ * ── The cadence belongs to the company, not to this file ──────────────────
+ * Osman's call, 2026-09-02: chasing is a commercial posture, not a system
+ * behaviour. On one contract the QS chases in person and an automated letter
+ * would cut across him; on another nothing moves without a written trail. So
+ * both the switch and the interval sit in the project's contract rules, and
+ * this sweep only reads them:
+ *
+ *   `clientFollowUpEnabled`  off means silence, and off is a real answer
+ *   `clientFollowUpDays`     days between one chase and the next; 7 is weekly
+ *   `voResponseDays`         the client's own period — nothing before it runs
+ *
+ * This replaces a fixed Monday. A fixed weekday was the right default and the
+ * wrong rule: it made a seven-day cadence unchangeable, and the field that
+ * claimed to change it did nothing.
+ *
+ * ── Why the schedule can now be daily ─────────────────────────────────────
+ * The interval is enforced HERE, by the window arithmetic below, not by how
+ * often n8n fires. The sweep is idempotent: running it hourly, daily, or twice
+ * on the same morning produces the same letters, because the dedupe key names
+ * the interval window rather than the run. That is deliberate — the schedule
+ * is the least trustworthy part of the stack and the easiest to edit by
+ * accident, so it is not allowed to decide anything.
  *
  * ── What it does NOT do ───────────────────────────────────────────────────
  * It does not chase a variation that has not been submitted, or one the
@@ -36,8 +52,53 @@ import { recordAudit } from '@/services/audit-log.service';
  * which is an answer and needs a person, not another chase.
  */
 
-/** Monday. `Date.getUTCDay()` numbering, where Sunday is 0. */
-const DEFAULT_CHASE_DAY = 1;
+/** Used when a project has no contract rules row at all. */
+const FALLBACK_RESPONSE_DAYS = 14;
+const FALLBACK_INTERVAL_DAYS = 7;
+
+export interface ClientChaseDecision {
+  /** Whether a chase is owed for this variation today. */
+  due: boolean;
+  /**
+   * Which interval since the client fell due this chase belongs to. Window 0
+   * is the first one, on the day the response period expires. It goes into the
+   * dedupe key, and that is what makes the interval real: a second sweep
+   * inside the same window computes the same key and writes nothing.
+   */
+  window: number;
+}
+
+/**
+ * Is a chase owed, and which one is it?
+ *
+ * Pure, so the cadence can be tested without a database — this is the part
+ * that decides whether a real client hears from us, and it should be provable
+ * by reading rather than by watching an inbox.
+ */
+export function clientChaseDue(input: {
+  enabled: boolean;
+  /** Days since the variation was submitted. */
+  waitingDays: number;
+  /** The client's own response period. Nothing is chased inside it. */
+  responseDays: number;
+  /** Days between chases. */
+  intervalDays: number;
+}): ClientChaseDecision {
+  if (!input.enabled) return { due: false, window: -1 };
+
+  // Nothing is chased before the client's own response period has run. A
+  // reminder on day three is not diligence, it is nagging, and it teaches
+  // them to ignore the one on day thirty.
+  const overdueDays = input.waitingDays - input.responseDays;
+  if (overdueDays < 0) return { due: false, window: -1 };
+
+  // A zero or negative interval would mean "every zero days", which is not a
+  // cadence. The field is validated at 1–90 on the way in; this is the
+  // backstop for a row that predates that or was written by hand.
+  const interval = input.intervalDays >= 1 ? Math.floor(input.intervalDays) : FALLBACK_INTERVAL_DAYS;
+
+  return { due: true, window: Math.floor(overdueDays / interval) };
+}
 
 export interface ClientFollowUpResult {
   /** Variations sitting unanswered with the client. */
@@ -45,27 +106,18 @@ export interface ClientFollowUpResult {
   /** Chases written this run. */
   written: number;
   queuedForDelivery: number;
-  /** True when today is not the chase day, and nothing was written. */
-  skippedWrongDay: boolean;
+  /** Projects that have switched chasing off, and were skipped for that reason. */
+  skippedDisabled: number;
 }
 
 /**
- * Writes one chase per unanswered variation, on the chase day only.
+ * Writes one chase per variation whose interval has come round.
  *
- * `force` exists for the "send it now" button and for tests. It skips the day
- * check and nothing else — the dedupe key still holds, so pressing it twice on
- * a Monday sends once.
+ * Safe to run as often as you like. The interval, not the schedule, decides
+ * what goes out.
  */
-export async function runClientFollowUp(
-  now: Date = new Date(),
-  options: { chaseDay?: number; force?: boolean } = {},
-): Promise<ClientFollowUpResult> {
+export async function runClientFollowUp(now: Date = new Date()): Promise<ClientFollowUpResult> {
   const today = todayUtc(now);
-  const chaseDay = options.chaseDay ?? DEFAULT_CHASE_DAY;
-
-  if (!options.force && today.getUTCDay() !== chaseDay) {
-    return { awaiting: 0, written: 0, queuedForDelivery: 0, skippedWrongDay: true };
-  }
 
   const orders = await prisma.variationOrder.findMany({
     where: {
@@ -90,7 +142,13 @@ export async function runClientFollowUp(
           projectCode: true,
           projectName: true,
           currency: true,
-          contractRules: { select: { voResponseDays: true } },
+          contractRules: {
+            select: {
+              voResponseDays: true,
+              clientFollowUpDays: true,
+              clientFollowUpEnabled: true,
+            },
+          },
           contacts: {
             where: {
               active: true,
@@ -106,6 +164,7 @@ export async function runClientFollowUp(
   });
 
   let written = 0;
+  let skippedDisabled = 0;
 
   for (const vo of orders) {
     const recipient = vo.project.contacts[0];
@@ -113,15 +172,20 @@ export async function runClientFollowUp(
     // set-up, and it stops this one chase rather than the whole sweep.
     if (!recipient?.email || !vo.submittedAt) continue;
 
+    const rules = vo.project.contractRules;
     const waitingDays = Math.floor(
       (today.getTime() - todayUtc(vo.submittedAt).getTime()) / 86_400_000,
     );
-    const allowed = vo.project.contractRules?.voResponseDays ?? 14;
 
-    // Nothing is chased before the client's own response period has run. A
-    // reminder on day three is not diligence, it is nagging, and it teaches
-    // them to ignore the one on day thirty.
-    if (waitingDays < allowed) continue;
+    const decision = clientChaseDue({
+      enabled: rules?.clientFollowUpEnabled ?? true,
+      waitingDays,
+      responseDays: rules?.voResponseDays ?? FALLBACK_RESPONSE_DAYS,
+      intervalDays: rules?.clientFollowUpDays ?? FALLBACK_INTERVAL_DAYS,
+    });
+
+    if (rules && !rules.clientFollowUpEnabled) skippedDisabled += 1;
+    if (!decision.due) continue;
 
     const value = vo.submittedValue
       ? `${vo.project.currency ?? 'AED'} ${vo.submittedValue.toString()}`
@@ -143,10 +207,6 @@ export async function runClientFollowUp(
       .filter((line) => line !== null)
       .join('\n');
 
-    // One per variation per week. The week number, not the date, so a sweep
-    // that runs late on Tuesday does not send a second one.
-    const week = `${today.getUTCFullYear()}-${isoWeek(today)}`;
-
     const result = await prisma.notificationLog.createMany({
       data: [
         {
@@ -160,10 +220,11 @@ export async function runClientFollowUp(
           body,
           payloadSummary: vo.voNumber,
           status: 'pending',
-          // One per variation per calendar week. `skipDuplicates` on the
-          // unique key is what makes a second sweep on the same Monday a
-          // no-op rather than a second letter.
-          dedupeKey: `client-chase:${vo.id}:${week}`,
+          // The interval window, not the date. `skipDuplicates` on the unique
+          // key is what turns "every 7 days" from an intention into a
+          // guarantee: every sweep inside window 3 computes this same string,
+          // and only the first one writes a row.
+          dedupeKey: `client-chase:${vo.id}:w${decision.window}`,
         },
       ],
       skipDuplicates: true,
@@ -184,7 +245,10 @@ export async function runClientFollowUp(
           voNumber: vo.voNumber,
         },
         source: 'system',
-        metadata: { week },
+        metadata: {
+          window: decision.window,
+          intervalDays: rules?.clientFollowUpDays ?? FALLBACK_INTERVAL_DAYS,
+        },
       });
     }
   }
@@ -195,17 +259,6 @@ export async function runClientFollowUp(
     awaiting: orders.length,
     written,
     queuedForDelivery: delivery.queued,
-    skippedWrongDay: false,
+    skippedDisabled,
   };
-}
-
-/** ISO week number, so a chase is one per calendar week rather than per 7 days. */
-function isoWeek(date: Date): number {
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const day = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - day + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const firstDay = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
-  return 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
 }

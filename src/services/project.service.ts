@@ -205,6 +205,11 @@ export const contractRuleUpdateSchema = z
     approvalThresholdManagingDirector: optionalMoney,
     highRiskVoValue: optionalMoney,
 
+    // The client's own contractual period. It is what decides when a
+    // submission has gone unanswered, so it belongs on the same form as the
+    // chase it gates rather than only in the seed.
+    voResponseDays: days(1, 365),
+    clientFollowUpEnabled: z.coerce.boolean(),
     clientFollowUpDays: days(1, 90),
     qsPricingDueDays: days(1, 90),
     pmScopeReviewDueDays: days(1, 90),

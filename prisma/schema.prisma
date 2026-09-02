@@ -717,6 +717,14 @@ model ProjectContractRule {
   /// How long the client gets before an unanswered VO is a bottleneck.
   voResponseDays         Int     @default(14) @map("vo_response_days")
 
+  /// Whether this project chases the client at all for an answer on a
+  /// submitted variation. Some contracts are chased by the commercial manager
+  /// in person, where an automated letter would cut across him, so it is the
+  /// company's call, per project, and off is a legitimate answer.
+  clientFollowUpEnabled  Boolean @default(true) @map("client_follow_up_enabled")
+  /// Days between one chase and the next, once the client's own response
+  /// period has run. 7 is weekly. It is an interval, not a delay before the
+  /// first one — `voResponseDays` decides when chasing may start at all.
   clientFollowUpDays     Int @default(3) @map("client_follow_up_days")
   qsPricingDueDays       Int @default(7) @map("qs_pricing_due_days")
   pmScopeReviewDueDays   Int @default(3) @map("pm_scope_review_due_days")

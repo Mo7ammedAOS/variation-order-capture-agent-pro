@@ -58,6 +58,7 @@ export async function saveContractRules(
       'approvalThresholdManagingDirector',
       'highRiskVoValue',
       'clientFollowUpDays',
+      'voResponseDays',
       'qsPricingDueDays',
       'pmScopeReviewDueDays',
       'internalApprovalDueDays',
@@ -67,6 +68,7 @@ export async function saveContractRules(
   const parsed = contractRuleUpdateSchema.safeParse({
     ...raw,
     eotAssessmentRequired: checkbox(formData, 'eotAssessmentRequired'),
+    clientFollowUpEnabled: checkbox(formData, 'clientFollowUpEnabled'),
   });
 
   if (!parsed.success) {

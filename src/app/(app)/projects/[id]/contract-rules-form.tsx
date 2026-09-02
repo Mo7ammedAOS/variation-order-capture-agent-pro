@@ -35,6 +35,8 @@ export interface ContractRulesFormValues {
   approvalThresholdCommercialDirector: string;
   approvalThresholdManagingDirector: string;
   highRiskVoValue: string;
+  voResponseDays: number;
+  clientFollowUpEnabled: boolean;
   clientFollowUpDays: number;
   qsPricingDueDays: number;
   pmScopeReviewDueDays: number;
@@ -262,12 +264,6 @@ export function ContractRulesForm({
             label="Internal approval (days)"
             value={values.internalApprovalDueDays}
           />
-          <DaysField
-            name="clientFollowUpDays"
-            label="Client follow-up (days)"
-            value={values.clientFollowUpDays}
-            hint="How long to wait before chasing an unanswered submission."
-          />
           <div className="flex items-start gap-3 sm:col-span-2">
             <input
               id="eotAssessmentRequired"
@@ -283,6 +279,48 @@ export function ContractRulesForm({
               </span>
             </Label>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Chasing the client</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            The only thing this system sends outside the company. How hard a client is
+            chased is a commercial decision, so it is yours to set per project — including
+            not to chase at all.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-start gap-3 sm:col-span-2">
+            <input
+              id="clientFollowUpEnabled"
+              name="clientFollowUpEnabled"
+              type="checkbox"
+              defaultChecked={values.clientFollowUpEnabled}
+              className="mt-1 size-4 rounded border-input"
+            />
+            <Label htmlFor="clientFollowUpEnabled" className="font-normal">
+              Chase the client automatically
+              <span className="block text-xs text-muted-foreground">
+                Off means nothing is ever sent to the client from here. Your team is still
+                reminded, and the variation still counts as overdue on the dashboard.
+              </span>
+            </Label>
+          </div>
+          <DaysField
+            name="voResponseDays"
+            label="Client response period (days)"
+            value={values.voResponseDays}
+            max={365}
+            hint="The client's own period to answer a submitted variation. Nothing is chased inside it."
+          />
+          <DaysField
+            name="clientFollowUpDays"
+            label="Chase every (days)"
+            value={values.clientFollowUpDays}
+            hint="Days between one chase and the next, after the response period has run. 7 is weekly."
+          />
         </CardContent>
       </Card>
 

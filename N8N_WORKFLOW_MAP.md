@@ -25,13 +25,29 @@ Set `ENABLE_SCHEDULER=false` on the app the moment lane S is active. Both
 running is harmless — the dedupe key absorbs it — but two clocks with one
 owner is a thing nobody remembers a year later.
 
-### Lanes F and G are deliberately absent
+### Lane F is built, as `S4` in the schedules block
 
-Client follow-up and the weekly report both need an app endpoint that does not
-exist yet. F chases a client for a response to a notice, and the app cannot yet
-issue a notice. Building them now would put nodes wired to URLs that 404 into
-the file — passing validation, looking finished, failing the first day anyone
-relied on them.
+Client follow-up is a scheduled job, not a webhook lane, so it lives with the
+other three rather than under its own letter. `S4 · Daily 08:00 · Chase Client`
+posts `{"job":"client_followup"}` to `/api/integrations/n8n/run-job`.
+
+**The schedule fires daily and decides nothing.** How often a client is chased,
+and whether they are chased at all, comes from each project's contract rules —
+`clientFollowUpEnabled` and `clientFollowUpDays` — and nothing goes out before
+`voResponseDays` has run. Chasing is a commercial posture and it differs by
+contract, so a company sets it per project; a fixed weekday in the schedule
+would have made a seven-day cadence unchangeable.
+
+The sweep is idempotent: the dedupe key names the interval WINDOW rather than
+the run, so firing it twice in a morning writes one letter. Two clocks are
+therefore harmless, and a schedule edited by accident cannot turn a weekly
+chase into a daily one.
+
+### Lane G is deliberately absent
+
+The weekly report needs an app endpoint that does not exist yet. Building it
+now would put nodes wired to a URL that 404s into the file — passing
+validation, looking finished, failing the first day anyone relied on it.
 
 ## Packaging: one all-in-one JSON per client
 
@@ -60,7 +76,7 @@ one import and one credential rebind, not eight.
 | **C** document | in | Drive / SharePoint watch | `POST /api/integrations/documents/uploaded` |
 | **D** notify | out | App request | Sends email → reports back |
 | **E** notify | out | App request | Sends WhatsApp → reports back |
-| **F** notify | out | App request | Client follow-up |
+| **F** notify | out | Schedule (`S4`, daily) | `POST /api/integrations/n8n/run-job` — cadence per project |
 | **G** report | out | Schedule | Weekly report delivery |
 | **H** error | — | Error trigger over A–G | Alerts, routed by lane letter |
 

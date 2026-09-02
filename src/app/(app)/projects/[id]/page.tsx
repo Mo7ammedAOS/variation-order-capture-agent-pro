@@ -288,6 +288,8 @@ async function ContractRulesTab({
           approvalThresholdCommercialDirector: decimalToInput(rules.approvalThresholdCommercialDirector),
           approvalThresholdManagingDirector: decimalToInput(rules.approvalThresholdManagingDirector),
           highRiskVoValue: decimalToInput(rules.highRiskVoValue),
+          voResponseDays: rules.voResponseDays,
+          clientFollowUpEnabled: rules.clientFollowUpEnabled,
           clientFollowUpDays: rules.clientFollowUpDays,
           qsPricingDueDays: rules.qsPricingDueDays,
           pmScopeReviewDueDays: rules.pmScopeReviewDueDays,
@@ -344,14 +346,31 @@ async function ContractRulesTab({
             <Detail label="Internal approval">
               <span className="tabular">{rules.internalApprovalDueDays} days</span>
             </Detail>
-            <Detail label="Client follow-up">
-              <span className="tabular">{rules.clientFollowUpDays} days</span>
-            </Detail>
             <Detail label="EOT assessment">
               {rules.eotAssessmentRequired ? 'Required' : 'Not required'}
             </Detail>
             <Detail label="High risk threshold">
               <Money value={rules.highRiskVoValue?.toString() ?? null} />
+            </Detail>
+            <Detail label="Client response period">
+              <span className="tabular">{rules.voResponseDays} days</span>
+            </Detail>
+            <Detail label="Chasing the client">
+              {rules.clientFollowUpEnabled ? (
+                <>
+                  <span className="tabular">Every {rules.clientFollowUpDays} days</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Starts once the response period has run, stops when they answer.
+                  </span>
+                </>
+              ) : (
+                <>
+                  Off
+                  <span className="block text-xs text-muted-foreground">
+                    Nothing is sent to the client automatically on this project.
+                  </span>
+                </>
+              )}
             </Detail>
           </dl>
         </CardContent>

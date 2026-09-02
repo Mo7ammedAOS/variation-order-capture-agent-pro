@@ -70,14 +70,14 @@ async function runJob(
       return runReminderSweep();
 
     case 'client_followup':
-      // The weekly chase for an answer on a submitted variation, and the only
+      // The chase for an answer on a submitted variation, and the only
       // scheduled job that writes to somebody outside the company.
       //
-      // The DAY is decided here, not by the schedule. n8n can fire this every
-      // morning and it will do nothing on six of them — so a schedule someone
-      // edits by accident cannot turn a weekly chase into a daily one, which
-      // is the mistake that would cost a client relationship rather than a
-      // record.
+      // The CADENCE is decided per project, in the contract rules, not by the
+      // schedule. n8n fires this every morning and most mornings it writes
+      // nothing — so a schedule somebody edits by accident cannot turn a
+      // weekly chase into a daily one, which is the mistake that would cost a
+      // client relationship rather than a record.
       return runClientFollowUp();
 
     case 'bottleneck_sweep':
