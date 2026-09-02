@@ -725,7 +725,7 @@ model ProjectContractRule {
   /// Days between one chase and the next, once the client's own response
   /// period has run. 7 is weekly. It is an interval, not a delay before the
   /// first one — `voResponseDays` decides when chasing may start at all.
-  clientFollowUpDays     Int @default(3) @map("client_follow_up_days")
+  clientFollowUpDays     Int @default(7) @map("client_follow_up_days")
   qsPricingDueDays       Int @default(7) @map("qs_pricing_due_days")
   pmScopeReviewDueDays   Int @default(3) @map("pm_scope_review_due_days")
   internalApprovalDueDays Int @default(5) @map("internal_approval_due_days")
