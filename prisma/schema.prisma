@@ -453,10 +453,15 @@ enum NotificationKind {
   task_escalation
   /// "Which project did you mean?" — answered by replying, not in the app.
   capture_question
-  /// A notice of variation, addressed OUTSIDE the company. The only kind whose
-  /// recipient is not one of our users, and the only one whose delivery result
+  /// A notice of variation, addressed OUTSIDE the company. Its delivery result
   /// is evidence rather than convenience.
   notice_issued
+  /// A weekly chase for an answer on a submitted variation, addressed OUTSIDE
+  /// the company. Separate from `notice_issued` because it carries no
+  /// contractual weight — nobody's entitlement turns on whether it arrived —
+  /// and because "how often are we chasing this client" is a question worth
+  /// being able to ask on its own.
+  client_followup
 }
 
 enum NotificationChannel {

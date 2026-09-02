@@ -41,6 +41,9 @@ vi.mock('@/services/permissions.service', () => ({
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],
   recordTaskNotifications: async () => 0,
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 
 const prismaMock = {
@@ -143,7 +146,27 @@ describe('the two-seat approval gate', () => {
     state.messagesCreated = [];
   });
 
-  it('does not move the change on a single approval', async () => {
+  it('moves a NOTICE on a single approval, without waiting for the other seat', async () => {
+    // Osman's call, 2026-09-02. A notice is protective: sending an
+    // unnecessary one costs an awkward letter, failing to send one costs the
+    // entitlement. The gate is built to fail in the direction that cannot
+    // lose money.
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'pending', taskId: 'task-2' },
+    ];
+
+    const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(result.complete).toBe(true);
+    expect(result.movedTo).toBe('pm_scope_review');
+  });
+
+  it('still needs BOTH seats on the money', async () => {
+    // The asymmetry is the point. This gate commits the company to a figure,
+    // and one signature on a number is how a company finds out a year later
+    // that nobody checked it.
+    state.approval = approval({ gate: 'final_variation' });
     state.siblings = [
       { id: ID, decision: 'approved', taskId: 'task-1' },
       { id: 'other', decision: 'pending', taskId: 'task-2' },
@@ -154,6 +177,22 @@ describe('the two-seat approval gate', () => {
     expect(result.complete).toBe(false);
     expect(result.movedTo).toBeNull();
     expect(state.pcUpdates).toHaveLength(0);
+  });
+
+  it('lets an approval outrank a rejection on the notice, keeping the rejection on file', async () => {
+    // The managing director overrides a project manager who said no. The "no"
+    // and its reason are never deleted — the file has to be able to explain
+    // its own history when the decision is challenged.
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1' },
+      { id: 'other', decision: 'rejected', taskId: 'task-2' },
+    ];
+
+    const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(result.complete).toBe(true);
+    expect(result.rejected).toBe(false);
+    expect(result.movedTo).toBe('pm_scope_review');
   });
 
   it('releases the notice only when both seats have approved', async () => {
@@ -333,7 +372,9 @@ describe('what the notice gate does to the notice', () => {
     state.messagesCreated = [];
   });
 
-  it('does not touch the notice on a single approval', async () => {
+  it('releases the notice on a single approval', async () => {
+    // It used to wait for the second seat. It no longer does, and the days
+    // that saves are the whole reason the change was made.
     state.siblings = [
       { id: ID, decision: 'approved', taskId: 'task-1' },
       { id: 'other', decision: 'pending', taskId: 'task-2' },
@@ -341,7 +382,22 @@ describe('what the notice gate does to the notice', () => {
 
     await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
 
-    expect(state.noticeUpdates).toHaveLength(0);
+    expect(state.noticeUpdates.length).toBeGreaterThan(0);
+  });
+
+  it('does nothing to the notice when the only decision so far is a rejection', async () => {
+    state.siblings = [
+      { id: ID, decision: 'rejected', taskId: 'task-1' },
+      { id: 'other', decision: 'pending', taskId: 'task-2' },
+    ];
+
+    const result = await recordApprovalDecision(USER, {
+      approvalId: ID,
+      decision: 'rejected',
+      comment: 'The instruction came from the site foreman, not the client.',
+    });
+
+    expect(result.complete).toBe(false);
     expect(state.messagesCreated).toHaveLength(0);
   });
 

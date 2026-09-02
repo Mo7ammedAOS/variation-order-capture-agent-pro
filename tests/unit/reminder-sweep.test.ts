@@ -57,6 +57,9 @@ const prismaMock = {
     },
   },
   projectMember: { findMany: async () => state.members },
+  // Approval tasks are chased on their own rules now. These tests cover the
+  // general ladder, so there are none.
+  approval: { findMany: async () => [] },
   user: { findMany: async () => state.directors },
   notificationLog: {
     createMany: async ({ data }: { data: Row[] }) => {

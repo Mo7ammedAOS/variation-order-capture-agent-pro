@@ -12,7 +12,12 @@ import { calculateNoticeCountdown } from '@/lib/risk';
 import { formatPcNumber } from '@/lib/pc-number';
 import { recordAudit } from '@/services/audit-log.service';
 import { pickResponsibleMember } from '@/services/permissions.service';
-import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
+import {
+  loadRecipients,
+  recordDirectNotifications,
+  recordTaskNotifications,
+} from '@/services/notification.service';
+import { listMembersWithCapability } from '@/services/permissions.service';
 import { NOTICE_ASSESSMENT_PREFERENCE } from '@/lib/rbac';
 import { extractWithFallback } from '@/integrations/claude';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
@@ -921,6 +926,25 @@ export async function createChangeFromCapture(args: {
   );
   const noticeRecipients = await loadRecipients([noticeOwner]);
 
+  // The PM and the MD hear about it the moment it lands, before anybody has
+  // assessed anything.
+  //
+  // Osman's call, 2026-09-02. The reasoning: the notice decision is theirs to
+  // make and the clock is already running, so waiting for a coordinator to
+  // notice a task in a list spends the only thing that cannot be recovered.
+  //
+  // Resolved through the permission matrix, never by role name. Routing by
+  // role once put a notice assessment on a project manager the app then
+  // refused, with no button and no explanation.
+  const [projectManagers, managingDirectors] = await Promise.all([
+    listMembersWithCapability(projectId, 'approval.projectManager'),
+    listMembersWithCapability(projectId, 'approval.managingDirector'),
+  ]);
+  const watchers = [
+    ...new Set([...projectManagers, ...managingDirectors].map((member) => member.userId)),
+  ].filter((id) => id !== noticeOwner);
+  const watcherRecipients = await loadRecipients(watchers);
+
   const outcome = await prisma.$transaction(async (tx): Promise<CaptureOutcome> => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
@@ -1013,6 +1037,25 @@ export async function createChangeFromCapture(args: {
       on: todayUtc(),
       recipients: noticeRecipients,
     });
+
+    // Told, not tasked. They are not being asked to assess it — that task
+    // belongs to one person and stays there. This is so nobody senior first
+    // hears about a change when the notice period is half gone.
+    if (watcherRecipients.length > 0) {
+      await recordDirectNotifications(tx, {
+        kind: 'task_assigned',
+        potentialChangeId: change.id,
+        subject: `New potential change — ${pcNumber}`,
+        body:
+          `${input.senderName ?? reporterName} reported this on ${project.projectCode}:\n\n` +
+          `"${input.text.length > 200 ? `${input.text.slice(0, 200).trimEnd()}…` : input.text}"\n\n` +
+          `Filed as ${pcNumber}. Notice due ${formatDate(noticeDueDate)}. ` +
+          `The assessment is with the commercial team.`,
+        recipients: watcherRecipients,
+        dedupeSeed: `raised:${change.id}`,
+        on: new Date(),
+      });
+    }
 
     await recordAudit({
       db: tx,

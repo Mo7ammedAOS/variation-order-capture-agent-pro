@@ -78,13 +78,14 @@ vi.mock('@/integrations/claude', () => ({
   }),
 }));
 
-vi.mock('@/services/permissions.service', () => ({
-  pickResponsibleMember: async () => 'daniel',
-}));
+vi.mock('@/services/permissions.service', () => ({ pickResponsibleMember: async () => 'daniel', listMembersWithCapability: async () => [], }));
 
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.filter(Boolean).map((id) => ({ userId: id })),
   recordTaskNotifications: async () => 1,
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 
 vi.mock('@/services/audit-log.service', () => ({ recordAudit: async () => undefined }));

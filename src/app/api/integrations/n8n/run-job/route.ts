@@ -4,6 +4,7 @@ import { verifyIntegrationRequest } from '@/lib/integration-auth';
 import { checkRateLimit, INTEGRATION_RATE_LIMIT } from '@/lib/rate-limit';
 import { scheduledJobSchema } from '@/app/api/integrations/schemas';
 import { runReminderSweep } from '@/services/reminder.service';
+import { runClientFollowUp } from '@/services/client-followup.service';
 import { runDetectionSweep } from '@/services/bottleneck.service';
 import { dispatchPendingNotifications } from '@/services/notification.service';
 import { fileUnfiledNotices } from '@/services/notice-document.service';
@@ -61,10 +62,23 @@ export async function POST(request: Request) {
   }
 }
 
-async function runJob(job: 'reminder_sweep' | 'bottleneck_sweep' | 'notification_dispatch') {
+async function runJob(
+  job: 'reminder_sweep' | 'bottleneck_sweep' | 'notification_dispatch' | 'client_followup',
+) {
   switch (job) {
     case 'reminder_sweep':
       return runReminderSweep();
+
+    case 'client_followup':
+      // The weekly chase for an answer on a submitted variation, and the only
+      // scheduled job that writes to somebody outside the company.
+      //
+      // The DAY is decided here, not by the schedule. n8n can fire this every
+      // morning and it will do nothing on six of them — so a schedule someone
+      // edits by accident cannot turn a weekly chase into a daily one, which
+      // is the mistake that would cost a client relationship rather than a
+      // record.
+      return runClientFollowUp();
 
     case 'bottleneck_sweep':
       // Had no caller at all until now. The detection logic has existed since

@@ -143,8 +143,14 @@ vi.mock('@/services/audit-log.service', () => ({ recordAudit: async () => ({}) }
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],
   recordTaskNotifications: async () => 0,
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
-vi.mock('@/services/permissions.service', () => ({ pickResponsibleMember: async () => 'cm-1' }));
+vi.mock('@/services/permissions.service', () => ({
+  pickResponsibleMember: async () => 'cm-1',
+  listMembersWithCapability: async () => [],
+}));
 vi.mock('@/services/integration.service', () => ({
   closeEvent: async () => undefined,
   listUnprocessedEvents: async () => [],

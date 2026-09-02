@@ -108,7 +108,12 @@ export const deliveryStatusSchema = z.object({
  * finite and readable in one glance.
  */
 export const scheduledJobSchema = z.object({
-  job: z.enum(['reminder_sweep', 'bottleneck_sweep', 'notification_dispatch']),
+  job: z.enum([
+    'reminder_sweep',
+    'bottleneck_sweep',
+    'notification_dispatch',
+    'client_followup',
+  ]),
 });
 
 export type WhatsappIncoming = z.infer<typeof whatsappIncomingSchema>;

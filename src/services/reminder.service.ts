@@ -89,6 +89,35 @@ export async function runReminderSweep(now: Date = new Date()): Promise<Reminder
     },
   });
 
+  // Approval rows, looked up separately and joined by task id.
+  //
+  // `Task` has no back-relation to `Approval` and does not need one: this is
+  // one small query, and a schema change to save it would be a migration paid
+  // for by nothing.
+  const approvals = await prisma.approval.findMany({
+    where: { potentialChange: { project: { projectStatus: { in: [...LIVE_PROJECT_STATUSES] } } } },
+    select: {
+      taskId: true,
+      decision: true,
+      gate: true,
+      seat: true,
+      round: true,
+      potentialChangeId: true,
+    },
+  });
+
+  const approvalByTask = new Map(
+    approvals.filter((row) => row.taskId).map((row) => [row.taskId as string, row]),
+  );
+
+  // Which seats have already said yes, so the managing director is only
+  // chased once the ball is actually with him.
+  const approvedSeats = new Set(
+    approvals
+      .filter((row) => row.decision === 'approved')
+      .map((row) => `${row.potentialChangeId}:${row.gate}:${row.round}:${row.seat}`),
+  );
+
   let remindersWritten = 0;
   let escalationsRaised = 0;
   let examined = 0;
@@ -106,7 +135,32 @@ export async function runReminderSweep(now: Date = new Date()): Promise<Reminder
     const lateBy = task.dueDate
       ? workingDaysBetween(task.dueDate, today, weekStart, weekEnd)
       : 0;
-    const level = noticeCritical && task.dueDate ? maxLevel(levelFor(lateBy), 'level_2') : levelFor(lateBy);
+
+    // An approval task answers to its seat, not to the general ladder.
+    const approval = approvalByTask.get(task.id);
+    const chase = approval
+      ? approvalChase({
+          gate: approval.gate,
+          seat: approval.seat,
+          waitingDays: lateBy,
+          otherSeatApproved: approvedSeats.has(
+            `${approval.potentialChangeId}:${approval.gate}:${approval.round}:` +
+              `${approval.seat === 'project_manager' ? 'managing_director' : 'project_manager'}`,
+          ),
+        })
+      : { chase: true, widen: true };
+
+    // Quiet is a decision, not an omission. The managing director is not asked
+    // about a notice for the first three days because the project manager owns
+    // that call, and a director copied on every decision from hour one stops
+    // reading any of them.
+    if (!chase.chase && !noticeCritical) continue;
+
+    const level = noticeCritical && task.dueDate
+      ? maxLevel(levelFor(lateBy), 'level_2')
+      : chase.widen
+        ? levelFor(lateBy)
+        : 'none';
 
     const recipients = await resolveAudience(task.project.id, task.assignedTo, level);
 
@@ -169,6 +223,44 @@ export async function runReminderSweep(now: Date = new Date()): Promise<Reminder
 
 function maxLevel(a: EscalationLevel, b: EscalationLevel): EscalationLevel {
   return rank(a) >= rank(b) ? a : b;
+}
+
+/** How long the managing director is left alone before a notice is chased. */
+const MD_NOTICE_GRACE_DAYS = 3;
+
+/**
+ * How hard to chase one seat of one gate, and whether to widen the audience.
+ *
+ * Osman's rules, 2026-09-02, and each one has a reason:
+ *
+ *   Notice, project manager   chased EVERY DAY, and never widened. It is his
+ *                             decision, the clock is running, and copying his
+ *                             director on day one is how you teach a director
+ *                             to ignore the mail.
+ *   Notice, managing director quiet for three days, then daily. He is the
+ *                             backstop for a PM who has gone quiet, not the
+ *                             first line.
+ *   Money, project manager    chased daily. Nothing moves without him.
+ *   Money, managing director  quiet until the PM has approved. Before that the
+ *                             ball is not with him, and chasing a man for a
+ *                             decision he cannot yet make is noise.
+ *
+ * `widen` stays false throughout: these seats ARE the escalation. There is
+ * nobody above a managing director to copy.
+ */
+export function approvalChase(input: {
+  gate: 'notice_issue' | 'final_variation';
+  seat: 'project_manager' | 'managing_director';
+  waitingDays: number;
+  otherSeatApproved: boolean;
+}): { chase: boolean; widen: boolean } {
+  if (input.seat === 'project_manager') return { chase: true, widen: false };
+
+  if (input.gate === 'notice_issue') {
+    return { chase: input.waitingDays >= MD_NOTICE_GRACE_DAYS, widen: false };
+  }
+
+  return { chase: input.otherSeatApproved, widen: false };
 }
 
 /**

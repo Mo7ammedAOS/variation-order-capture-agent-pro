@@ -26,6 +26,7 @@ vi.mock('@/services/permissions.service', () => ({
     state.askedFor.push({ capability, preferred });
     return state.owner;
   },
+  listMembersWithCapability: async () => [],
 }));
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.filter(Boolean).map((id) => ({ userId: id })),
@@ -33,6 +34,9 @@ vi.mock('@/services/notification.service', () => ({
     state.notifications.push(input);
     return 1;
   },
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 
 const tx = {

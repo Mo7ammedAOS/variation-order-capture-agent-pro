@@ -46,6 +46,7 @@ vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.map((id) => ({ userId: id, email: 'a@b.c', phone: '+9715' })),
   recordDirectNotifications: async () => 1,
   dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 
 const { tryAnswerQuestion } = await import('@/services/capture-question.service');

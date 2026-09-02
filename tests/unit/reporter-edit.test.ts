@@ -33,10 +33,14 @@ vi.mock('@/services/permissions.service', () => ({
   hasCapability: async (_s: string, _r: string[], capability: string) =>
     state.capabilities.has(capability),
   pickResponsibleMember: async () => null,
+  listMembersWithCapability: async () => [],
 }));
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],
   recordTaskNotifications: async () => 0,
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 vi.mock('@/services/approval.service', () => ({ openGate: async () => undefined }));
 vi.mock('@/services/stage.service', () => ({

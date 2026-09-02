@@ -37,6 +37,9 @@ vi.mock('@/services/project-access.service', () => ({
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],
   recordTaskNotifications: async () => 0,
+  recordDirectNotifications: async () => 0,
+  dispatchNow: async () => undefined,
+  dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 
 const prismaMock = {

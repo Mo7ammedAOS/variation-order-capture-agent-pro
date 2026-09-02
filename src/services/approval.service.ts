@@ -8,7 +8,7 @@ import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit } from '@/services/audit-log.service';
 import { assertProjectAccess, getProjectRoles } from '@/services/project-access.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
-import { loadRecipients, recordTaskNotifications } from '@/services/notification.service';
+import { dispatchNow, loadRecipients, recordTaskNotifications } from '@/services/notification.service';
 import { enterStage } from '@/services/stage.service';
 import { issueNotice, supersedeDraft } from '@/services/notice-document.service';
 import type { Capability } from '@/lib/rbac';
@@ -17,9 +17,21 @@ import type { Capability } from '@/lib/rbac';
  * Two gates, two seats each, and nothing else gated.
  *
  *   notice_issue      before the initial notice of variation reaches the
- *                     client. It starts a contractual clock and states a
- *                     position, so it is not one person's call.
- *   final_variation   after the price exists. It commits to a number.
+ *                     client. EITHER seat alone opens it — see below.
+ *   final_variation   after the price exists. It commits to a number, and
+ *                     needs both seats.
+ *
+ * ── The notice gate is deliberately weak ──────────────────────────────────
+ * Both seats are still asked, and both still see it. But the FIRST approval
+ * sends the notice, and an approval outranks a rejection on this gate alone.
+ *
+ * That is not an oversight. A notice is protective: sending an unnecessary one
+ * costs an awkward letter, and failing to send one costs the entitlement. The
+ * two costs are not comparable, so the gate is built to fail in the direction
+ * that cannot lose money. A rejection keeps its reason and stays on the file
+ * for ever; it stops being a veto, not a fact.
+ *
+ * The money gate is unchanged, and that asymmetry is the point.
  *
  * ── Seats, not a list of approvers ─────────────────────────────────────────
  * A gate needs one operational decision and one commercial one. Requiring
@@ -279,7 +291,7 @@ export async function recordApprovalDecision(
     throw new ForbiddenError('You have already given one of the two approvals on this gate.');
   }
 
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
     await tx.approval.update({
       where: { id: approval.id },
       data: {
@@ -306,8 +318,30 @@ export async function recordApprovalDecision(
       select: { id: true, decision: true, taskId: true },
     });
 
-    const rejected = siblings.some((row) => row.decision === 'rejected');
-    const complete = !rejected && siblings.every((row) => row.decision === 'approved');
+    // ── Who has to agree, by gate ─────────────────────────────────────────
+    //
+    // NOTICE: either seat alone is enough, and an approval beats a rejection.
+    // Osman's call, 2026-09-02, and the reasoning is sound: a notice is
+    // PROTECTIVE. Sending one that turns out to be unnecessary costs an
+    // awkward letter; failing to send one costs the entitlement outright. The
+    // two costs are not comparable, so the gate is deliberately weak in the
+    // direction that cannot lose money.
+    //
+    // A rejection is still recorded, still carries its reason, and stays
+    // visible on the change for ever. It stops being a veto, not a fact.
+    //
+    // MONEY: unchanged. Both seats, and a rejection sends it back. This gate
+    // commits the company to a figure, and one signature on a number is how a
+    // company finds out a year later that nobody checked it.
+    const approvedByAnyone = siblings.some((row) => row.decision === 'approved');
+    const anyRejection = siblings.some((row) => row.decision === 'rejected');
+
+    const rejected =
+      approval.gate === 'notice_issue' ? anyRejection && !approvedByAnyone : anyRejection;
+    const complete =
+      approval.gate === 'notice_issue'
+        ? approvedByAnyone
+        : !anyRejection && siblings.every((row) => row.decision === 'approved');
 
     let movedTo: string | null = null;
     let noticeToFileId: string | undefined;
@@ -401,4 +435,19 @@ export async function recordApprovalDecision(
 
     return { gate: approval.gate, complete, rejected, movedTo, noticeToFileId };
   });
+
+  // Out of the door NOW, not on the next half-hourly sweep.
+  //
+  // AFTER the transaction, because this makes network calls and the
+  // transaction holds row locks. A notice that waits twenty minutes for a
+  // scheduler is a notice served twenty minutes later than it had to be, and
+  // the whole product is about the gap between the event and the notice.
+  //
+  // Best effort: failing to send does not un-issue the notice. The row stays
+  // pending, the dispatcher retries on its next pass, and nothing is lost.
+  if (outcome.noticeToFileId) {
+    await dispatchNow(`notice:${outcome.noticeToFileId}`);
+  }
+
+  return outcome;
 }
