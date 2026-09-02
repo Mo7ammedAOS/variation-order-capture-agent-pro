@@ -22,7 +22,7 @@ vi.mock('@/lib/env', () => ({
   getEnv: () => ({
     AI_PROVIDER: 'claude',
     ANTHROPIC_API_KEY: 'test-key-not-real',
-    ANTHROPIC_MODEL: 'claude-opus-5',
+    ANTHROPIC_MODEL: 'claude-sonnet-5',
     N8N_NOTIFY_EMAIL_URL: '',
     N8N_NOTIFY_WHATSAPP_URL: '',
   }),

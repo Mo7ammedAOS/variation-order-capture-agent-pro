@@ -386,7 +386,7 @@ rate per project and a rule for who agrees it.
 
 **Stage 7 — AI for real.** Built, 2026-09-01, for capture extraction.
 
-`AI_PROVIDER=claude` now runs a real adapter on `claude-opus-5` at `effort:
+`AI_PROVIDER=claude` now runs a real adapter on `claude-sonnet-5` at `effort:
 low`. It reads a captured WhatsApp or email message and proposes a title, a
 location, a trade, and — most usefully — a list of what the message does not
 say.

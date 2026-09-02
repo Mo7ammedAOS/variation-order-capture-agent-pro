@@ -24,7 +24,7 @@ through `extractWithFallback` in `src/integrations/claude/index.ts`.
 
 ## Model
 
-`ANTHROPIC_MODEL`, default `claude-opus-5`, at `effort: low`. Set through the
+`ANTHROPIC_MODEL`, default `claude-sonnet-5`, at `effort: low`. Set through the
 AI-provider abstraction, never a hardcoded string at the call site.
 
 Low effort deliberately: this is extraction from two paragraphs of WhatsApp,

@@ -54,7 +54,7 @@ const serverSchema = z.object({
 
   AI_PROVIDER: z.enum(['mock', 'claude']).default('mock'),
   ANTHROPIC_API_KEY: z.string().default(''),
-  ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
 
   N8N_BASE_URL: z.string().default(''),
   N8N_WEBHOOK_SECRET: z.string().min(8),
