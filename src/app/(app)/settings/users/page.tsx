@@ -3,7 +3,7 @@ import { requirePageUser } from '@/lib/auth/session';
 import { listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
-import { formatDate } from '@/lib/dates';
+import { formatInstant } from '@/lib/dates';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -114,7 +114,7 @@ export default async function UsersPage() {
                   )}
                 </TableCell>
                 <TableCell className="tabular text-muted-foreground">
-                  {row.lastLoginAt ? formatDate(row.lastLoginAt) : 'Never'}
+                  {row.lastLoginAt ? formatInstant(row.lastLoginAt) : 'Never'}
                 </TableCell>
                 <TableCell>
                   <Badge variant={row.active ? 'riskGreen' : 'riskNeutral'}>

@@ -1,6 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
-import { formatDate, todayUtc } from '@/lib/dates';
+import { formatInstant, todayUtc } from '@/lib/dates';
 import { dispatchPendingNotifications } from '@/services/notification.service';
 import { recordAudit } from '@/services/audit-log.service';
 
@@ -198,7 +198,7 @@ export async function runClientFollowUp(now: Date = new Date()): Promise<ClientF
       '',
       `Subject: ${vo.title}`,
       value ? `Value submitted: ${value}` : null,
-      `Submitted: ${formatDate(vo.submittedAt)} (${waitingDays} days ago)`,
+      `Submitted: ${formatInstant(vo.submittedAt)} (${waitingDays} days ago)`,
       '',
       'We have not yet received your response. Could you confirm the position, or let us know what further information you need.',
       '',

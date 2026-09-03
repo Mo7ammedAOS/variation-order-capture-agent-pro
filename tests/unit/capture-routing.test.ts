@@ -574,7 +574,11 @@ describe('the rest of the conversation', () => {
       pcNumber: 'PC-DXB-001-0007',
       projectId: 'proj-a',
       description: 'Reception ceiling grid lowered',
-      eventDate: new Date(Date.UTC(2026, 8, 1)),
+      // Deliberately far from any date the reply could parse to. It was
+      // 1 September, which silently became "3 days ago" when the calendar
+      // reached the 4th — the patch turned into a no-op and the test failed
+      // on a day nobody had touched the code.
+      eventDate: new Date(Date.UTC(2026, 0, 1)),
       sourceReference: null,
       workStatus: 'not_started',
       project: { projectCode: 'DXB-001', contractRules: { noticePeriodDays: 28 } },
@@ -641,12 +645,73 @@ describe('the rest of the conversation', () => {
     expect(daysAgo).toBeGreaterThanOrEqual(3);
   });
 
-  it('asks the follow-up only AFTER the change exists', async () => {
-    state.detailFields = ['event_date'];
+  it('asks what is missing BEFORE opening anything', async () => {
+    state.detailFields = ['work_status'];
     const outcome = await capture('client wants the wall moved');
-    // The clock is already running. The question can only make it sharper, and
-    // must never be the reason a deadline was missed.
+
+    // Osman's rule, 2026-09-04. A change whose work status nobody knows cannot
+    // be assessed — it may be an instruction to price or a cost already spent
+    // — so it is not opened on half a story. Nothing is written until he
+    // answers, and the question carries no change reference because there is
+    // no change yet.
+    expect(outcome.kind).toBe('needs_triage');
+    expect(state.created).toHaveLength(0);
+    expect(state.askedForDetail[0]?.fields).toEqual(['work_status']);
+    expect(state.askedForDetail[0]?.potentialChangeId ?? null).toBeNull();
+  });
+
+  it('files on the answer, reading the reply and the report as one', async () => {
+    state.answer = {
+      outcome: 'detailed',
+      kind: 'detail',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      // No change yet. This is the pre-filing follow-up.
+      potentialChangeId: null,
+      originalText: 'client wants the reception wall moved',
+      replyText: 'yes work started yesterday',
+      candidateProjectIds: ['proj-a'],
+      detailFields: ['work_status', 'event_date'],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('yes work started yesterday');
+
     expect(outcome.kind).toBe('created');
-    expect(state.askedForDetail[0]?.pcNumber).toBe('PC-DXB-001-0007');
+    // Both halves reach the record. Filing on the reply alone would store
+    // "yes work started yesterday" as the entire report and lose the change.
+    const description = String(state.created[0]?.description ?? '');
+    expect(description).toContain('reception wall moved');
+    expect(description).toContain('work started');
+  });
+
+  it('files as reported when he says he cannot answer', async () => {
+    state.answer = {
+      outcome: 'declined',
+      kind: 'detail',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: null,
+      originalText: 'client wants the reception wall moved',
+      replyText: 'skip',
+      candidateProjectIds: ['proj-a'],
+      detailFields: ['work_status'],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('skip');
+
+    // "I don't know" is an answer, and it must not cost him the record.
+    // Refusing to file here would punish honesty by losing a real change.
+    expect(outcome.kind).toBe('created');
+    expect(state.askedForDetail).toHaveLength(0);
   });
 });

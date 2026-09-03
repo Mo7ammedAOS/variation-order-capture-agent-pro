@@ -5,6 +5,7 @@ import {
   daysSince,
   daysUntil,
   formatDate,
+  formatInstant,
   isWorkingDay,
 } from '@/lib/dates';
 
@@ -75,5 +76,36 @@ describe('working days', () => {
     // Friday is the only non-working day when the week runs 6..4.
     expect(isWorkingDay(new Date('2026-08-28T00:00:00Z'), 6, 4)).toBe(false);
     expect(isWorkingDay(new Date('2026-08-29T00:00:00Z'), 6, 4)).toBe(true);
+  });
+});
+
+describe('a timestamp shown as a date', () => {
+  // The bug: a variation filed at 01:00 Dubai on 4 September displayed as
+  // 3 September. `formatDate` renders in UTC, which is correct for a stored
+  // `date` column and wrong for an instant — at UTC+4 every moment between
+  // midnight and 04:00 belongs to the previous day in UTC. It is only ever
+  // out by one, only ever in the small hours, and it always looks like a
+  // plausible date, which is why it survived until somebody filed after
+  // midnight.
+  const justAfterMidnightInDubai = new Date('2026-09-03T21:00:00.000Z');
+
+  it('reads as the local day, not the UTC one', () => {
+    expect(formatInstant(justAfterMidnightInDubai)).toBe('04 Sep 2026');
+  });
+
+  it('is what formatDate got wrong', () => {
+    expect(formatDate(justAfterMidnightInDubai)).toBe('03 Sep 2026');
+  });
+
+  it('still agrees with formatDate in the middle of the day', () => {
+    const midday = new Date('2026-09-04T09:00:00.000Z');
+    expect(formatInstant(midday)).toBe(formatDate(midday));
+  });
+
+  it('leaves a stored calendar date to formatDate', () => {
+    // A `@db.Date` column comes back as UTC midnight and has no zone of its
+    // own. Running it through the local clock would push it a day BACKWARDS,
+    // which is the same bug pointing the other way.
+    expect(formatDate('2026-09-04')).toBe('04 Sep 2026');
   });
 });

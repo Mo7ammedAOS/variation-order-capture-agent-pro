@@ -10,7 +10,7 @@ import { allowedNextStatuses, getPotentialChange } from '@/services/potential-ch
 import { findSimilarChanges } from '@/services/search.service';
 import { findScopeMatches } from '@/services/document-index.service';
 import { prisma } from '@/lib/prisma';
-import { toDateInputValue, formatDate, formatDateTime, daysSince, todayUtc } from '@/lib/dates';
+import { daysSince, formatDate, formatDateTime, formatInstant, toDateInputValue, todayUtc } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { hasCapability, listMembersWithCapability } from '@/services/permissions.service';
 import { canFillSeat, getGateState, GATE_LABEL } from '@/services/approval.service';
@@ -135,7 +135,7 @@ export default async function PotentialChangeDetailPage({
           decision: seat.decision,
           assignedToName: seat.assignedToName,
           decidedByName: seat.decidedByName,
-          decidedAt: seat.decidedAt ? formatDate(seat.decidedAt) : null,
+          decidedAt: seat.decidedAt ? formatInstant(seat.decidedAt) : null,
           comment: seat.comment,
           mine:
             seat.decision === 'pending' &&
@@ -226,12 +226,12 @@ export default async function PotentialChangeDetailPage({
           status: voRecord.status,
           clientResponse: voRecord.clientResponse,
           submittedValue,
-          submittedAt: voRecord.submittedAt ? formatDate(voRecord.submittedAt) : null,
+          submittedAt: voRecord.submittedAt ? formatInstant(voRecord.submittedAt) : null,
           submittedByName: voRecord.submittedBy?.fullName ?? null,
           approvedValue,
           shortfall: shortfall && !shortfall.startsWith('-') ? shortfall : null,
           clientResponseAt: voRecord.clientResponseAt
-            ? formatDate(voRecord.clientResponseAt)
+            ? formatInstant(voRecord.clientResponseAt)
             : null,
           clientReference: voRecord.clientReference,
           clientResponseNotes: voRecord.clientResponseNotes,
@@ -273,7 +273,7 @@ export default async function PotentialChangeDetailPage({
                 narrative: note.narrative,
                 grossAmount: note.grossAmount.toString(),
                 totalCredited: note.totalCredited.toString(),
-                issuedAt: note.issuedAt ? formatDate(note.issuedAt) : null,
+                issuedAt: note.issuedAt ? formatInstant(note.issuedAt) : null,
               })),
               periodEnd: formatDate(invoice.periodEnd),
               cumulativePercent: invoice.cumulativePercent.toString(),
@@ -282,7 +282,7 @@ export default async function PotentialChangeDetailPage({
               netValue: invoice.netValue.toString(),
               vatAmount: invoice.vatAmount.toString(),
               totalDue: invoice.totalDue.toString(),
-              issuedAt: invoice.issuedAt ? formatDate(invoice.issuedAt) : null,
+              issuedAt: invoice.issuedAt ? formatInstant(invoice.issuedAt) : null,
               dueAt: invoice.dueAt ? formatDate(invoice.dueAt) : null,
               // Derived here, never stored: an "overdue" column would need a
               // nightly job to stay true, and a stale one is worse than none.
@@ -318,11 +318,11 @@ export default async function PotentialChangeDetailPage({
         recipientEmail: noticeRecord.recipientEmail,
         draftedByName: noticeRecord.draftedBy?.fullName ?? null,
         issuedByName: noticeRecord.issuedBy?.fullName ?? null,
-        issuedAt: noticeRecord.issuedAt ? formatDate(noticeRecord.issuedAt) : null,
-        sentAt: noticeRecord.sentAt ? formatDate(noticeRecord.sentAt) : null,
+        issuedAt: noticeRecord.issuedAt ? formatInstant(noticeRecord.issuedAt) : null,
+        sentAt: noticeRecord.sentAt ? formatInstant(noticeRecord.sentAt) : null,
         externalMessageId: noticeRecord.externalMessageId,
         acknowledgedAt: noticeRecord.acknowledgedAt
-          ? formatDate(noticeRecord.acknowledgedAt)
+          ? formatInstant(noticeRecord.acknowledgedAt)
           : null,
         acknowledgedByName: noticeRecord.acknowledgedBy?.fullName ?? null,
         documentId: noticeRecord.document?.id ?? null,
@@ -607,7 +607,7 @@ export default async function PotentialChangeDetailPage({
               canPrice={mayPrice && change.currentStatus === 'qs_pricing'}
               pricingStatus={pricing.pricingStatus}
               submittedValue={pricing.submittedValue?.toFixed(2) ?? null}
-              submittedAt={pricing.submittedAt ? formatDate(pricing.submittedAt) : null}
+              submittedAt={pricing.submittedAt ? formatInstant(pricing.submittedAt) : null}
               prelimsPercent={pricing.prelimsPercent?.toString() ?? ''}
               overheadProfitPercent={pricing.overheadProfitPercent?.toString() ?? ''}
               pricingNotes={pricing.pricingNotes ?? ''}

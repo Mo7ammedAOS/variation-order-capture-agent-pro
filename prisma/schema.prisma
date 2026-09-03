@@ -1087,6 +1087,10 @@ model CaptureQuestion {
   potentialChangeId   String?               @map("potential_change_id") @db.Uuid
   /// Which facts were asked for, so the reply is read for those and only those.
   detailFields        String[]              @default([]) @map("detail_fields")
+  /// How many times this has been put to the reporter. Re-asking is capped:
+  /// a question nobody answers twice is not going to be answered a third time,
+  /// and asking again is how a system teaches people to ignore it.
+  askCount            Int                   @default(1) @map("ask_count")
   status              CaptureQuestionStatus @default(open)
   chosenProjectId     String?               @map("chosen_project_id") @db.Uuid
   askedAt             DateTime              @default(now()) @map("asked_at")

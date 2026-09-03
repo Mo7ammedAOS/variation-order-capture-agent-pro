@@ -216,6 +216,16 @@ export async function captureFromChannel(
   // form of that question is a list of what is already open on the job.
   const evidenceOnly = attachments.length > 0 && looksEvidenceOnly(input.text);
 
+  // What the report itself does not answer. Carried into whichever question
+  // gets asked, so "which project?" and "has the work started?" arrive in one
+  // message rather than as two exchanges an hour apart.
+  const missing = plannedDetailFields({
+    text: input.text,
+    eventDateKnown: parseEventDate(input.text, todayUtc()) !== null,
+    documentReferenceKnown: parseDocumentReference(input.text) !== null,
+    workStatusKnown: parseWorkStatus(input.text) !== null,
+  });
+
   // Only one live job: there is nothing to be wrong about.
   if (memberships.length === 1) {
     const only = memberships[0];
@@ -278,6 +288,7 @@ export async function captureFromChannel(
       proposedProjectId: proposal.projectId,
       match: proposal,
       otherProjectIds: memberProjectIds,
+      fields: missing,
       sourceMessageId: input.externalMessageId,
       sourceSubject: input.sourceSubject ?? null,
     });
@@ -308,6 +319,7 @@ export async function captureFromChannel(
         channel: input.channel,
         originalText: input.text,
         candidateProjectIds,
+        fields: missing,
         sourceMessageId: input.externalMessageId,
         sourceSubject: input.sourceSubject ?? null,
         evidenceCount: evidenceOnly ? attachments.length : 0,
@@ -361,6 +373,33 @@ async function applyAnswer(
     return { kind: 'cancelled', reason: `${answer.userName} withdrew it` };
   }
 
+  // "I don't know", before anything has been written.
+  //
+  // It cannot mean "leave it as it is" — there is nothing to leave. A reporter
+  // who genuinely does not know when it happened has still reported a change,
+  // and refusing to file it would punish honesty with a lost record. So it
+  // files exactly as reported, and the gaps show as gaps.
+  if (answer.outcome === 'declined' && !answer.potentialChangeId && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: answer.originalText,
+        attachments: mergeAttachments(pending, attachments),
+      },
+      integrationEventId: answer.integrationEventId,
+      closeEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+      // He has just told us he cannot answer. Asking again would be the
+      // rudest thing this system could do.
+      skipQuestions: true,
+    });
+  }
+
   // They declined the follow-up. The change stands exactly as it was; the only
   // thing that closes is the question.
   if (answer.outcome === 'declined') {
@@ -373,6 +412,27 @@ async function applyAnswer(
       sourceSubject: answer.sourceSubject,
     });
     return { kind: 'closed', reason: `${answer.userName} skipped the follow-up` };
+  }
+
+  // The questions were asked BEFORE anything was written, and here are the
+  // answers. This reply is not an improvement to a record, it is the last
+  // piece of one — so it is what files it.
+  if (answer.outcome === 'detailed' && !answer.potentialChangeId && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: joinReport(answer.originalText, answer.replyText),
+        attachments: mergeAttachments(pending, attachments),
+      },
+      integrationEventId: answer.integrationEventId,
+      closeEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
   }
 
   if (answer.outcome === 'detailed' && answer.potentialChangeId) {
@@ -398,6 +458,12 @@ async function applyAnswer(
       projectId: answer.projectId,
       evidenceCount: pending.length || attachments.length,
       originalText: answer.originalText,
+      fields: plannedDetailFields({
+        text: answer.originalText,
+        eventDateKnown: parseEventDate(answer.originalText, todayUtc()) !== null,
+        documentReferenceKnown: parseDocumentReference(answer.originalText) !== null,
+        workStatusKnown: parseWorkStatus(answer.originalText) !== null,
+      }),
       sourceMessageId: answer.sourceMessageId,
       sourceSubject: answer.sourceSubject,
     });
@@ -467,7 +533,12 @@ async function applyAnswer(
       reporterName: answer.userName,
       input: {
         ...input,
-        text: answer.originalText || input.text,
+        // The report AND the reply. The question that settled the project also
+        // carried "has the work started?", so the answer to it is sitting in
+        // this reply — and reading only the original text would throw it away
+        // and then ask him the same thing again, which is exactly the loop
+        // this is meant to end.
+        text: joinReport(answer.originalText || input.text, answer.replyText),
         attachments: carried,
       },
       integrationEventId: answer.integrationEventId,
@@ -506,17 +577,42 @@ async function applyAnswer(
   return null;
 }
 
+/**
+ * The original report and the reply that completed it, as one report.
+ *
+ * Everything downstream reads the TEXT — the event date, the work status, the
+ * drawing reference, the AI extraction — so an answer that lives only in a
+ * reply variable is an answer nothing can see.
+ */
+function joinReport(original: string, reply: string): string {
+  const first = (original ?? '').trim();
+  const second = (reply ?? '').trim();
+  if (!first) return second;
+  if (!second || first.includes(second)) return first;
+  return `${first}\n\n${second}`;
+}
+
 /** Unique per question, so a retried delivery writes one acknowledgement. */
 function ackToken(answer: QuestionReply): string {
   return answer.questionId.replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
 /**
- * Files the change, tells the reporter, then asks for what is still missing.
+ * Asks for whatever is still missing, and files once nothing is.
  *
- * The order is the whole design. The change exists — and the notice clock with
- * it — before any follow-up is sent, so an unanswered question can never be
- * the reason a deadline passed. Everything after the filing is improvement.
+ * ── Why the order changed ─────────────────────────────────────────────────
+ * It used to file first and ask afterwards, so the contractual clock started
+ * the instant a report arrived. Osman's call, 2026-09-04: a change opened on
+ * half a story is worse than a change opened a few hours later. A record whose
+ * work status is unknown cannot be assessed — nobody can tell whether it is an
+ * instruction to price or a cost already spent — so it sits in the register
+ * looking captured and gets picked up by somebody who has to go and ask the
+ * same questions by hand.
+ *
+ * ── What stops that becoming a black hole ─────────────────────────────────
+ * `MAX_ASKS`. The questions go out at most twice; after that `askForDetail`
+ * returns null and this files with whatever it has. So an unanswered question
+ * can delay a record by one exchange. It can never lose one.
  */
 async function fileAndFollowUp(args: {
   projectId: string;
@@ -527,7 +623,45 @@ async function fileAndFollowUp(args: {
   closeEventId?: string;
   sourceMessageId?: string | null;
   sourceSubject?: string | null;
+  /** File as reported, asking nothing. Set when the reporter has said he cannot say. */
+  skipQuestions?: boolean;
 }): Promise<CaptureOutcome> {
+  // What the report does not say. Read BEFORE anything is written, because the
+  // answer is now what completes it rather than what improves it.
+  const missing = args.skipQuestions
+    ? []
+    : plannedDetailFields({
+        text: args.input.text,
+        eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
+        documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
+        workStatusKnown: parseWorkStatus(args.input.text) !== null,
+      });
+
+  if (missing.length > 0 && args.integrationEventId) {
+    const asked = await askForDetail({
+      integrationEventId: args.integrationEventId,
+      userId: args.reporterId,
+      projectId: args.projectId,
+      fields: missing,
+      originalText: args.input.text,
+      sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
+      sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
+    });
+
+    // Null means the cap is reached and the question has been put twice
+    // already. Fall through and file: at that point the missing facts are the
+    // lesser loss.
+    if (asked) {
+      return {
+        kind: 'needs_triage',
+        reason:
+          `Asked ${args.reporterName} for ${missing.join(', ')} before filing (${asked.token}). ` +
+          `Waiting for a reply.`,
+        candidateProjectIds: [args.projectId],
+      };
+    }
+  }
+
   const outcome = await createChangeFromCapture({
     projectId: args.projectId,
     reporterId: args.reporterId,
@@ -570,32 +704,7 @@ async function fileAndFollowUp(args: {
       `running from the date of the event. Reply CANCEL if that is the wrong report.`,
     sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
     sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
-    // The follow-up below carries the invitation instead, so the reporter is
-    // not asked two different questions in two messages seconds apart.
-    invite: false,
   });
-
-  // What is still missing, and worth one more message.
-  const fields = plannedDetailFields({
-    text: args.input.text,
-    eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
-    documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
-    workStatusKnown: parseWorkStatus(args.input.text) !== null,
-  });
-
-  if (fields.length > 0 && args.integrationEventId) {
-    await askForDetail({
-      integrationEventId: args.integrationEventId,
-      userId: args.reporterId,
-      projectId: args.projectId,
-      potentialChangeId: outcome.potentialChangeId,
-      pcNumber: outcome.pcNumber,
-      fields,
-      originalText: args.input.text,
-      sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
-      sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
-    });
-  }
 
   return outcome;
 }
@@ -1334,7 +1443,10 @@ export async function fileTriagedEvent(
       senderName,
       text,
       externalMessageId: event.externalId,
-      eventDate: event.receivedAt,
+      // The DAY it arrived in Dubai, not the instant. `event_date` is a
+      // Postgres `date`, so handing it a timestamp truncates in UTC — and a
+      // report filed at 01:00 on the 4th was stored, and dated, as the 3rd.
+      eventDate: todayUtc(event.receivedAt),
       projectCodeHint: null,
       sourceSubject: str(payload.subject),
       // The photographs the message arrived with. Filing by hand must produce

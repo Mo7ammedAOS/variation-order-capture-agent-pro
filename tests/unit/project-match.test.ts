@@ -122,3 +122,59 @@ describe('ranking and de-duplication', () => {
     expect(ids('the office fit out is behind')).toEqual([]);
   });
 });
+
+describe('the code as it actually gets typed', () => {
+  // A site engineer writes what he says out loud. The zeros are padding a
+  // database chose, not part of the name of the job.
+  const PROJECTS = [
+    { id: 'p1', projectCode: 'DXB-002', projectName: 'Dubai Mall Level 3 Fit-Out', clientName: 'Emaar Malls' },
+    { id: 'p2', projectCode: 'AUH-014', projectName: 'Yas Marina Clubhouse', clientName: 'Miral Asset Management' },
+  ];
+
+  it('reads the zeros as optional', () => {
+    for (const written of ['dxb2', 'DXB 2', 'dxb-2', 'dxb02', 'dxb002', 'DXB-002', 'dxb0002']) {
+      expect(matchProjectsInText(`${written} wall moved`, PROJECTS)[0]?.projectId).toBe('p1');
+    }
+  });
+
+  it('does not let a shorter code swallow a longer one', () => {
+    // DXB-002 must not be found inside DXB-0021. The boundary has to survive
+    // every way the engine can split those digits.
+    expect(matchProjectsInText('DXB-0021 wall moved', PROJECTS)).toHaveLength(0);
+  });
+
+  it('reads a word that belongs to only one of his jobs', () => {
+    // "Dubai Mall Level 3 Fit-Out" is called the mall. Requiring every
+    // distinctive word of the registered name is how a matcher fails to read
+    // the name people actually use.
+    expect(matchProjectsInText('the mall job, wall moved', PROJECTS)[0]?.projectId).toBe('p1');
+    expect(matchProjectsInText('dxb mall', PROJECTS)[0]?.projectId).toBe('p1');
+    expect(matchProjectsInText('dubai mall', PROJECTS)[0]?.projectId).toBe('p1');
+    expect(matchProjectsInText('at the clubhouse', PROJECTS)[0]?.projectId).toBe('p2');
+  });
+
+  it('will not identify a job on a three letter word', () => {
+    // "YAS" names it to a person and is still too short to be safe here: at
+    // three characters the odds of an unrelated message containing it stop
+    // being negligible, and the generic list cannot enumerate every short
+    // word in the trade. Four characters is the floor.
+    expect(matchProjectsInText('at yas', PROJECTS)).toHaveLength(0);
+  });
+
+  it('drops a word two of his jobs share', () => {
+    // MARINA owns nothing here, so it picks nothing. The ambiguity survives
+    // to the caller, which resolves it by asking — the correct outcome,
+    // because at that point the message really is ambiguous.
+    const shared = [
+      { id: 'p1', projectCode: 'DXB-002', projectName: 'Marina Heights Lobby', clientName: 'Emaar' },
+      { id: 'p2', projectCode: 'DXB-003', projectName: 'Marina Walk Retail', clientName: 'Nakheel' },
+    ];
+    expect(matchProjectsInText('the marina one', shared)).toHaveLength(0);
+  });
+
+  it('still prefers a code over a resemblance', () => {
+    const matches = matchProjectsInText('AUH-014 near the mall', PROJECTS);
+    expect(matches[0]?.matchedOn).toBe('code');
+    expect(matches[0]?.projectId).toBe('p2');
+  });
+});

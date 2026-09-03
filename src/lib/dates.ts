@@ -53,6 +53,27 @@ export function formatDate(value: Date | string | null | undefined) {
   return formatInTimeZone(date, 'UTC', DATE_FORMAT);
 }
 
+/**
+ * Renders an INSTANT as a calendar date, in the deployment's local clock.
+ *
+ * The one to use for `created_at`, `submitted_at`, `issued_at`, `sent_at` and
+ * every other timestamp shown as a plain date. `formatDate` renders in UTC,
+ * which is right for a stored `date` column and WRONG for a timestamp: at
+ * UTC+4 every instant between midnight and 04:00 belongs to the previous day
+ * in UTC, so a variation filed at 01:00 on the 4th rendered as the 3rd. It is
+ * only ever wrong by one day, only ever in the small hours, and it always
+ * reads as a plausible date — which is exactly why it survived until somebody
+ * happened to file something after midnight.
+ */
+export function formatInstant(
+  value: Date | string | null | undefined,
+  timeZone = DEFAULT_TIMEZONE,
+) {
+  const date = toDate(value);
+  if (!date) return '—';
+  return formatInTimeZone(date, timeZone, DATE_FORMAT);
+}
+
 /** Renders an INSTANT in the deployment's local clock. */
 export function formatDateTime(
   value: Date | string | null | undefined,

@@ -96,8 +96,28 @@ function distinctiveTokens(name: string): string[] {
 export function codePattern(projectCode: string): RegExp {
   const runs = projectCode.toUpperCase().match(/[A-Z0-9]+/g) ?? [];
   if (runs.length === 0) return /(?!)/;
-  const body = runs.map(escapeRegExp).join('[^A-Z0-9]{0,3}');
+  const body = runs.map(runPattern).join('[^A-Z0-9]{0,3}');
   return new RegExp(`(?<![A-Z0-9])${body}(?![A-Z0-9])`);
+}
+
+/**
+ * One run of a code, with the leading zeros made optional.
+ *
+ * `DXB-002` gets written `dxb2` far more often than `DXB-002`, because the
+ * zeros are padding a database chose and not something anybody says out loud.
+ * A purely numeric run therefore matches on its VALUE: `002` is found in "2",
+ * "02", "002" and "0002" alike.
+ *
+ * It stays unambiguous. `DXB-001` still does not match inside `DXB-0012` —
+ * the trailing boundary in `codePattern` rejects every way the engine can
+ * split those digits. And where two projects genuinely collapse to the same
+ * value, both match, the answer stops being unique, and the caller asks
+ * instead of choosing. Ambiguity resolves to a question, never to a guess.
+ */
+function runPattern(run: string): string {
+  if (!/^[0-9]+$/.test(run)) return escapeRegExp(run);
+  const value = run.replace(/^0+/, '');
+  return value === '' ? '0+' : `0*${value}`;
 }
 
 function escapeRegExp(value: string): string {
@@ -193,8 +213,70 @@ export function matchProjectsInText(
     }
   }
 
+  // Last, and only for what is still unmatched: a single word that belongs to
+  // exactly one of HIS projects. See `uniqueTokenOwners`.
+  const owners = uniqueTokenOwners(projects);
+  for (const [token, projectId] of owners) {
+    if (matches.has(projectId)) continue;
+    if (!normalised.includes(` ${token} `)) continue;
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) continue;
+    matches.set(projectId, {
+      projectId,
+      matchedOn: 'name',
+      matchedText: project.projectName,
+    });
+  }
+
   const order: Record<MatchBasis, number> = { code: 0, client: 1, name: 2 };
   return [...matches.values()].sort((a, b) => order[a.matchedOn] - order[b.matchedOn]);
+}
+
+/** A word has to be this long to identify a project on its own. */
+const UNIQUE_TOKEN_LENGTH = 4;
+
+/**
+ * Words that belong to exactly one project in the set, and so name it alone.
+ *
+ * "Dubai Mall Level 3 Fit-Out" is called "Dubai Mall", or "the mall", or "dxb
+ * mall". The strict rule above needs EVERY distinctive word of the project
+ * name to be present, so it reads none of those — and a matcher that cannot
+ * read the name people actually use is a matcher that asks "which project?"
+ * to a man who just told you.
+ *
+ * Loosening it safely turns on one idea: **distinctiveness is relative to his
+ * own project list, not to the language.** MALL is a common word, but if only
+ * one of the four jobs he is on has MALL in its name, then MALL identifies it
+ * exactly. If two do, the word owns nothing, it is dropped here, and the
+ * caller is left with an ambiguity it will resolve by asking — which is the
+ * correct outcome, because at that point the message really is ambiguous.
+ *
+ * Both the project name and the client name feed this, because "the Emaar
+ * one" and "the mall one" are the same kind of shorthand.
+ */
+function uniqueTokenOwners(projects: MatchableProject[]): Map<string, string> {
+  const seen = new Map<string, string[]>();
+
+  for (const project of projects) {
+    const tokens = new Set([
+      ...distinctiveTokens(project.projectName),
+      ...distinctiveTokens(project.clientName),
+    ]);
+    for (const token of tokens) {
+      if (token.length < UNIQUE_TOKEN_LENGTH) continue;
+      const holders = seen.get(token) ?? [];
+      if (!holders.includes(project.id)) holders.push(project.id);
+      seen.set(token, holders);
+    }
+  }
+
+  const owners = new Map<string, string>();
+  for (const [token, holders] of seen) {
+    // Shared by two projects is shared by none. A word that cannot separate
+    // them must not be allowed to pick one.
+    if (holders.length === 1 && holders[0]) owners.set(token, holders[0]);
+  }
+  return owners;
 }
 
 /** How the match is described back to the person, in the confirmation. */

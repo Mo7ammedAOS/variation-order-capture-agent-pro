@@ -156,6 +156,14 @@ export interface AskInput {
   sourceSubject?: string | null;
   /** Files that came with it, when the message was files and nothing else. */
   evidenceCount?: number;
+  /**
+   * The facts still missing, asked in the SAME message as the project.
+   *
+   * One message, one reply, one filing. Asking which project, waiting, filing,
+   * then asking two more things is three exchanges for one report — and by the
+   * third the man has moved on and the answer never comes.
+   */
+  fields?: DetailField[];
 }
 
 export interface ConfirmInput extends Omit<AskInput, 'candidateProjectIds'> {
@@ -249,6 +257,17 @@ function replySubject(sourceSubject: string | null | undefined, token: string): 
  * "no" to a confirmation re-asks on the SAME row, so the reporter never has two
  * live tokens for one report and cannot answer the dead one.
  */
+/**
+ * How many times one question may be put to the same person.
+ *
+ * Two. The first ask, and one more when a reply answered part of it. A third
+ * is not persistence, it is nagging: nobody who ignored a question twice
+ * answers it the third time, and the cost of asking is that he starts ignoring
+ * the ones that matter. When the cap is reached the caller is told (null) and
+ * proceeds on what it already has.
+ */
+const MAX_ASKS = 2;
+
 async function putQuestion(input: {
   integrationEventId: string;
   userId: string;
@@ -264,9 +283,19 @@ async function putQuestion(input: {
   subject: string;
   body: string;
   token: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const recipients = await loadRecipients([input.userId]);
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) return false;
+
+  // A re-ask lands on the same row, so the count is read from what is already
+  // there rather than tracked in memory across two separate requests.
+  const previous = await prisma.captureQuestion.findUnique({
+    where: { integrationEventId: input.integrationEventId },
+    select: { kind: true, askCount: true },
+  });
+  const repeat = previous?.kind === input.kind;
+  const askCount = repeat ? previous.askCount + 1 : 1;
+  if (askCount > MAX_ASKS) return false;
 
   const expiresAt = new Date();
   expiresAt.setUTCDate(expiresAt.getUTCDate() + EXPIRES_AFTER_DAYS[input.kind]);
@@ -288,6 +317,7 @@ async function putQuestion(input: {
       chosenProjectId: null,
       answeredAt: null,
       askedAt: new Date(),
+      askCount,
       expiresAt,
     };
 
@@ -313,6 +343,7 @@ async function putQuestion(input: {
   // this makes network calls and the transaction holds row locks — the same
   // rule that cost this project a duplicated Drive folder tree once already.
   await dispatchNow(`question:${input.token}`);
+  return true;
 }
 
 /**
@@ -340,29 +371,26 @@ export async function askWhichProject(input: AskInput): Promise<{ token: string 
   const ordered = projects.map((p) => p.id);
 
   const list = projects
-    .map((p, i) => `${i + 1}. ${p.projectCode} — ${p.projectName}`)
+    .map((p, i) => `  ${i + 1}. ${p.projectCode} — ${p.projectName}`)
     .join('\n');
 
   const files = input.evidenceCount ?? 0;
   const opening =
     files > 0
-      ? `You sent ${files} ${files === 1 ? 'file' : 'files'} with no message.\n\n` +
-        `Which project ${files === 1 ? 'is it' : 'are they'} for?\n\n`
-      : `You reported:\n"${excerptOf(input.originalText)}"\n\n` +
-        `You are on ${projects.length} live projects, so we could not tell which one this is.\n\n`;
+      ? `${files} ${files === 1 ? 'file' : 'files'}, no message.\n\n`
+      : `"${excerptOf(input.originalText, 100)}"\n\n`;
+
+  const extra = questionBlock(input.fields ?? []);
 
   const body =
-    opening +
-    `${list}\n\n` +
-    `Reply with the number, the project code, or anything that names it.\n` +
-    `For example: 1, or ${projects[0]?.projectCode}.\n\n` +
-    `Nothing is recorded against any project until you answer.`;
+    opening + `Which project?\n${list}` + (extra ? `\n\n${extra}` : '');
 
-  await putQuestion({
+  const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
     userId: input.userId,
     kind: 'choose',
     candidateProjectIds: ordered,
+    detailFields: input.fields ?? [],
     askedText: input.originalText,
     sourceMessageId: input.sourceMessageId ?? null,
     sourceSubject: input.sourceSubject ?? null,
@@ -371,7 +399,7 @@ export async function askWhichProject(input: AskInput): Promise<{ token: string 
     token,
   });
 
-  return { token };
+  return sent ? { token } : null;
 }
 
 /**
@@ -405,26 +433,30 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
     .filter((p) => p.id !== proposed.id)
     .sort((a, b) => a.projectCode.localeCompare(b.projectCode));
 
+  // The other jobs, on one line. Carried so "no, it is DXB-002" resolves in a
+  // single reply — but as a footnote, not as a second list to read.
   const otherLine =
     alternatives.length > 0
-      ? `\nIf not, reply with the right code instead:\n` +
-        alternatives.map((p) => `  ${p.projectCode} — ${p.projectName}`).join('\n') +
-        '\n'
+      ? `\n\nOr: ${alternatives.map((p) => p.projectCode).join(', ')}`
       : '';
 
-  const body =
-    `You reported:\n"${excerptOf(input.originalText)}"\n\n` +
-    `This looks like ${proposed.projectCode} — ${proposed.projectName} ` +
-    `(${proposed.clientName}), because ${describeMatch(input.match)}.\n\n` +
-    `Reply YES to file it there.\n` +
-    otherLine +
-    `\nNothing is recorded against any project until you answer.`;
+  const extra = questionBlock(input.fields ?? []);
 
-  await putQuestion({
+  // The inference is quoted — "you wrote DXB-002" — because a person can only
+  // check a guess he can see, and a bare "is this DXB-002?" invites a
+  // reflexive yes. Four words is enough to show the working.
+  const body =
+    `${capitalise(describeMatch(input.match))} — is this ` +
+    `${proposed.projectCode}, ${proposed.projectName}?` +
+    (extra ? `\n\n${extra}` : '') +
+    otherLine;
+
+  const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
     userId: input.userId,
     kind: 'confirm',
     candidateProjectIds: ordered,
+    detailFields: input.fields ?? [],
     askedText: input.originalText,
     sourceMessageId: input.sourceMessageId ?? null,
     sourceSubject: input.sourceSubject ?? null,
@@ -433,7 +465,12 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
     token,
   });
 
-  return { token };
+  return sent ? { token } : null;
+}
+
+/** First letter up, for a sentence that starts with a quoted inference. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /**
@@ -458,6 +495,7 @@ export async function askWhichChange(input: {
   sourceMessageId?: string | null;
   sourceSubject?: string | null;
   limit?: number;
+  fields?: DetailField[];
 }): Promise<{ token: string; offered: number } | null> {
   const project = await prisma.project.findUnique({
     where: { id: input.projectId },
@@ -484,21 +522,17 @@ export async function askWhichChange(input: {
   const noun = files === 1 ? 'file' : 'files';
 
   const list = changes
-    .map((c, i) => `${i + 1}. ${c.pcNumber} — ${briefOf(c)}`)
+    .map((c, i) => `  ${i + 1}. ${c.pcNumber} — ${briefOf(c)}`)
     .join('\n');
 
   const body =
     changes.length > 0
-      ? `${files} ${noun} for ${project.projectCode} — ${project.projectName}.\n\n` +
-        `Do ${files === 1 ? 'it' : 'they'} belong to one of these?\n\n` +
-        `${list}\n\n` +
-        `Reply with the number or the reference. If this is something new, ` +
-        `reply NEW and tell me in a line what changed.`
-      : `${files} ${noun} for ${project.projectCode} — ${project.projectName}.\n\n` +
-        `There is nothing open on that project yet, so tell me in a line what ` +
-        `changed and I will open it with ${files === 1 ? 'this file' : 'these files'} attached.`;
+      ? `${files} ${noun} on ${project.projectCode} — ${project.projectName}.\n\n` +
+        `New change, or one of these?\n${list}`
+      : `${files} ${noun} on ${project.projectCode} — ${project.projectName}.\n\n` +
+        `What changed?`;
 
-  await putQuestion({
+  const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
     userId: input.userId,
     kind: changes.length > 0 ? 'attach' : 'describe',
@@ -513,7 +547,7 @@ export async function askWhichChange(input: {
     token,
   });
 
-  return { token, offered: changes.length };
+  return sent ? { token, offered: changes.length } : null;
 }
 
 /** "Tell me in a line what changed." Asked after they say the files are new. */
@@ -525,6 +559,7 @@ export async function askForDescription(input: {
   originalText: string;
   sourceMessageId?: string | null;
   sourceSubject?: string | null;
+  fields?: DetailField[];
 }): Promise<{ token: string } | null> {
   const project = await prisma.project.findUnique({
     where: { id: input.projectId },
@@ -533,21 +568,20 @@ export async function askForDescription(input: {
   if (!project) return null;
 
   const token = newToken();
-  const files = input.evidenceCount;
+  const extra = questionBlock(input.fields ?? []);
 
   const body =
     `New change on ${project.projectCode} — ${project.projectName}.\n\n` +
-    `Tell me in one line what changed and I will open it with ` +
-    `${files === 1 ? 'the file' : `the ${files} files`} attached.\n\n` +
-    `For example: "client asked for the reception ceiling grid to be reset ` +
-    `300mm lower".`;
+    `What changed?` +
+    (extra ? `\n\n${extra}` : '');
 
-  await putQuestion({
+  const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
     userId: input.userId,
     kind: 'describe',
     candidateProjectIds: [input.projectId],
     projectId: input.projectId,
+    detailFields: input.fields ?? [],
     askedText: input.originalText,
     sourceMessageId: input.sourceMessageId ?? null,
     sourceSubject: input.sourceSubject ?? null,
@@ -556,7 +590,7 @@ export async function askForDescription(input: {
     token,
   });
 
-  return { token };
+  return sent ? { token } : null;
 }
 
 export type DetailField = 'event_date' | 'document_reference' | 'work_status';
@@ -584,34 +618,63 @@ export function plannedDetailFields(input: {
   workStatusKnown: boolean;
 }): DetailField[] {
   const fields: DetailField[] = [];
+  // Work status leads. Whether the work has already been done is what decides
+  // what this change IS — an instruction to price, or a cost already incurred
+  // that has to be recovered — and it is the one answer nobody can reconstruct
+  // later from a photograph.
+  if (!input.workStatusKnown) fields.push('work_status');
   if (!input.eventDateKnown) fields.push('event_date');
   if (!input.documentReferenceKnown && mentionsDocument(input.text)) {
     fields.push('document_reference');
   }
-  if (!input.workStatusKnown) fields.push('work_status');
-  return fields.slice(0, 2);
+  // Three is the ceiling. A fourth question turns a reply into homework.
+  return fields.slice(0, 3);
 }
 
 const DETAIL_PROMPTS: Record<DetailField, string> = {
-  event_date: 'When did this happen? A date, or just say "yesterday".',
-  document_reference: 'Which drawing, RFI or instruction does it come from? Send it if you have it.',
-  work_status: 'Has the work started on site yet?',
+  work_status: 'Has the work started on site?',
+  event_date: 'When did this happen?',
+  document_reference: 'Which drawing or RFI is it from?',
 };
 
 /**
- * The follow-up, sent AFTER the change is filed.
+ * The questions, as one block a person can answer in one message.
  *
- * Never before. The change is the thing that starts the contractual clock, and
- * a question about a detail must not be able to hold that up — if this message
- * is never answered, the change is still on file, still owned, still counting
- * down. The follow-up only makes it sharper.
+ * Short and bare. No "reply with", no worked example, no explanation of what
+ * the number means — a man on a ladder reads the first line and the last, and
+ * everything in between is what makes him stop reading. He answers in his own
+ * words and the parser copes; teaching him a format is the system asking him
+ * to do its job.
+ */
+function questionBlock(fields: DetailField[]): string {
+  return fields.map((field) => DETAIL_PROMPTS[field]).join('\n\n');
+}
+
+/**
+ * The outstanding questions, asked on their own.
+ *
+ * Reached two ways, and the difference is `potentialChangeId`.
+ *
+ * BEFORE FILING (null) — the project is settled and something the record needs
+ * is still missing. Nothing has been written; the answer completes the report
+ * and the answer is what files it. Osman's rule, 2026-09-04: a change is not
+ * opened on half a story.
+ *
+ * AFTER FILING (set) — the change exists and this only sharpens it. Reached
+ * when the questions were asked twice and the reporter answered enough of them
+ * to file, or when a detail is wanted on a change that was filed by hand.
+ *
+ * The tension is real and worth naming: not filing means the contractual clock
+ * is not running on a change that has been reported. That is why `MAX_ASKS`
+ * exists — after two asks the caller files with what it has, so an unanswered
+ * question can delay a record but can never swallow one.
  */
 export async function askForDetail(input: {
   integrationEventId: string;
   userId: string;
   projectId: string;
-  potentialChangeId: string;
-  pcNumber: string;
+  potentialChangeId?: string | null;
+  pcNumber?: string | null;
   fields: DetailField[];
   originalText: string;
   sourceMessageId?: string | null;
@@ -620,25 +683,19 @@ export async function askForDetail(input: {
   if (input.fields.length === 0) return null;
 
   const token = newToken();
+  const filed = Boolean(input.potentialChangeId);
 
-  const asked =
-    input.fields.length === 1
-      ? DETAIL_PROMPTS[input.fields[0]!]
-      : input.fields.map((field, i) => `${i + 1}. ${DETAIL_PROMPTS[field]}`).join('\n');
+  const body = filed
+    ? `${input.pcNumber} is on file.\n\n${questionBlock(input.fields)}`
+    : `"${excerptOf(input.originalText, 100)}"\n\n${questionBlock(input.fields)}`;
 
-  const body =
-    `${input.pcNumber} is on file and the assessment is with the commercial team.\n\n` +
-    `${input.fields.length === 1 ? 'One thing' : 'Two things'} that would make it stronger:\n\n` +
-    `${asked}\n\n` +
-    `Reply in one message, or reply SKIP and it stays as it is.`;
-
-  await putQuestion({
+  const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
     userId: input.userId,
     kind: 'detail',
     candidateProjectIds: [input.projectId],
     projectId: input.projectId,
-    potentialChangeId: input.potentialChangeId,
+    potentialChangeId: input.potentialChangeId ?? null,
     detailFields: input.fields,
     askedText: input.originalText,
     sourceMessageId: input.sourceMessageId ?? null,
@@ -648,7 +705,7 @@ export async function askForDetail(input: {
     token,
   });
 
-  return { token };
+  return sent ? { token } : null;
 }
 
 /**

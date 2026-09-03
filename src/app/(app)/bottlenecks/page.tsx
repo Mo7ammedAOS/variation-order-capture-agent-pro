@@ -4,7 +4,7 @@ import { PartyPopper } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { listBottlenecks } from '@/services/bottleneck.service';
 import { humanise } from '@/services/dashboard.service';
-import { formatDate } from '@/lib/dates';
+import { formatInstant } from '@/lib/dates';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RiskChip } from '@/components/domain/risk-chip';
@@ -82,7 +82,7 @@ export default async function BottlenecksPage() {
                     <Money value={bottleneck.valueAtRisk?.toString() ?? null} />
                   </TableCell>
                   <TableCell className="tabular text-muted-foreground">
-                    {formatDate(bottleneck.firstDetectedAt)}
+                    {formatInstant(bottleneck.firstDetectedAt)}
                   </TableCell>
                   <TableCell>
                     <RiskChip level={bottleneck.riskLevel} />

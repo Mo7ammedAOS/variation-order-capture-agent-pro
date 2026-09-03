@@ -17,7 +17,7 @@ import { reindexDocumentAction } from './actions';
 import { listTasks } from '@/services/task.service';
 import { prisma } from '@/lib/prisma';
 import { isAppError } from '@/lib/errors';
-import { formatDate, formatDateTime } from '@/lib/dates';
+import { formatDate, formatDateTime, formatInstant } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
@@ -501,7 +501,7 @@ async function TeamTab({ user, projectId }: { user: User; projectId: string }) {
                     )}
                   </TableCell>
                   <TableCell className="tabular text-muted-foreground">
-                    {formatDate(member.assignedAt)}
+                    {formatInstant(member.assignedAt)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -603,7 +603,7 @@ async function DocumentsTab({ user, projectId }: { user: User; projectId: string
                 {document.revisionNumber ?? '—'}
               </TableCell>
               <TableCell className="tabular text-muted-foreground">
-                {formatDate(document.createdAt)}
+                {formatInstant(document.createdAt)}
               </TableCell>
             </TableRow>
           ))}
