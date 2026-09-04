@@ -230,6 +230,17 @@ export async function recordDirectNotifications(
     if (available.whatsapp && recipient.phone) {
       rows.push({
         ...common,
+        // NO SUBJECT on WhatsApp.
+        //
+        // The outbound lane sends `subject + "\n\n" + body`, which is right
+        // for an email and wrong for a chat: WhatsApp has no subject line, so
+        // the header arrived as the first line of every message. Live on
+        // 2026-09-04 each reply opened with "Which project? [QNS7]" —
+        // including the ones not asking which project — so the exchange
+        // looked like it was repeating itself, and the reporter was shown an
+        // internal token he had no use for and no way to read as anything but
+        // noise. `payloadSummary` keeps the subject for the operator's view.
+        subject: null,
         channel: 'whatsapp' as const,
         recipient: recipient.phone,
         status: 'pending' as const,

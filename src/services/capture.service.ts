@@ -1,10 +1,5 @@
 import 'server-only';
-import type {
-  IntegrationEventStatus,
-  IntegrationSource,
-  Prisma,
-  SourceType,
-} from '@prisma/client';
+import type { IntegrationEventStatus, IntegrationSource, Prisma, SourceType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { formatDate, todayUtc } from '@/lib/dates';
 import { calculateNoticeDueDate } from '@/lib/dates';
@@ -28,6 +23,8 @@ import {
   acknowledgeCapture,
   askForDescription,
   askForDetail,
+  askToConfirmCapture,
+  type CaptureSummary,
   askWhichChange,
   askWhichProject,
   confirmProject,
@@ -46,10 +43,7 @@ import {
   parseEventDate,
   parseWorkStatus,
 } from '@/lib/reply-intent';
-import {
-  ambiguousSenderReason,
-  resolveSender,
-} from '@/services/sender-identity.service';
+import { ambiguousSenderReason, resolveSender } from '@/services/sender-identity.service';
 import { storeCaptureEvidence, type CaptureAttachment } from '@/services/document.service';
 
 /**
@@ -82,9 +76,21 @@ import { storeCaptureEvidence, type CaptureAttachment } from '@/services/documen
 export type CaptureOutcome =
   | { kind: 'created'; potentialChangeId: string; pcNumber: string; projectId: string }
   /** Files landed on a change that already existed. Nothing new was opened. */
-  | { kind: 'evidence_filed'; potentialChangeId: string; pcNumber: string; projectId: string; stored: number }
+  | {
+      kind: 'evidence_filed';
+      potentialChangeId: string;
+      pcNumber: string;
+      projectId: string;
+      stored: number;
+    }
   /** A follow-up answer sharpened a change that was already on file. */
-  | { kind: 'updated'; potentialChangeId: string; pcNumber: string; projectId: string; applied: string[] }
+  | {
+      kind: 'updated';
+      potentialChangeId: string;
+      pcNumber: string;
+      projectId: string;
+      applied: string[];
+    }
   | { kind: 'needs_triage'; reason: string; candidateProjectIds: string[] }
   /** The reporter withdrew it. Nothing was filed, and that was the right answer. */
   | { kind: 'cancelled'; reason: string }
@@ -171,7 +177,11 @@ export async function captureFromChannel(
   }
 
   const memberships = await prisma.projectMember.findMany({
-    where: { userId: sender.id, active: true, project: { projectStatus: { in: ['active', 'awarded'] } } },
+    where: {
+      userId: sender.id,
+      active: true,
+      project: { projectStatus: { in: ['active', 'awarded'] } },
+    },
     select: {
       projectId: true,
       project: { select: { projectCode: true, projectName: true, clientName: true } },
@@ -414,6 +424,50 @@ async function applyAnswer(
     return { kind: 'closed', reason: `${answer.userName} skipped the follow-up` };
   }
 
+  // "OK" to the read-back. Everything has been checked by the person who
+  // reported it, so this is the one path that files without asking anything
+  // more — asking again after he has confirmed would be the system refusing to
+  // believe its own summary.
+  if (answer.kind === 'summary' && answer.outcome === 'answered' && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: answer.originalText,
+        attachments: mergeAttachments(pending, attachments),
+      },
+      integrationEventId: answer.integrationEventId,
+      closeEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+      confirmed: true,
+    });
+  }
+
+  // Not a yes to the read-back: he is correcting it. His correction joins the
+  // report and the whole thing goes round again — which is cheap, because
+  // nothing has been written yet. That is the entire reason the read-back
+  // happens before the filing and not after.
+  if (answer.kind === 'summary' && answer.outcome === 'described' && answer.projectId) {
+    const pending = await attachmentsForEvent(answer.integrationEventId);
+    return fileAndFollowUp({
+      projectId: answer.projectId,
+      reporterId: answer.userId,
+      reporterName: answer.userName,
+      input: {
+        ...input,
+        text: joinReport(answer.originalText, answer.replyText),
+        attachments: mergeAttachments(pending, attachments),
+      },
+      integrationEventId: answer.integrationEventId,
+      sourceMessageId: answer.sourceMessageId,
+      sourceSubject: answer.sourceSubject,
+    });
+  }
+
   // The questions were asked BEFORE anything was written, and here are the
   // answers. This reply is not an improvement to a record, it is the last
   // piece of one — so it is what files it.
@@ -625,17 +679,24 @@ async function fileAndFollowUp(args: {
   sourceSubject?: string | null;
   /** File as reported, asking nothing. Set when the reporter has said he cannot say. */
   skipQuestions?: boolean;
+  /** He has already seen the read-back and said yes. Do not ask again. */
+  confirmed?: boolean;
 }): Promise<CaptureOutcome> {
   // What the report does not say. Read BEFORE anything is written, because the
   // answer is now what completes it rather than what improves it.
-  const missing = args.skipQuestions
-    ? []
-    : plannedDetailFields({
-        text: args.input.text,
-        eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
-        documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
-        workStatusKnown: parseWorkStatus(args.input.text) !== null,
-      });
+  // `confirmed` silences the questions as firmly as `skipQuestions` does. He
+  // has just read the summary of everything we know and said file it — asking
+  // him for one of the facts printed in that summary would be the system
+  // refusing to believe its own read-back.
+  const missing =
+    args.skipQuestions || args.confirmed
+      ? []
+      : plannedDetailFields({
+          text: args.input.text,
+          eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
+          documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
+          workStatusKnown: parseWorkStatus(args.input.text) !== null,
+        });
 
   if (missing.length > 0 && args.integrationEventId) {
     const asked = await askForDetail({
@@ -655,8 +716,32 @@ async function fileAndFollowUp(args: {
       return {
         kind: 'needs_triage',
         reason:
-          `Asked ${args.reporterName} for ${missing.join(', ')} before filing (${asked.token}). ` +
+          `Asked ${args.reporterName} for ${missing[0]} before filing (${asked.token}). ` +
           `Waiting for a reply.`,
+        candidateProjectIds: [args.projectId],
+      };
+    }
+  }
+
+  // Everything is known. Read it back before writing anything.
+  //
+  // The LAST cheap moment to be wrong: after this a PC number exists, a notice
+  // clock is running, and the PM and MD have both been told. One word from him
+  // here replaces a support conversation later.
+  if (!args.confirmed && args.integrationEventId) {
+    const asked = await askToConfirmCapture({
+      integrationEventId: args.integrationEventId,
+      userId: args.reporterId,
+      projectId: args.projectId,
+      summary: await summariseCapture(args.projectId, args.input),
+      originalText: args.input.text,
+      sourceMessageId: args.sourceMessageId ?? args.input.externalMessageId,
+      sourceSubject: args.sourceSubject ?? args.input.sourceSubject ?? null,
+    });
+    if (asked) {
+      return {
+        kind: 'needs_triage',
+        reason: `Read the capture back to ${args.reporterName} for confirmation (${asked.token}).`,
         candidateProjectIds: [args.projectId],
       };
     }
@@ -692,7 +777,8 @@ async function fileAndFollowUp(args: {
   const filed = args.input.text.trim();
   const excerpt = filed.length > 100 ? `${filed.slice(0, 100).trimEnd()}…` : filed;
   const files = args.input.attachments?.length ?? 0;
-  const evidenceLine = files > 0 ? `\n${files} ${files === 1 ? 'file' : 'files'} attached as evidence.` : '';
+  const evidenceLine =
+    files > 0 ? `\n${files} ${files === 1 ? 'file' : 'files'} attached as evidence.` : '';
 
   await acknowledgeCapture({
     userId: args.reporterId,
@@ -724,7 +810,14 @@ async function attachEvidenceToChange(
 ): Promise<CaptureOutcome> {
   const change = await prisma.potentialChange.findUnique({
     where: { id: answer.potentialChangeId! },
-    select: { id: true, pcNumber: true, projectId: true, title: true, summary: true, description: true },
+    select: {
+      id: true,
+      pcNumber: true,
+      projectId: true,
+      title: true,
+      summary: true,
+      description: true,
+    },
   });
   if (!change) {
     return {
@@ -819,7 +912,9 @@ async function applyCaptureDetails(
       eventDate: true,
       sourceReference: true,
       workStatus: true,
-      project: { select: { projectCode: true, contractRules: { select: { noticePeriodDays: true } } } },
+      project: {
+        select: { projectCode: true, contractRules: { select: { noticePeriodDays: true } } },
+      },
     },
   });
   if (!change) {
@@ -930,7 +1025,10 @@ async function closeCourteously(
   input: CaptureInput,
 ): Promise<CaptureOutcome> {
   const recent = await hadRecentExchange(sender.id);
-  const token = `HI${input.externalMessageId.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+  const token = `HI${input.externalMessageId
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 6)
+    .toUpperCase()}`;
 
   await acknowledgeCapture({
     userId: sender.id,
@@ -969,8 +1067,10 @@ async function findForeignProjectByCode(
   });
   if (outside.length === 0) return null;
 
-  const named = matchProjectsInText(text, outside.map((p) => ({ ...p })))
-    .filter((m) => m.matchedOn === 'code');
+  const named = matchProjectsInText(
+    text,
+    outside.map((p) => ({ ...p })),
+  ).filter((m) => m.matchedOn === 'code');
   if (named.length === 0) return null;
 
   return outside.find((p) => p.id === named[0]?.projectId) ?? null;
@@ -1008,7 +1108,11 @@ export async function createChangeFromCapture(args: {
   // down, rate limited, or declines the message, the keyword reader answers
   // instead and says so. A site engineer's report must never be lost because
   // a third party is having a bad afternoon.
-  const { envelope: extraction, provider: readBy, degraded } = await extractWithFallback({
+  const {
+    envelope: extraction,
+    provider: readBy,
+    degraded,
+  } = await extractWithFallback({
     text: input.text,
     sourceType: input.channel,
     senderName: input.senderName ?? reporterName,
@@ -1069,13 +1173,16 @@ export async function createChangeFromCapture(args: {
       RETURNING pc_sequence
     `;
     if (!bumped) {
-      return { kind: 'needs_triage', reason: 'Could not allocate a PC number', candidateProjectIds: [] };
+      return {
+        kind: 'needs_triage',
+        reason: 'Could not allocate a PC number',
+        candidateProjectIds: [],
+      };
     }
 
     const pcNumber = formatPcNumber(project.projectCode, bumped.pc_sequence);
     const noticePeriodDays = project.contractRules?.noticePeriodDays ?? 28;
     const noticeDueDate = calculateNoticeDueDate(eventDate, noticePeriodDays);
-
 
     const dueDays = project.contractRules?.pmScopeReviewDueDays ?? 3;
     const nextActionDue = new Date(todayUtc());
@@ -1429,9 +1536,8 @@ export async function fileTriagedEvent(
   // several people who might have sent it. The audit trail then says a
   // coordinator filed it, which is true and checkable.
   const identity = senderIdentifier ? await resolveSender(channel, senderIdentifier) : null;
-  const originalSender = identity?.kind === 'one'
-    ? { id: identity.userId, fullName: identity.fullName }
-    : null;
+  const originalSender =
+    identity?.kind === 'one' ? { id: identity.userId, fullName: identity.fullName } : null;
 
   const outcome = await createChangeFromCapture({
     projectId: input.projectId,
@@ -1515,3 +1621,40 @@ function asRecord(value: unknown): Record<string, unknown> {
 function str(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
+
+/**
+ * The facts as understood, for the read-back.
+ *
+ * Reads exactly what `createChangeFromCapture` will read a moment later — the
+ * same parsers over the same text — so the list he confirms is the record he
+ * gets. A summary assembled from anywhere else would be a second opinion, and
+ * the one thing worse than not showing him the facts is showing him facts that
+ * are not the ones being filed.
+ */
+async function summariseCapture(projectId: string, input: CaptureInput): Promise<CaptureSummary> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { projectCode: true, projectName: true },
+  });
+
+  const dated = parseEventDate(input.text, todayUtc());
+  const status = parseWorkStatus(input.text);
+  const reference = parseDocumentReference(input.text);
+  const text = input.text.trim();
+
+  return {
+    projectLabel: project ? `${project.projectCode} ${project.projectName}` : 'Unknown',
+    description: text.length > 220 ? `${text.slice(0, 220).trimEnd()}…` : text,
+    eventDate: formatDate(dated?.date ?? todayUtc()),
+    workStatus: status ? (WORK_STATUS_WORDS[status] ?? null) : null,
+    documentReference: reference ?? null,
+    evidenceCount: input.attachments?.length ?? 0,
+  };
+}
+
+const WORK_STATUS_WORDS: Record<string, string> = {
+  not_started: 'Not started',
+  in_progress: 'Started on site',
+  on_hold: 'On hold',
+  completed: 'Completed',
+};

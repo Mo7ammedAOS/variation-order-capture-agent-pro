@@ -14,6 +14,7 @@ import {
   isPleasantry,
   mentionsDocument,
   parseDocumentReference,
+  parseAnswerForField,
   parseEventDate,
   parseWorkStatus,
 } from '@/lib/reply-intent';
@@ -75,6 +76,9 @@ const EXPIRES_AFTER_DAYS: Record<CaptureQuestionKind, number> = {
   attach: 3,
   describe: 3,
   detail: 2,
+  // The shortest of the lot. A read-back is only meaningful while the exchange
+  // it summarises is still in the reporter's head.
+  summary: 1,
 };
 
 /**
@@ -94,6 +98,7 @@ const CONVERSATION_WINDOW_MS: Record<CaptureQuestionKind, number> = {
   attach: 12 * 60 * 60 * 1000,
   describe: 12 * 60 * 60 * 1000,
   detail: 6 * 60 * 60 * 1000,
+  summary: 6 * 60 * 60 * 1000,
 };
 
 /** Whole-reply agreement. Every word has to be one of these, or it is not a yes. */
@@ -380,10 +385,11 @@ export async function askWhichProject(input: AskInput): Promise<{ token: string 
       ? `${files} ${files === 1 ? 'file' : 'files'}, no message.\n\n`
       : `"${excerptOf(input.originalText, 100)}"\n\n`;
 
-  const extra = questionBlock(input.fields ?? []);
-
-  const body =
-    opening + `Which project?\n${list}` + (extra ? `\n\n${extra}` : '');
+  // Nothing but the project. It is the only question that has to be settled
+  // before anything else can be, and stacking "has the work started?"
+  // underneath it produced replies answering one, the other, or both in an
+  // order nothing could read.
+  const body = opening + `Which project?\n${list}`;
 
   const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
@@ -440,15 +446,12 @@ export async function confirmProject(input: ConfirmInput): Promise<{ token: stri
       ? `\n\nOr: ${alternatives.map((p) => p.projectCode).join(', ')}`
       : '';
 
-  const extra = questionBlock(input.fields ?? []);
-
   // The inference is quoted — "you wrote DXB-002" — because a person can only
   // check a guess he can see, and a bare "is this DXB-002?" invites a
   // reflexive yes. Four words is enough to show the working.
   const body =
     `${capitalise(describeMatch(input.match))} — is this ` +
     `${proposed.projectCode}, ${proposed.projectName}?` +
-    (extra ? `\n\n${extra}` : '') +
     otherLine;
 
   const sent = await putQuestion({
@@ -568,12 +571,9 @@ export async function askForDescription(input: {
   if (!project) return null;
 
   const token = newToken();
-  const extra = questionBlock(input.fields ?? []);
 
   const body =
-    `New change on ${project.projectCode} — ${project.projectName}.\n\n` +
-    `What changed?` +
-    (extra ? `\n\n${extra}` : '');
+    `${project.projectCode} — ${project.projectName}.\n\nWhat changed?`;
 
   const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
@@ -627,8 +627,12 @@ export function plannedDetailFields(input: {
   if (!input.documentReferenceKnown && mentionsDocument(input.text)) {
     fields.push('document_reference');
   }
-  // Three is the ceiling. A fourth question turns a reply into homework.
-  return fields.slice(0, 3);
+  // The full list of what is still missing. The CALLER asks one of these at a
+  // time — see `askForDetail`. Two questions in one message came back from
+  // site on 2026-09-04 answered as "No / Yesterday", which is two answers to
+  // two questions in one line and reads as one sentence to a parser. One
+  // question, one answer, no ambiguity.
+  return fields;
 }
 
 const DETAIL_PROMPTS: Record<DetailField, string> = {
@@ -637,18 +641,6 @@ const DETAIL_PROMPTS: Record<DetailField, string> = {
   document_reference: 'Which drawing or RFI is it from?',
 };
 
-/**
- * The questions, as one block a person can answer in one message.
- *
- * Short and bare. No "reply with", no worked example, no explanation of what
- * the number means — a man on a ladder reads the first line and the last, and
- * everything in between is what makes him stop reading. He answers in his own
- * words and the parser copes; teaching him a format is the system asking him
- * to do its job.
- */
-function questionBlock(fields: DetailField[]): string {
-  return fields.map((field) => DETAIL_PROMPTS[field]).join('\n\n');
-}
 
 /**
  * The outstanding questions, asked on their own.
@@ -685,9 +677,13 @@ export async function askForDetail(input: {
   const token = newToken();
   const filed = Boolean(input.potentialChangeId);
 
+  // ONE question. The rest stay in `detailFields` and are asked in turn as
+  // each is answered, because a man on a ladder answers the last thing he read
+  // and the answers to two questions in one reply cannot be told apart.
+  const asking = input.fields[0]!;
   const body = filed
-    ? `${input.pcNumber} is on file.\n\n${questionBlock(input.fields)}`
-    : `"${excerptOf(input.originalText, 100)}"\n\n${questionBlock(input.fields)}`;
+    ? `${input.pcNumber} is on file.\n\n${DETAIL_PROMPTS[asking]}`
+    : DETAIL_PROMPTS[asking];
 
   const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
@@ -901,6 +897,17 @@ async function interpret(
     potentialChangeId: question.potentialChangeId,
   };
 
+  if (question.kind === 'summary') {
+    // The read-back. A yes files it; anything else is a correction, and a
+    // correction is the whole point of having asked.
+    if (isWholly(body, CANCEL)) return { outcome: 'cancelled', ...none };
+    if (isWholly(body, AFFIRMATIVE, 5)) return { outcome: 'answered', ...none };
+    // Not a yes. He is telling us what we got wrong, and that text becomes the
+    // report — the alternative is filing something he has just said is wrong.
+    if (wordCount(rawText) > 0) return { outcome: 'described', ...none };
+    return null;
+  }
+
   if (question.kind === 'detail') {
     // A follow-up competes with real reports, so it is the strictest of the
     // five. Anything long, or anything that yields no fact at all, is a new
@@ -911,7 +918,19 @@ async function interpret(
     }
     if (wordCount(rawText) > DETAIL_ANSWER_MAX_WORDS) return null;
 
+    // Read in the light of the question that was asked. "No" answers "has the
+    // work started?" and answers nothing else — without this, a bare yes or no
+    // yielded no fact at all, the reply was taken for a new report, and the
+    // exchange started again from "which project?". It did exactly that four
+    // times in a row on 2026-09-04.
+    const asked = question.detailFields[0];
+    const answered =
+      asked === 'work_status' || asked === 'event_date' || asked === 'document_reference'
+        ? parseAnswerForField(asked, rawText) !== null
+        : false;
+
     const yieldsFact =
+      answered ||
       parseEventDate(rawText, new Date()) !== null ||
       parseDocumentReference(rawText) !== null ||
       parseWorkStatus(rawText) !== null;
@@ -1088,4 +1107,79 @@ export async function expireStaleQuestions(now: Date = new Date()): Promise<{ ex
     data: { status: 'expired' },
   });
   return { expired: result.count };
+}
+
+/* ─────────────────────────── the read-back ───────────────────────────────── */
+
+export interface CaptureSummary {
+  projectLabel: string;
+  description: string;
+  eventDate: string | null;
+  workStatus: string | null;
+  documentReference: string | null;
+  evidenceCount: number;
+}
+
+/**
+ * Everything understood, put back to the reporter before anything is written.
+ *
+ * ── Why this is worth an extra message ────────────────────────────────────
+ * Osman's call, 2026-09-04. The exchange used to file whatever it had made of
+ * the conversation and TELL him afterwards. When the parse was wrong he found
+ * out from an acknowledgement that already said his change was on file, and
+ * the only way to fix it was to open the app — which is the thing he was
+ * avoiding by using WhatsApp in the first place.
+ *
+ * Reading it back first turns every misunderstanding into one word instead of
+ * a support conversation. It costs one message and it is the last cheap moment
+ * to be wrong: after this a PC number exists, a notice clock is running, and
+ * two people have been told.
+ *
+ * ── Why it is a plain list and not a sentence ─────────────────────────────
+ * He is checking four facts, not reading prose. A list is scanned in two
+ * seconds; a paragraph restating the same four facts is skimmed and confirmed
+ * without being read, which would make the whole step theatre.
+ */
+export async function askToConfirmCapture(input: {
+  integrationEventId: string;
+  userId: string;
+  projectId: string;
+  summary: CaptureSummary;
+  originalText: string;
+  sourceMessageId?: string | null;
+  sourceSubject?: string | null;
+}): Promise<{ token: string } | null> {
+  const token = newToken();
+  const s = input.summary;
+
+  const rows = [
+    `Project: ${s.projectLabel}`,
+    `Change: ${s.description}`,
+    s.eventDate ? `Happened: ${s.eventDate}` : null,
+    s.workStatus ? `Work: ${s.workStatus}` : null,
+    s.documentReference ? `Reference: ${s.documentReference}` : null,
+    s.evidenceCount > 0
+      ? `Evidence: ${s.evidenceCount} ${s.evidenceCount === 1 ? 'file' : 'files'}`
+      : null,
+  ].filter((row): row is string => row !== null);
+
+  const body =
+    `Here is what I have:\n\n${rows.join('\n')}\n\n` +
+    `Reply OK to file it. Or tell me what to change.`;
+
+  const sent = await putQuestion({
+    integrationEventId: input.integrationEventId,
+    userId: input.userId,
+    kind: 'summary',
+    candidateProjectIds: [input.projectId],
+    projectId: input.projectId,
+    askedText: input.originalText,
+    sourceMessageId: input.sourceMessageId ?? null,
+    sourceSubject: input.sourceSubject ?? null,
+    subject: replySubject(input.sourceSubject, token),
+    body,
+    token,
+  });
+
+  return sent ? { token } : null;
 }

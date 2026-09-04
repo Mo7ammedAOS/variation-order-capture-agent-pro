@@ -29,6 +29,9 @@ const state = {
   askedWhichChange: [] as Record<string, unknown>[],
   askedToDescribe: [] as Record<string, unknown>[],
   askedForDetail: [] as Record<string, unknown>[],
+  readBack: [] as Record<string, unknown>[],
+  /** Off by default: most tests are about routing, not the confirmation step. */
+  confirmationEnabled: false,
   detailFields: [] as string[],
   recentExchange: false,
   updated: [] as Record<string, unknown>[],
@@ -70,6 +73,11 @@ vi.mock('@/lib/prisma', () => ({
         const excluded = args?.where?.id?.notIn ?? [];
         return state.allProjects.filter((p) => !excluded.includes(p.id as string));
       },
+      // Read when the capture is summarised back to the reporter.
+      findUnique: async () => ({
+        projectCode: 'DXB-001',
+        projectName: 'Marina Heights Lobby',
+      }),
     },
     integrationEvent: { findUnique: async () => ({ payloadJson: state.eventPayload }) },
     potentialChange: {
@@ -107,6 +115,14 @@ vi.mock('@/services/capture-question.service', () => ({
   askForDetail: async (input: Record<string, unknown>) => {
     state.askedForDetail.push(input);
     return { token: 'DTL1' };
+  },
+  // Returning null is "the read-back was not sent", which the service reads as
+  // permission to file. Most tests here predate the confirmation step and are
+  // about ROUTING — which project, which change, which attachments — so they
+  // keep filing straight through, and the tests that care switch it on.
+  askToConfirmCapture: async (input: Record<string, unknown>) => {
+    state.readBack.push(input);
+    return state.confirmationEnabled ? { token: 'SUM1' } : null;
   },
   // The real one is pure, and these tests care about WHETHER a follow-up was
   // asked for, not which fields it named.
@@ -200,6 +216,8 @@ describe('choosing the project a captured message belongs to', () => {
     state.askedWhichChange = [];
     state.askedToDescribe = [];
     state.askedForDetail = [];
+    state.readBack = [];
+    state.confirmationEnabled = false;
     state.detailFields = [];
     state.recentExchange = false;
   });
@@ -412,6 +430,8 @@ describe('the rest of the conversation', () => {
     state.askedWhichChange = [];
     state.askedToDescribe = [];
     state.askedForDetail = [];
+    state.readBack = [];
+    state.confirmationEnabled = false;
     state.detailFields = [];
     state.recentExchange = false;
     state.updated = [];
@@ -687,6 +707,81 @@ describe('the rest of the conversation', () => {
     const description = String(state.created[0]?.description ?? '');
     expect(description).toContain('reception wall moved');
     expect(description).toContain('work started');
+  });
+
+  it('reads the capture back before writing anything', async () => {
+    // Osman's call, 2026-09-04. The last cheap moment to be wrong: after this
+    // a PC number exists, a clock is running and two people have been told.
+    state.confirmationEnabled = true;
+    state.detailFields = [];
+
+    const outcome = await capture('client wants the reception wall moved yesterday, not started');
+
+    expect(outcome.kind).toBe('needs_triage');
+    expect(state.created).toHaveLength(0);
+    expect(state.readBack).toHaveLength(1);
+
+    const summary = state.readBack[0]?.summary as Record<string, unknown>;
+    expect(String(summary.description)).toContain('reception wall moved');
+    expect(summary.projectLabel).toBe('DXB-001 Marina Heights Lobby');
+  });
+
+  it('files on the word back, without asking anything else', async () => {
+    state.confirmationEnabled = true;
+    state.detailFields = ['work_status'];
+    state.answer = {
+      outcome: 'answered',
+      kind: 'summary',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: null,
+      originalText: 'client wants the reception wall moved',
+      replyText: 'ok',
+      candidateProjectIds: ['proj-a'],
+      detailFields: [],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('ok');
+
+    // He has checked it. Asking again would be the system refusing to believe
+    // its own summary.
+    expect(outcome.kind).toBe('created');
+    expect(state.askedForDetail).toHaveLength(0);
+  });
+
+  it('takes a correction instead of filing what he says is wrong', async () => {
+    state.confirmationEnabled = true;
+    state.detailFields = [];
+    state.answer = {
+      outcome: 'described',
+      kind: 'summary',
+      questionId: 'q1',
+      integrationEventId: 'evt-original',
+      userId: 'ahmed',
+      userName: 'Ahmed',
+      projectId: 'proj-a',
+      potentialChangeId: null,
+      originalText: 'client wants the reception wall moved',
+      replyText: 'no it is the lobby wall not the reception',
+      candidateProjectIds: ['proj-a'],
+      detailFields: [],
+      sourceMessageId: null,
+      sourceSubject: null,
+    };
+
+    const outcome = await capture('no it is the lobby wall not the reception');
+
+    // Nothing was written, so the correction costs one more round and no
+    // cleanup. That is the whole reason the read-back comes before the filing.
+    expect(outcome.kind).toBe('needs_triage');
+    expect(state.created).toHaveLength(0);
+    const summary = state.readBack.at(-1)?.summary as Record<string, unknown>;
+    expect(String(summary.description)).toContain('lobby wall');
   });
 
   it('files as reported when he says he cannot answer', async () => {

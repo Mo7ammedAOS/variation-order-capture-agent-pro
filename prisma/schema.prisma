@@ -1043,6 +1043,8 @@ enum CaptureQuestionKind {
   /// "When did it happen, and which drawing?" — asked AFTER a change is filed,
   /// so the follow-up never delays the notice clock it exists to correct.
   detail
+  /// The read-back: everything understood so far, awaiting a yes.
+  summary
 }
 
 enum CaptureQuestionStatus {

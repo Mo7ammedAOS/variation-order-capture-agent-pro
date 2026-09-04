@@ -280,6 +280,52 @@ export type ReportedWorkStatus = 'not_started' | 'in_progress' | 'completed' | '
  * cost is being incurred with no authority behind it, and the notice is late
  * the moment it is late.
  */
+/**
+ * The answer to a question we just asked, read in the light of the question.
+ *
+ * ── The bug this exists to kill ───────────────────────────────────────────
+ * "Has the work started on site?" — "No". `parseWorkStatus` on its own reads
+ * that as nothing, because "no" is not a statement about work. So the reply
+ * yielded no fact, was treated as a brand new report, and the exchange asked
+ * "which project?" all over again. Live on 2026-09-04, four times in a row,
+ * which is exactly how long it takes somebody to stop using a system.
+ *
+ * A bare yes or no is only meaningful because of what was asked a moment ago,
+ * so the field being asked is an argument. Nothing here guesses: if the field
+ * is not `work_status`, yes and no still mean nothing.
+ */
+export function parseAnswerForField(
+  field: 'work_status' | 'event_date' | 'document_reference',
+  text: string,
+  today: Date = new Date(),
+): ReportedWorkStatus | ParsedDate | string | null {
+  if (field === 'work_status') {
+    const explicit = parseWorkStatus(text);
+    if (explicit) return explicit;
+
+    const words = text.toUpperCase().split(/[^A-Z']+/).filter(Boolean);
+    // Only a SHORT reply is read as a bare yes or no. "No, the client said the
+    // ceiling has to come down" is a report that happens to start with "no",
+    // and reading it as a work status would throw the sentence away.
+    if (words.length > 3) return null;
+    if (words.some((word) => AFFIRMATIVE_ANSWER.has(word))) return 'in_progress';
+    if (words.some((word) => NEGATIVE_ANSWER.has(word))) return 'not_started';
+    return null;
+  }
+
+  if (field === 'event_date') return parseEventDate(text, today);
+  return parseDocumentReference(text);
+}
+
+/** Whole words that answer "has it started?" without saying so. */
+const AFFIRMATIVE_ANSWER = new Set([
+  'YES', 'YEP', 'YEAH', 'YUP', 'Y', 'STARTED', 'DONE', 'ALREADY', 'AFFIRMATIVE', 'CORRECT',
+]);
+
+const NEGATIVE_ANSWER = new Set([
+  'NO', 'NOPE', 'NOT', 'NONE', 'NEGATIVE', 'NIL', 'N', 'YET',
+]);
+
 export function parseWorkStatus(text: string): ReportedWorkStatus | null {
   const upper = text.toUpperCase();
   if (/\b(NOT STARTED|HAVEN'?T STARTED|HASN'?T STARTED|NO WORK|NOTHING STARTED|NOT YET)\b/.test(upper)) {
