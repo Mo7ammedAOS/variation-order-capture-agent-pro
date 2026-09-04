@@ -57,7 +57,7 @@ const NAVIGATION: Item[] = [
   { id: 'nav-dashboard', label: 'Overview', href: '/dashboard', icon: LayoutDashboard, group: 'Go to' },
   { id: 'nav-tasks', label: 'My Tasks', href: '/my-tasks', icon: ListChecks, group: 'Go to' },
   { id: 'nav-changes', label: 'Potential Changes', href: '/variations', icon: FileWarning, group: 'Go to' },
-  { id: 'nav-bottlenecks', label: 'Bottlenecks', href: '/bottlenecks', icon: AlertOctagon, group: 'Go to' },
+  { id: 'nav-held-up', label: 'Held Up', href: '/bottlenecks', icon: AlertOctagon, group: 'Go to' },
   { id: 'nav-projects', label: 'Projects', href: '/projects', icon: FolderKanban, group: 'Go to' },
   { id: 'nav-settings', label: 'Settings', href: '/settings/users', icon: Settings, group: 'Go to' },
   { id: 'act-report', label: 'Report a change', hint: 'Capture a new potential change', href: '/report-change', icon: Plus, group: 'Do' },

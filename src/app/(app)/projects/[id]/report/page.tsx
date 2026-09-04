@@ -223,7 +223,7 @@ export default async function ProjectReportPage({
         )}
       </section>
 
-      <section aria-label="Bottlenecks" className="flex flex-col gap-2 break-inside-avoid">
+      <section aria-label="Held up" className="flex flex-col gap-2 break-inside-avoid">
         <h2 className="text-base font-semibold">
           What is holding things up
           <span className="ms-2 text-xs font-normal text-muted-foreground">

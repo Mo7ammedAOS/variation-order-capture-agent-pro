@@ -33,7 +33,21 @@ export const projectCreateSchema = z.object({
     .default('active'),
 });
 
-export const projectUpdateSchema = projectCreateSchema.partial().omit({ projectCode: true });
+/**
+ * Everything on a project can be corrected, INCLUDING the code.
+ *
+ * The code used to be frozen, on the reasoning that PC numbers are minted from
+ * it. They are — and that is exactly why changing it is safe: a PC number is
+ * stamped at creation and stored, not derived on read, so renaming DXB-01 to
+ * DXB-001 leaves every issued reference exactly as it was issued. Paper that
+ * has left the building keeps saying what it said.
+ *
+ * What it does mean is that old and new changes on the same job carry
+ * different prefixes. That is a cosmetic inconsistency, and it is a far
+ * smaller problem than a project that has to live for two years with a code
+ * somebody mistyped on the first afternoon.
+ */
+export const projectUpdateSchema = projectCreateSchema.partial();
 
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;

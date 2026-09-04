@@ -315,7 +315,7 @@ export async function recordApprovalDecision(
         gate: approval.gate,
         round: approval.round,
       },
-      select: { id: true, decision: true, taskId: true },
+      select: { id: true, decision: true, taskId: true, seat: true },
     });
 
     // ── Who has to agree, by gate ─────────────────────────────────────────
@@ -330,18 +330,34 @@ export async function recordApprovalDecision(
     // A rejection is still recorded, still carries its reason, and stays
     // visible on the change for ever. It stops being a veto, not a fact.
     //
-    // MONEY: unchanged. Both seats, and a rejection sends it back. This gate
-    // commits the company to a figure, and one signature on a number is how a
-    // company finds out a year later that nobody checked it.
+    // MONEY: both seats, EXCEPT that the managing director alone is enough.
+    //
+    // Osman's call, 2026-09-04, and it reverses the narrower rule of 2026-09-02
+    // deliberately. The earlier reasoning — one signature on a number is how a
+    // company finds out a year later that nobody checked it — is sound in a
+    // company where the second signature belongs to someone the first cannot
+    // overrule. It does not describe this one. The managing director already
+    // holds every authority the project manager holds and answers for the
+    // figure himself, so requiring the PM's countersignature does not add a
+    // check; it adds a person who can be on a plane.
+    //
+    // What it is NOT: any two approvals. The PM alone still does not carry the
+    // money gate. Only the seat that owns the consequence can shorten it.
     const approvedByAnyone = siblings.some((row) => row.decision === 'approved');
     const anyRejection = siblings.some((row) => row.decision === 'rejected');
+    const directorApproved = siblings.some(
+      (row) => row.seat === 'managing_director' && row.decision === 'approved',
+    );
 
-    const rejected =
-      approval.gate === 'notice_issue' ? anyRejection && !approvedByAnyone : anyRejection;
+    // On both gates now, an approval that carries the gate outranks a
+    // rejection. The "no" is never deleted — it keeps its author, its reason
+    // and its timestamp on the change for ever. It stops being a veto, not a
+    // fact, and a reader a year later can still see who disagreed.
+    const carried = approval.gate === 'notice_issue' ? approvedByAnyone : directorApproved;
+
+    const rejected = anyRejection && !carried;
     const complete =
-      approval.gate === 'notice_issue'
-        ? approvedByAnyone
-        : !anyRejection && siblings.every((row) => row.decision === 'approved');
+      carried || (!anyRejection && siblings.every((row) => row.decision === 'approved'));
 
     let movedTo: string | null = null;
     let noticeToFileId: string | undefined;

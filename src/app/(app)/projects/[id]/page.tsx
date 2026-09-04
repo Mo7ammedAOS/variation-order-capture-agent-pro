@@ -17,7 +17,7 @@ import { reindexDocumentAction } from './actions';
 import { listTasks } from '@/services/task.service';
 import { prisma } from '@/lib/prisma';
 import { isAppError } from '@/lib/errors';
-import { formatDate, formatDateTime, formatInstant } from '@/lib/dates';
+import { formatDate, formatDateTime, formatInstant, toDateInputValue } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
@@ -35,6 +35,7 @@ import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { StatCard } from '@/components/domain/stat-card';
 import { getProjectRoles } from '@/services/project-access.service';
 import { ContractRulesForm } from './contract-rules-form';
+import { ProjectForm } from './project-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,6 +143,12 @@ type User = Awaited<ReturnType<typeof requirePageUser>>;
 async function OverviewTab({ user, projectId }: { user: User; projectId: string }) {
   const data = await getProjectDashboard(user, projectId);
 
+  // Shown to whoever may change it. Not what enforces it — `updateProject`
+  // re-checks the same capability server-side, so hiding the form is a
+  // courtesy and the service is the gate.
+  const projectRoles = await getProjectRoles(user, projectId);
+  const canEditProject = await hasCapability(user.systemRole, projectRoles, 'project.update');
+
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -164,7 +171,7 @@ async function OverviewTab({ user, projectId }: { user: User; projectId: string 
           tone={data.noticesOverdue > 0 ? 'red' : 'green'}
         />
         <StatCard
-          label="Open bottlenecks"
+          label="Held up"
           value={data.bottlenecks}
           tone={data.bottlenecks > 0 ? 'amber' : 'green'}
         />
@@ -190,6 +197,27 @@ async function OverviewTab({ user, projectId }: { user: User; projectId: string 
           )}
         </CardContent>
       </Card>
+
+      {canEditProject && data.project ? (
+        <ProjectForm
+          projectId={projectId}
+          values={{
+            projectCode: data.project.projectCode,
+            projectName: data.project.projectName,
+            clientName: data.project.clientName,
+            consultantName: data.project.consultantName ?? '',
+            projectLocation: data.project.projectLocation ?? '',
+            contractNumber: data.project.contractNumber ?? '',
+            contractStartDate: toDateInputValue(data.project.contractStartDate),
+            contractCompletionDate: toDateInputValue(data.project.contractCompletionDate),
+            originalContractValue: data.project.originalContractValue
+              ? String(data.project.originalContractValue)
+              : '',
+            currency: data.project.currency ?? 'AED',
+            projectStatus: data.project.projectStatus,
+          }}
+        />
+      ) : null}
     </div>
   );
 }

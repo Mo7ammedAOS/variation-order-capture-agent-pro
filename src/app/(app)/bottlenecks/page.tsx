@@ -11,7 +11,7 @@ import { RiskChip } from '@/components/domain/risk-chip';
 import { Money } from '@/components/domain/money';
 import { EmptyState } from '@/components/domain/empty-state';
 
-export const metadata: Metadata = { title: 'Bottlenecks' };
+export const metadata: Metadata = { title: 'Held Up' };
 export const dynamic = 'force-dynamic';
 
 export default async function BottlenecksPage() {
@@ -21,7 +21,7 @@ export default async function BottlenecksPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Bottlenecks</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Held Up</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           What is blocked, who owns it, and how much is waiting on it.
         </p>
@@ -31,7 +31,7 @@ export default async function BottlenecksPage() {
         <EmptyState
           icon={PartyPopper}
           title="Nothing is blocked"
-          description="No open bottlenecks across the projects you can see."
+          description="Nothing is held up on the projects you can see."
         />
       ) : (
         <Card className="overflow-hidden">

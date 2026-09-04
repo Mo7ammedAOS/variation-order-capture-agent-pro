@@ -135,3 +135,49 @@ describe('the capability list', () => {
     }
   });
 });
+
+describe('who may serve a notice', () => {
+  // Osman's call, 2026-09-04. The administrator sets the system up — accounts,
+  // projects, documents, contract rules. A notice is not set-up: it is a
+  // contractual act served in the company's name, and the person who signs it
+  // has to be the person who assessed it.
+  it('is not the company administrator', () => {
+    expect(systemHas('company_admin', 'notice.draft')).toBe(false);
+    expect(systemHas('company_admin', 'notice.acknowledge')).toBe(false);
+    expect(systemHas('company_admin', 'potentialChange.assessNotice')).toBe(false);
+  });
+
+  it('is still everything else the administrator does', () => {
+    // Removing the notice must not have removed the job.
+    for (const capability of [
+      'user.manage', 'project.create', 'project.update', 'project.manageMembers',
+      'project.manageContractRules', 'document.upload', 'document.manageRegister',
+    ] as const) {
+      expect(systemHas('company_admin', capability)).toBe(true);
+    }
+  });
+
+  it('is the managing director and the company owner', () => {
+    expect(systemHas('managing_director', 'notice.draft')).toBe(true);
+    expect(systemHas('company_owner', 'notice.draft')).toBe(true);
+  });
+});
+
+describe('correcting a report', () => {
+  it('lets the site engineer fix his own and nobody else’s', () => {
+    // The person who was standing there is the only one who can say what
+    // actually happened. Making him ask a project manager to fix a mistyped
+    // date is how the correction never gets made.
+    //
+    // Granted on the PROJECT role, not the system role: the authority to
+    // correct a report belongs to the job he is on, and a site engineer
+    // assigned to nothing should hold nothing.
+    expect(projectHas('site_engineer', 'potentialChange.updateOwn')).toBe(true);
+    expect(projectHas('site_engineer', 'potentialChange.update')).toBe(false);
+    expect(projectHas('foreman', 'potentialChange.updateOwn')).toBe(true);
+  });
+
+  it('lets the managing director fix anyone’s', () => {
+    expect(systemHas('managing_director', 'potentialChange.update')).toBe(true);
+  });
+});

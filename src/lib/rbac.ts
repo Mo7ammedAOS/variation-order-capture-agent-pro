@@ -84,11 +84,21 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
     'user.manage', 'companySettings.manage',
   ],
+  // Osman's call, 2026-09-04: the administrator does NOT touch notices.
+  //
+  // He sets the system up — accounts, projects, documents, contract rules —
+  // and a notice is not set-up, it is a contractual act. It is served in the
+  // company's name, it is the document produced when entitlement is argued,
+  // and the person who signs it has to be the person who assessed it. An
+  // administrator with `notice.draft` can serve one on a job he has never
+  // visited, and the audit trail would show it as properly authorised.
+  //
+  // `assessNotice` goes with it for the same reason: deciding a notice is
+  // required is the judgement, and drafting is only the typing.
   company_admin: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
     'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
-    'potentialChange.create', 'potentialChange.update', 'potentialChange.assessNotice',
-    'notice.draft', 'notice.acknowledge',
+    'potentialChange.create', 'potentialChange.update',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
     'user.manage', 'companySettings.manage',
@@ -148,8 +158,17 @@ export const DEFAULT_PROJECT_ROLE_CAPABILITIES: Record<ProjectRole, readonly Cap
     'document.upload', 'potentialChange.create', 'potentialChange.update',
     'potentialChange.changeStatus', 'variationOrder.manage', 'task.complete',
   ],
-  site_engineer: ['document.upload', 'potentialChange.create', 'task.complete'],
-  foreman: ['document.upload', 'potentialChange.create', 'task.complete'],
+  // `updateOwn`, not `update`. He can correct the report he made — a wrong
+  // date, a wrong location, a description that read badly on a phone — and
+  // nobody else's. The person who was standing there is the only one who can
+  // fix what he wrote, and making him ask a PM to do it is how the correction
+  // never happens.
+  site_engineer: [
+    'document.upload', 'potentialChange.create', 'potentialChange.updateOwn', 'task.complete',
+  ],
+  foreman: [
+    'document.upload', 'potentialChange.create', 'potentialChange.updateOwn', 'task.complete',
+  ],
   commercial_manager: [
     'project.manageContractRules', 'contact.manage', 'document.upload',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.assessNotice',

@@ -17,7 +17,7 @@ const LINKS = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/my-tasks', label: 'My Tasks', icon: ListChecks },
   { href: '/variations', label: 'Potential Changes', icon: FileWarning },
-  { href: '/bottlenecks', label: 'Bottlenecks', icon: AlertOctagon },
+  { href: '/bottlenecks', label: 'Held Up', icon: AlertOctagon },
   { href: '/inbox', label: 'Capture Inbox', icon: Inbox },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/settings/company', label: 'Company', icon: Building2 },

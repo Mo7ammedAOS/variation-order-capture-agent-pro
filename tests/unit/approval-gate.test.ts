@@ -162,14 +162,13 @@ describe('the two-seat approval gate', () => {
     expect(result.movedTo).toBe('pm_scope_review');
   });
 
-  it('still needs BOTH seats on the money', async () => {
-    // The asymmetry is the point. This gate commits the company to a figure,
-    // and one signature on a number is how a company finds out a year later
-    // that nobody checked it.
-    state.approval = approval({ gate: 'final_variation' });
+  it('does not let the project manager alone carry the money', async () => {
+    // Not "any one approval". The seat that owns the consequence is the only
+    // one that may shorten the gate, and it is not this one.
+    state.approval = approval({ gate: 'final_variation', seat: 'project_manager' });
     state.siblings = [
-      { id: ID, decision: 'approved', taskId: 'task-1' },
-      { id: 'other', decision: 'pending', taskId: 'task-2' },
+      { id: ID, decision: 'approved', taskId: 'task-1', seat: 'project_manager' },
+      { id: 'other', decision: 'pending', taskId: 'task-2', seat: 'managing_director' },
     ];
 
     const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
@@ -177,6 +176,55 @@ describe('the two-seat approval gate', () => {
     expect(result.complete).toBe(false);
     expect(result.movedTo).toBeNull();
     expect(state.pcUpdates).toHaveLength(0);
+  });
+
+  it('lets the managing director carry the money on his own', async () => {
+    // Osman's call, 2026-09-04, reversing the both-seats rule of 2026-09-02.
+    // The managing director already holds every authority the project manager
+    // holds and answers for the figure himself, so the countersignature was
+    // not a second check — it was a second person who could be on a plane.
+    state.approval = approval({ gate: 'final_variation', seat: 'managing_director' });
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1', seat: 'managing_director' },
+      { id: 'other', decision: 'pending', taskId: 'task-2', seat: 'project_manager' },
+    ];
+
+    const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(result.complete).toBe(true);
+    expect(result.rejected).toBe(false);
+  });
+
+  it('lets the managing director carry the money over a rejection', async () => {
+    // The "no" stays on the file with its author and its reason. It stops
+    // being a veto, not a fact.
+    state.approval = approval({ gate: 'final_variation', seat: 'managing_director' });
+    state.siblings = [
+      { id: ID, decision: 'approved', taskId: 'task-1', seat: 'managing_director' },
+      { id: 'other', decision: 'rejected', taskId: 'task-2', seat: 'project_manager' },
+    ];
+
+    const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
+
+    expect(result.complete).toBe(true);
+    expect(result.rejected).toBe(false);
+  });
+
+  it('still sends the money back when only the project manager has rejected it', async () => {
+    state.approval = approval({ gate: 'final_variation', seat: 'project_manager' });
+    state.siblings = [
+      { id: ID, decision: 'rejected', taskId: 'task-1', seat: 'project_manager' },
+      { id: 'other', decision: 'pending', taskId: 'task-2', seat: 'managing_director' },
+    ];
+
+    const result = await recordApprovalDecision(USER, {
+      approvalId: ID,
+      decision: 'rejected',
+      comment: 'The prelims are double counted against PC-0004.',
+    });
+
+    expect(result.rejected).toBe(true);
+    expect(result.complete).toBe(false);
   });
 
   it('lets an approval outrank a rejection on the notice, keeping the rejection on file', async () => {

@@ -388,9 +388,26 @@ export async function dispatchNow(dedupeSeed: string): Promise<void> {
 /* ─── Reading, for the bell ──────────────────────────────────────────────── */
 
 /** Scoped to the caller by user id. A notification is addressed, never shared. */
-export async function listMyNotifications(user: AuthenticatedUser, limit = 30) {
+/**
+ * The bell's contents.
+ *
+ * Unread only by default. Osman's call, 2026-09-04: a notification that has
+ * been read has done its job, and leaving it on the list turns the one place
+ * that is supposed to say "these need you" into an archive that says nothing.
+ * Read ones are still here — `includeRead` shows them — but they are history,
+ * not a list of things owed.
+ */
+export async function listMyNotifications(
+  user: AuthenticatedUser,
+  limit = 30,
+  includeRead = false,
+) {
   return prisma.notificationLog.findMany({
-    where: { userId: user.id, channel: 'in_app' },
+    where: {
+      userId: user.id,
+      channel: 'in_app',
+      ...(includeRead ? {} : { readAt: null }),
+    },
     orderBy: { requestedAt: 'desc' },
     take: limit,
     include: {

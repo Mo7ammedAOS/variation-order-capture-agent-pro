@@ -10,7 +10,12 @@ import {
 } from '@/services/project-member.service';
 import { contactSchema, createContact } from '@/services/contact.service';
 import { isAppError } from '@/lib/errors';
-import { contractRuleUpdateSchema, updateContractRules } from '@/services/project.service';
+import {
+  contractRuleUpdateSchema,
+  projectUpdateSchema,
+  updateContractRules,
+  updateProject,
+} from '@/services/project.service';
 import type { DocumentType } from '@prisma/client';
 import { uploadDocument } from '@/services/document.service';
 import { indexDocument } from '@/services/document-index.service';
@@ -19,6 +24,69 @@ import { assertProjectAccess } from '@/services/project-access.service';
 export interface ContractRulesState {
   error?: string;
   ok?: boolean;
+}
+
+export interface ProjectFormState {
+  error?: string;
+  ok?: boolean;
+}
+
+/**
+ * Correcting the project record.
+ *
+ * Blank clears an optional field rather than leaving the old value in place —
+ * a consultant who has left the job has to be removable, and a form where
+ * emptying a box does nothing is a form that quietly lies about what it saved.
+ * The two required ones, code and name, are not clearable.
+ */
+export async function saveProjectAction(
+  _prev: ProjectFormState,
+  formData: FormData,
+): Promise<ProjectFormState> {
+  const user = await requirePageUser();
+  const projectId = String(formData.get('projectId') ?? '');
+
+  const text = (name: string) => {
+    const value = formData.get(name);
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+  };
+
+  const parsed = projectUpdateSchema.safeParse({
+    projectCode: text('projectCode') ?? undefined,
+    projectName: text('projectName') ?? undefined,
+    clientName: text('clientName') ?? undefined,
+    consultantName: text('consultantName'),
+    projectLocation: text('projectLocation'),
+    contractNumber: text('contractNumber'),
+    contractStartDate: text('contractStartDate'),
+    contractCompletionDate: text('contractCompletionDate'),
+    originalContractValue: text('originalContractValue'),
+    currency: text('currency') ?? undefined,
+    projectStatus: text('projectStatus') ?? undefined,
+  });
+
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join('.') ?? '';
+    return { error: field ? `${field}: ${issue?.message}` : (issue?.message ?? 'Check the values') };
+  }
+
+  try {
+    await updateProject(user, projectId, parsed.data);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    // A duplicate project code is a collision, not a crash. Prisma reports it
+    // as P2002 and the raw message names the database column, which is no help
+    // to anybody standing in front of the form.
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      return { error: 'That project code is already used by another project.' };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/projects');
+  return { ok: true };
 }
 
 /** Checkboxes are absent from FormData when unticked, which is not the same as false. */

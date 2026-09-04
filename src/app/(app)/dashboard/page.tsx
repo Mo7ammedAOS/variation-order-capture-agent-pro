@@ -59,7 +59,7 @@ export default async function DashboardPage() {
           href="/my-tasks"
         />
         <StatCard
-          label="Critical bottlenecks"
+          label="Badly held up"
           value={stats.criticalBottlenecks}
           icon={AlertOctagon}
           tone={stats.criticalBottlenecks > 0 ? 'red' : 'green'}
