@@ -6,8 +6,8 @@ import { NotFoundError, ValidationError } from '@/lib/errors';
 import { todayUtc } from '@/lib/dates';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { formatNoticeReference } from '@/lib/pc-number';
-import { renderNotice, type NoticeFacts } from '@/lib/notice-template';
-import { renderTextPdf, textToPdfLines } from '@/lib/pdf';
+import { noticeLetterPdf, renderNotice, type NoticeFacts } from '@/lib/notice-template';
+import { renderDocumentPdf } from '@/lib/pdf';
 import { recordAudit } from '@/services/audit-log.service';
 import { assertProjectAccess } from '@/services/project-access.service';
 import { storeNoticeDocument } from '@/services/document.service';
@@ -52,6 +52,17 @@ export async function draftNotice(
     potentialChangeId: string;
     projectId: string;
     actorUserId: string;
+    /**
+     * Professional wording for the account of what happened, drafted by the
+     * model BEFORE this transaction opened.
+     *
+     * It arrives as an argument rather than being fetched here, and that is
+     * not tidiness: this runs inside a Prisma interactive transaction holding
+     * row locks, with a five second budget. An API call in here would hold
+     * those locks across somebody else's network, and a slow afternoon at the
+     * provider would start rolling back notice assessments.
+     */
+    narrative?: string | null;
   },
 ): Promise<{ id: string; reference: string } | null> {
   const live = await tx.notice.findFirst({
@@ -116,6 +127,7 @@ export async function draftNotice(
     instructionSource: describeSource(change.sourceType, change.sourceLocation),
     potentialTimeImpact: change.potentialTimeImpact,
     noticeDate: todayUtc(),
+    narrative: input.narrative ?? null,
   };
 
   const rendered = renderNotice(facts);
@@ -350,7 +362,24 @@ export async function fileNoticeDocument(noticeId: string): Promise<{ documentId
   if (notice.documentId) return { documentId: notice.documentId };
   if (notice.status === 'draft') return null;
 
-  const pdf = renderTextPdf(textToPdfLines(notice.body));
+  // The company name and the reference come off the record, not the body —
+  // a letterhead reconstructed by parsing the letter would go wrong the first
+  // time somebody edited the top of it.
+  const [project, company] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: notice.projectId },
+      select: { projectCode: true },
+    }),
+    prisma.companySettings.findFirst({ where: { singleton: true } }),
+  ]);
+
+  const pdf = renderDocumentPdf(
+    noticeLetterPdf(notice.body, {
+      companyName:
+        company?.legalCompanyName ?? company?.displayCompanyName ?? 'The Contractor',
+      footer: `${notice.reference}   |   ${project?.projectCode ?? ''}`,
+    }),
+  );
 
   const document = await storeNoticeDocument({
     projectId: notice.projectId,

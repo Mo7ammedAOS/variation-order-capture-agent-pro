@@ -9,6 +9,7 @@ import { signOut } from '@/app/(auth)/login/actions';
 import { MobileNav, ReportChangeFab, SidebarNav } from './nav';
 import { CommandPalette } from './command-palette';
 import { CommandTrigger } from './command-trigger';
+import { PageTransition } from '@/components/domain/page-transition';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,7 +120,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           table scrolling inside its own container. The sidebar then slides off
           screen, which is the visible symptom of a rule about a table.
         */}
-        {children}
+        <PageTransition>{children}</PageTransition>
       </main>
 
       <MobileNav />

@@ -53,6 +53,37 @@ export interface AiProvider {
     audio: Buffer;
     mimeType: string;
   }): Promise<AgentEnvelope<{ transcript: string; language: string }>>;
+
+  /**
+   * Turns a site report into the account of it that goes in a notice.
+   *
+   * ── What this is, precisely ──────────────────────────────────────────────
+   * A REWRITE. "clint want the celing lower in resption 300 he say monday" is
+   * true, sufficient, and cannot be sent to a main contractor's commercial
+   * team — a notice that reads as an unedited text message invites the reply
+   * that it was not a proper notice. So the model restates the same facts in
+   * the register the document is written in.
+   *
+   * ── What it must not become ──────────────────────────────────────────────
+   * It may not add a fact. Not a date, not a drawing number, not a name, not a
+   * quantity, and above all not a number — nothing that was not in the report
+   * it was given. It may not assert entitlement, allege breach, quantify cost
+   * or time, or characterise the change as instructed when the report does not
+   * say so. Every one of those is a commercial judgement, and the system has
+   * no business making one on a document served in the company's name.
+   *
+   * The output is a DRAFT into an editable notice that two seats then approve.
+   * The reporter's original words stay on the change, untouched, for ever.
+   */
+  draftNoticeNarrative(input: {
+    /** Exactly what the reporter wrote. The only source of fact. */
+    description: string;
+    title: string;
+    /** Context for register and phrasing only. Never to be restated as fact. */
+    trade?: string | null;
+    location?: string | null;
+    instructedBy?: string | null;
+  }): Promise<AgentEnvelope<{ narrative: string }>>;
 }
 
 /** Below this, a suggestion is held for human review rather than surfaced. */

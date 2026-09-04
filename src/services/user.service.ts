@@ -93,6 +93,116 @@ export async function inviteUser(actor: AuthenticatedUser, input: z.infer<typeof
   });
 }
 
+/**
+ * The shortest password an administrator may set on somebody's behalf.
+ *
+ * Twelve, not eight. A password set by one person for another gets read aloud
+ * across a site office and typed into a phone, so it will be shared whatever
+ * the policy says — the only defence is that it is long enough to survive
+ * being guessed by somebody who heard half of it.
+ */
+const MIN_PASSWORD_LENGTH = 12;
+
+export const passwordResetSchema = z.object({
+  userId: z.string().uuid(),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`)
+    .max(72, 'Too long — 72 characters is the limit'),
+});
+
+/**
+ * An administrator setting a new password for a member of staff.
+ *
+ * ── Why "set", and never "show" ────────────────────────────────────────────
+ * Osman asked to see existing passwords. There is nothing to see: Supabase
+ * stores a one-way hash, so the plaintext does not exist anywhere in this
+ * system or in the identity provider, and no permission could reveal it. That
+ * is a property worth keeping rather than a gap to close — a system that CAN
+ * show a password is a system where one leaked administrator account exposes
+ * every account at once. Setting a new one solves the real problem, which is
+ * a man locked out on a Friday afternoon, without creating that one.
+ *
+ * ── What is recorded ───────────────────────────────────────────────────────
+ * That it happened, by whom, to whom, and when. Never the password, not in the
+ * audit trail, not in a log line, not in the value returned to the caller. The
+ * audit row is what makes this safe to hand to an administrator: the authority
+ * to reset an account is also the authority to impersonate its owner, so every
+ * use of it has to be visible to the person it was used on.
+ */
+export async function resetUserPassword(
+  actor: AuthenticatedUser,
+  input: z.infer<typeof passwordResetSchema>,
+) {
+  await assertCapability(actor, 'user.manage');
+
+  const target = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, email: true, fullName: true, active: true },
+  });
+  if (!target) throw new NotFoundError('User not found');
+
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.auth.admin.updateUserById(target.id, {
+    password: input.password,
+  });
+
+  if (error) {
+    // The provider's message can quote the password back in a validation
+    // error, so only its shape is passed on.
+    throw new IntegrationError('Could not set the password. Check it meets the provider policy.');
+  }
+
+  await recordAudit({
+    db: prisma,
+    userId: actor.id,
+    recordType: 'user',
+    recordId: target.id,
+    actionType: 'updated',
+    // Deliberately no `oldValue`/`newValue` carrying anything about the
+    // secret. The fact and the actor are the record.
+    newValue: { passwordReset: true, email: target.email },
+  });
+
+  return { email: target.email, fullName: target.fullName };
+}
+
+/**
+ * Sending somebody the link to set their own password.
+ *
+ * The better of the two whenever the person is reachable: the administrator
+ * never learns the password, so there is nothing to be overheard, written on a
+ * whiteboard, or reused on the man's personal email.
+ */
+export async function sendPasswordResetLink(actor: AuthenticatedUser, userId: string) {
+  await assertCapability(actor, 'user.manage');
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, fullName: true },
+  });
+  if (!target) throw new NotFoundError('User not found');
+
+  const supabase = createSupabaseAdminClient();
+  const env = getEnv();
+
+  const { error } = await supabase.auth.resetPasswordForEmail(target.email, {
+    redirectTo: `${env.APP_URL}/login`,
+  });
+  if (error) throw new IntegrationError(`Could not send the link: ${error.message}`);
+
+  await recordAudit({
+    db: prisma,
+    userId: actor.id,
+    recordType: 'user',
+    recordId: target.id,
+    actionType: 'updated',
+    newValue: { passwordResetLinkSent: true, email: target.email },
+  });
+
+  return { email: target.email, fullName: target.fullName };
+}
+
 export async function setUserActive(
   actor: AuthenticatedUser,
   userId: string,

@@ -92,4 +92,23 @@ export const mockAiProvider: AiProvider = {
       suggestedNextAction: 'Review the transcript against the original audio',
     };
   },
+
+  /**
+   * The mock returns the report unchanged, on purpose.
+   *
+   * Not a fake paragraph of business English. A test that passes against
+   * invented prose proves the plumbing and hides the only thing worth
+   * checking — that when there is no model, the notice still carries exactly
+   * what the reporter said. Returning the input IS the correct behaviour of a
+   * rewriter that cannot rewrite.
+   */
+  async draftNoticeNarrative(input): Promise<AgentEnvelope<{ narrative: string }>> {
+    return {
+      extractedData: { narrative: input.description.trim() },
+      confidenceScore: 1,
+      sourceReferences: ['mock:passthrough'],
+      missingInformation: [],
+      suggestedNextAction: 'Review the wording before issuing',
+    };
+  },
 };

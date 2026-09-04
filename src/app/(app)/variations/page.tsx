@@ -84,7 +84,7 @@ export default async function VariationsPage({
                   <TableHead className="sr-only">Preview</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="motion-stagger">
                 {changes.map((change) => (
                   // Clicking anywhere on the row peeks; clicking the PC number
                   // still navigates, because a link that does not navigate is a

@@ -78,7 +78,7 @@ export default async function ProjectsPage({
                   <TableHead className="text-end">Changes</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="motion-stagger">
                 {projects.map((project) => (
                   <TableRow key={project.id}>
                     <TableCell>

@@ -19,15 +19,28 @@ export function NoticeCountdown({
 }) {
   const countdown = calculateNoticeCountdown(noticeDueDate, { amberThresholdDays });
 
+  // `isOverdue` is the one condition allowed to animate anywhere in this app.
+  // It is not "red" — red also means one day left, which is bad and not yet a
+  // loss. Overdue means the contractual period has run out.
   if (compact) {
-    return <RiskChip level={countdown.riskLevel} label={countdown.label} />;
+    return (
+      <RiskChip
+        level={countdown.riskLevel}
+        label={countdown.label}
+        breached={countdown.isOverdue}
+      />
+    );
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <CalendarClock aria-hidden className="size-4 text-muted-foreground" />
       <span className="tabular text-sm font-medium">{formatDate(noticeDueDate)}</span>
-      <RiskChip level={countdown.riskLevel} label={countdown.label} />
+      <RiskChip
+        level={countdown.riskLevel}
+        label={countdown.label}
+        breached={countdown.isOverdue}
+      />
     </div>
   );
 }

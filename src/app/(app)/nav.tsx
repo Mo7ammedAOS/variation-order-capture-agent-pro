@@ -38,13 +38,29 @@ export function SidebarNav() {
             href={href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
+              'transition-[background-color,color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              'hover:translate-x-0.5 active:translate-x-0',
               active
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                 : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
             )}
           >
-            <Icon aria-hidden className="size-4 shrink-0" />
+            {/* A rail on the active item rather than a heavier fill. It marks
+                where you are without competing with the risk colours, which
+                are the only things on this screen allowed to shout. */}
+            <span
+              aria-hidden
+              className={cn(
+                'absolute inset-y-1.5 -start-1 w-[3px] rounded-full bg-primary',
+                'transition-opacity duration-200',
+                active ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+            <Icon
+              aria-hidden
+              className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110"
+            />
             {label}
           </Link>
         );

@@ -287,6 +287,32 @@
     background: var(--card);
   }
 
+  /*
+    A panel you can open.
+
+    Applied only where the whole card is a link. A card that lifts under the
+    cursor and does nothing when clicked is worse than a card that sits still:
+    the movement is a promise, and an interface that makes promises it does not
+    keep is one people stop trusting the rest of.
+  */
+  .panel-interactive {
+    transition:
+      transform 180ms var(--ease-out-quint),
+      box-shadow 180ms var(--ease-out-quint),
+      border-color 180ms var(--ease-out-quint);
+  }
+  .panel-interactive:hover {
+    transform: translate3d(0, -2px, 0);
+    border-color: color-mix(in oklab, var(--primary) 32%, var(--panel-edge));
+    box-shadow:
+      var(--panel-shadow),
+      0 10px 26px -14px color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+  .panel-interactive:active {
+    transform: translate3d(0, 0, 0);
+    transition-duration: 90ms;
+  }
+
   .panel-notice { background: var(--panel-notice); }
   .panel-connect { background: var(--panel-connect); }
   .panel-work { background: var(--panel-work); }
@@ -315,6 +341,86 @@
   }
 }
 
+/* ───────────────────────────────── motion ─────────────────────────────────
+ *
+ * The product is a clock running down, and the motion is written to read like
+ * one: quick, mechanical, confident. Short durations, small displacements, no
+ * bounce. Nothing here is decorative — every movement either confirms that
+ * something was pressed, or shows where new content came from.
+ *
+ * ── One looping animation in the whole app ────────────────────────────────
+ * `breathe`, on a BREACHED notice deadline, and nowhere else. A thing that
+ * moves forever earns attention forever, so there may only be one, and it has
+ * to be reserved for the single state this product exists to prevent. Put it
+ * on a hero, a logo or a loading dot and the one that matters stops working.
+ */
+@theme inline {
+  /* Decelerating, no overshoot. Overshoot on a register of contractual
+     deadlines reads as playful, and this screen is never playful. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-press: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(220, 38, 38, 0);
+  }
+}
+
+@layer utilities {
+  /* Content arriving: 8px up, 220ms, done. */
+  .motion-rise {
+    animation: rise 220ms var(--ease-out-quint) both;
+  }
+
+  /*
+    A list arriving in order.
+
+    The stagger is capped at eight rows and 24ms apart: enough that the eye
+    reads it as one movement with a direction, short enough that the last row
+    of a full table is not still arriving after the user has started reading.
+    Rows past the eighth simply appear — nobody is watching row twelve.
+  */
+  .motion-stagger > * {
+    animation: rise 220ms var(--ease-out-quint) both;
+  }
+  .motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .motion-stagger > *:nth-child(2) { animation-delay: 24ms; }
+  .motion-stagger > *:nth-child(3) { animation-delay: 48ms; }
+  .motion-stagger > *:nth-child(4) { animation-delay: 72ms; }
+  .motion-stagger > *:nth-child(5) { animation-delay: 96ms; }
+  .motion-stagger > *:nth-child(6) { animation-delay: 120ms; }
+  .motion-stagger > *:nth-child(7) { animation-delay: 144ms; }
+  .motion-stagger > *:nth-child(n + 8) { animation-delay: 168ms; }
+
+  /*
+    The signature.
+
+    A breached notice deadline, and nothing else in the product, breathes. It
+    is slow — 2.4s — because an urgent flash is read once and then filtered
+    out, while something moving quietly at the edge of vision keeps being
+    noticed. This is the one state that costs money if it goes unseen.
+  */
+  .motion-breach {
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+}
+
 /*
   Anyone who has asked not to see motion gets none of it. This covers the
   entrance choreography as well as hovers.
@@ -324,7 +430,23 @@
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+    `both` fill would otherwise hold the last keyframe, and the stagger delays
+    would still hold rows at 8px and zero opacity for their delay. Reduced
+    motion has to mean the content is simply THERE, not that it arrives
+    instantly after a pause.
+  */
+  .motion-rise,
+  .motion-stagger > *,
+  .motion-breach {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

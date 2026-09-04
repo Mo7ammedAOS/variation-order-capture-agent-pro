@@ -105,6 +105,213 @@ interface PdfLine {
   bold?: boolean;
 }
 
+/* ─────────────────────────── the designed document ───────────────────────
+ *
+ * `renderTextPdf` below puts a typed letter on a page and nothing else. It is
+ * still here, still used, and still correct for anything internal.
+ *
+ * A NOTICE is not internal. It goes to the main contractor, it is read by
+ * their commercial team, and it is the document produced when entitlement is
+ * argued about a year later. A page of undifferentiated 10pt Helvetica reads
+ * as something a system spat out; the same words with a letterhead, a
+ * reference block and a hierarchy read as something a company sent. That
+ * difference is not decoration — it is whether the recipient treats the
+ * notice as correspondence or as noise.
+ *
+ * So: a block model. Sizes, weights, a colour, horizontal rules, right
+ * alignment, and a footer on every page. Still no library, for the reason at
+ * the top of this file: the one document here that may end up in front of a
+ * tribunal has nothing between its text and its bytes.
+ */
+
+export type Rgb = readonly [number, number, number];
+
+const INK: Rgb = [0.07, 0.09, 0.15];
+const MUTED: Rgb = [0.42, 0.45, 0.52];
+const RULE: Rgb = [0.82, 0.84, 0.88];
+
+export type PdfBlock =
+  | {
+      kind: 'text';
+      text: string;
+      size?: number;
+      bold?: boolean;
+      color?: Rgb;
+      /** Extra leading under this line, on top of the line height. */
+      after?: number;
+      align?: 'left' | 'right';
+      /** Letter-spaced, for a small-caps style heading. */
+      tracked?: boolean;
+    }
+  | { kind: 'space'; height: number }
+  | { kind: 'rule'; color?: Rgb; thickness?: number; after?: number }
+  /** A label and its value on one line: the reference block of a letter. */
+  | { kind: 'field'; label: string; value: string }
+  /** Never split across a page: a heading must not end one. */
+  | { kind: 'keepWithNext' };
+
+export interface PdfDocument {
+  blocks: PdfBlock[];
+  /** Repeated at the foot of every page, with the page number. */
+  footer?: string;
+}
+
+function blockHeight(block: PdfBlock): number {
+  switch (block.kind) {
+    case 'text':
+      return (block.size ?? FONT_SIZE) * 1.35 + (block.after ?? 0);
+    case 'field':
+      return FONT_SIZE * 1.35;
+    case 'space':
+      return block.height;
+    case 'rule':
+      return (block.thickness ?? 0.6) + (block.after ?? 0);
+    case 'keepWithNext':
+      return 0;
+  }
+}
+
+const FOOTER_SPACE = 34;
+const LABEL_WIDTH = 132;
+
+/**
+ * Lays blocks onto pages and writes the PDF.
+ *
+ * Pagination is a running cursor rather than a fixed lines-per-page count,
+ * because the blocks are different heights. `keepWithNext` is what stops a
+ * heading being orphaned at the foot of a page — it looks at the block after
+ * it and breaks early if the pair will not fit together.
+ */
+export function renderDocumentPdf(doc: PdfDocument): Buffer {
+  const usableBottom = MARGIN + (doc.footer ? FOOTER_SPACE : 0);
+  const pages: PdfBlock[][] = [];
+  let current: PdfBlock[] = [];
+  let y = PAGE_HEIGHT - MARGIN;
+
+  doc.blocks.forEach((block, index) => {
+    if (block.kind === 'keepWithNext') {
+      const next = doc.blocks[index + 1];
+      const pairHeight = blockHeight(block) + (next ? blockHeight(next) : 0);
+      if (y - pairHeight < usableBottom && current.length > 0) {
+        pages.push(current);
+        current = [];
+        y = PAGE_HEIGHT - MARGIN;
+      }
+      return;
+    }
+
+    const height = blockHeight(block);
+    if (y - height < usableBottom && current.length > 0) {
+      pages.push(current);
+      current = [];
+      y = PAGE_HEIGHT - MARGIN;
+      // A blank line at the top of a new page is the previous page's spacing,
+      // and it reads as a mistake.
+      if (block.kind === 'space') return;
+    }
+    current.push(block);
+    y -= height;
+  });
+
+  pages.push(current);
+
+  const objects: string[] = [];
+  const pageObjectNumbers: number[] = [];
+  const FIRST_PAGE_OBJ = 5;
+  pages.forEach((_, index) => pageObjectNumbers.push(FIRST_PAGE_OBJ + index * 2));
+
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] =
+    `<< /Type /Pages /Kids [${pageObjectNumbers.map((n) => `${n} 0 R`).join(' ')}] ` +
+    `/Count ${pages.length} >>`;
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  objects[4] =
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+
+  const rgb = (color: Rgb) => `${color[0].toFixed(3)} ${color[1].toFixed(3)} ${color[2].toFixed(3)}`;
+
+  pages.forEach((pageBlocks, index) => {
+    const pageObj = pageObjectNumbers[index]!;
+    const contentObj = pageObj + 1;
+    const parts: string[] = [];
+    let cursor = PAGE_HEIGHT - MARGIN;
+
+    const write = (
+      text: string,
+      x: number,
+      baseline: number,
+      size: number,
+      bold: boolean,
+      color: Rgb,
+      tracked = false,
+    ) => {
+      parts.push('BT');
+      parts.push(`${rgb(color)} rg`);
+      parts.push(`/${bold ? 'F2' : 'F1'} ${size} Tf`);
+      if (tracked) parts.push(`${(size * 0.09).toFixed(2)} Tc`);
+      parts.push(`1 0 0 1 ${x.toFixed(2)} ${baseline.toFixed(2)} Tm`);
+      parts.push(`(${escapePdfText(text)}) Tj`);
+      if (tracked) parts.push('0 Tc');
+      parts.push('ET');
+    };
+
+    for (const block of pageBlocks) {
+      if (block.kind === 'space') {
+        cursor -= block.height;
+        continue;
+      }
+
+      if (block.kind === 'rule') {
+        const thickness = block.thickness ?? 0.6;
+        parts.push(`${rgb(block.color ?? RULE)} rg`);
+        parts.push(
+          `${MARGIN.toFixed(2)} ${(cursor - thickness).toFixed(2)} ` +
+            `${USABLE_WIDTH.toFixed(2)} ${thickness.toFixed(2)} re f`,
+        );
+        cursor -= thickness + (block.after ?? 0);
+        continue;
+      }
+
+      if (block.kind === 'field') {
+        const baseline = cursor - FONT_SIZE;
+        write(block.label, MARGIN, baseline, FONT_SIZE - 0.5, false, MUTED);
+        write(block.value, MARGIN + LABEL_WIDTH, baseline, FONT_SIZE, true, INK);
+        cursor -= FONT_SIZE * 1.35;
+        continue;
+      }
+
+      // Never reaches a page — pagination consumes it — but the narrowing has
+      // to be written down for the compiler and for the next reader.
+      if (block.kind !== 'text') continue;
+
+      const size = block.size ?? FONT_SIZE;
+      const baseline = cursor - size;
+      const x =
+        block.align === 'right'
+          ? MARGIN + USABLE_WIDTH - textWidth(block.text, size)
+          : MARGIN;
+      write(block.text, x, baseline, size, block.bold ?? false, block.color ?? INK, block.tracked);
+      cursor -= size * 1.35 + (block.after ?? 0);
+    }
+
+    if (doc.footer) {
+      const label = `${doc.footer}   |   Page ${index + 1} of ${pages.length}`;
+      parts.push(`${rgb(RULE)} rg`);
+      parts.push(`${MARGIN.toFixed(2)} ${(MARGIN + 20).toFixed(2)} ${USABLE_WIDTH.toFixed(2)} 0.5 re f`);
+      write(label, MARGIN, MARGIN + 8, 7.5, false, MUTED);
+    }
+
+    const stream = parts.join('\n');
+    objects[pageObj] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] ` +
+      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObj} 0 R >>`;
+    objects[contentObj] =
+      `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`;
+  });
+
+  return assemblePdf(objects);
+}
+
 /**
  * Renders lines of text to a PDF document.
  *
@@ -155,7 +362,18 @@ export function renderTextPdf(lines: PdfLine[]): Buffer {
       `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`;
   });
 
-  // Assemble, recording the byte offset of every object for the xref table.
+  return assemblePdf(objects);
+}
+
+/**
+ * Objects in, file out: header, bodies, the xref table, the trailer.
+ *
+ * Shared by both renderers. The xref offsets have to be the exact byte
+ * position of each object, which is why everything is written as latin1 and
+ * measured as it goes — a multi-byte character counted as one byte shifts
+ * every offset after it and the file opens as corrupt.
+ */
+function assemblePdf(objects: string[]): Buffer {
   const chunks: Buffer[] = [];
   let offset = 0;
   const offsets: number[] = [];

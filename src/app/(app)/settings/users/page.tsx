@@ -4,6 +4,7 @@ import { listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { formatInstant } from '@/lib/dates';
+import { PasswordControls } from './password-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,7 +66,7 @@ export default async function UsersPage() {
               <TableHead className="text-end">Action</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="motion-stagger">
             {users.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>
@@ -123,13 +124,16 @@ export default async function UsersPage() {
                 </TableCell>
                 <TableCell className="text-end">
                   {user.canAdministerCompany && row.id !== user.id ? (
-                    <form action={toggleUserActiveAction}>
-                      <input type="hidden" name="userId" value={row.id} />
-                      <input type="hidden" name="active" value={String(!row.active)} />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {row.active ? 'Deactivate' : 'Reactivate'}
-                      </Button>
-                    </form>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <PasswordControls userId={row.id} fullName={row.fullName} />
+                      <form action={toggleUserActiveAction}>
+                        <input type="hidden" name="userId" value={row.id} />
+                        <input type="hidden" name="active" value={String(!row.active)} />
+                        <Button type="submit" variant="ghost" size="sm">
+                          {row.active ? 'Deactivate' : 'Reactivate'}
+                        </Button>
+                      </form>
+                    </div>
                   ) : null}
                 </TableCell>
               </TableRow>

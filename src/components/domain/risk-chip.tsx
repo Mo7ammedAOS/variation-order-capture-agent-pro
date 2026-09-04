@@ -19,14 +19,35 @@ export function RiskChip({
   level,
   label,
   className,
+  /**
+   * The deadline has passed.
+   *
+   * The ONLY thing in this product that moves continuously. A breached notice
+   * period is the one state where doing nothing costs real money, so it is the
+   * one state allowed to keep asking for attention — slowly, at 2.4s, because
+   * something urgent is read once and filtered out while something quiet at
+   * the edge of vision keeps being noticed.
+   *
+   * If a second looping animation is ever added anywhere in this app, this one
+   * stops working. That is the whole reason there is only one.
+   */
+  breached = false,
 }: {
   level: RiskLevel;
   label?: string;
   className?: string;
+  breached?: boolean;
 }) {
   const { variant, Icon, label: fallback } = CONFIG[level];
   return (
-    <Badge variant={variant} className={cn(className)}>
+    <Badge
+      variant={variant}
+      className={cn(
+        'transition-colors duration-200',
+        breached && level === 'red' && 'motion-breach',
+        className,
+      )}
+    >
       <Icon aria-hidden className="size-3.5" />
       {label ?? fallback}
     </Badge>

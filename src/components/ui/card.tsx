@@ -26,13 +26,27 @@ const TONE_CLASS: Record<PanelTone, string> = {
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   tone?: PanelTone;
+  /**
+   * The whole card opens something.
+   *
+   * Adds the hover lift. Set it ONLY when the card is genuinely a link or a
+   * button — a card that rises under the cursor and does nothing when clicked
+   * is a promise the interface does not keep, and people stop trusting the
+   * ones that do work.
+   */
+  interactive?: boolean;
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, tone = 'plain', ...props }, ref) => (
+  ({ className, tone = 'plain', interactive = false, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('panel text-card-foreground', TONE_CLASS[tone], className)}
+      className={cn(
+        'panel text-card-foreground',
+        TONE_CLASS[tone],
+        interactive && 'panel-interactive',
+        className,
+      )}
       {...props}
     />
   ),

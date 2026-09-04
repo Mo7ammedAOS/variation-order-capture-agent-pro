@@ -12,6 +12,8 @@ import { recordTaskNotifications } from '@/services/notification.service';
 import { openGate } from '@/services/approval.service';
 import { assertProjectAccess } from '@/services/project-access.service';
 import { draftNotice, markNoticeDelivered } from '@/services/notice-document.service';
+import { getAiProvider } from '@/integrations/claude';
+import { CONFIDENCE_REVIEW_THRESHOLD } from '@/integrations/claude/provider';
 
 /**
  * Notice control.
@@ -54,6 +56,25 @@ export async function assessNotice(
   // the PM the QS's allowance, and the change would look late or early for
   // reasons nobody could trace back to a setting.
   const scopeDueDays = rules?.pmScopeReviewDueDays ?? 3;
+
+  // The notice wording, drafted BEFORE the transaction opens.
+  //
+  // Out here for two reasons. It is a network call, and the transaction below
+  // holds row locks on a five second budget — a slow afternoon at the provider
+  // would start rolling back assessments. And it is optional: if it throws, or
+  // returns something the schema refuses, the notice is still drafted, still
+  // quoting the reporter's own words exactly as it did before. A notice must
+  // never fail to exist because a rewrite failed.
+  const narrative =
+    input.outcome === 'required'
+      ? await draftNarrative({
+          description: change.description ?? '',
+          title: change.title,
+          trade: change.trade,
+          location: change.location,
+          instructedBy: null,
+        })
+      : null;
 
   return prisma.$transaction(async (tx) => {
     const nextDue = new Date(todayUtc());
@@ -116,6 +137,7 @@ export async function assessNotice(
         potentialChangeId,
         projectId: change.projectId,
         actorUserId: user.id,
+        narrative,
       });
 
       await openGate(tx, {
@@ -299,4 +321,39 @@ export async function recordDeliveryResult(input: {
   });
 
   return updated;
+}
+
+/**
+ * The notice wording, or nothing.
+ *
+ * Every failure path returns null and the notice falls back to quoting the
+ * report verbatim — which is what it did for months and is never wrong, only
+ * plainer. The one case that is NOT a failure but still returns null is the
+ * model telling us it could not keep to the facts: `facts_all_from_report`
+ * comes back false, confidence drops, and prose that may contain an invented
+ * fact is exactly the prose that must not reach a contractual document.
+ */
+async function draftNarrative(input: {
+  description: string;
+  title: string;
+  trade: string | null;
+  location: string | null;
+  instructedBy: string | null;
+}): Promise<string | null> {
+  const source = input.description.trim();
+  // Nothing to improve. A one-line report reads better as itself than as three
+  // paragraphs of business English wrapped around six words.
+  if (source.length < 40) return null;
+
+  try {
+    const envelope = await getAiProvider().draftNoticeNarrative(input);
+    const narrative = envelope.extractedData.narrative.trim();
+    if (!narrative || envelope.confidenceScore < CONFIDENCE_REVIEW_THRESHOLD) return null;
+    return narrative;
+  } catch {
+    // Swallowed deliberately, and it is the only place in this service that
+    // swallows anything. The alternative is an assessment that fails because a
+    // rewrite did.
+    return null;
+  }
 }

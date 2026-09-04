@@ -1,4 +1,5 @@
 import { formatDate } from '@/lib/dates';
+import { type PdfBlock, type PdfDocument, wrapText } from '@/lib/pdf';
 
 /**
  * The words of a notice.
@@ -46,6 +47,18 @@ export interface NoticeFacts {
   potentialTimeImpact: boolean;
   /** The day the notice is drafted. Passed in, never read from the clock. */
   noticeDate: Date;
+  /**
+   * Professional prose for the account of what happened, written by the model
+   * from the reporter's own words.
+   *
+   * Optional, and the absence of it is a supported path rather than a
+   * degraded one: with no narrative the notice quotes `description` exactly as
+   * reported, which is what it did before and what it falls back to whenever
+   * the model is unavailable, slow, or returns something that fails
+   * validation. A notice must never fail to exist because a third party is
+   * having a bad afternoon.
+   */
+  narrative?: string | null;
 }
 
 export interface RenderedNotice {
@@ -111,7 +124,7 @@ export function renderNotice(facts: NoticeFacts): RenderedNotice {
     circumstance.join('\n'),
     '',
     'WHAT HAPPENED',
-    facts.description.trim(),
+    (facts.narrative ?? facts.description).trim(),
     '',
     'OUR POSITION',
     'This notice is given to preserve our entitlement within the period required ' +
@@ -131,4 +144,99 @@ export function renderNotice(facts: NoticeFacts): RenderedNotice {
   ].join('\n');
 
   return { subject, body };
+}
+
+/* ─────────────────────────── the printed notice ──────────────────────────── */
+
+/**
+ * The notice as a designed document rather than a typed page.
+ *
+ * ── It prints the STORED BODY, never a re-render from the facts ───────────
+ * The body is edited by a person and approved by two seats. That edited text
+ * IS the notice; anything else on the page would be a different document
+ * wearing the same reference. So this reads the same plain text that was
+ * approved and only decides how it looks — which means a wording change can
+ * never fail to reach the PDF, and the PDF can never say something nobody
+ * approved.
+ *
+ * ── How it knows what is what ─────────────────────────────────────────────
+ * Two conventions the template above already writes, and nothing else:
+ *
+ *   A LINE IN CAPITALS      a section heading
+ *   Label: value            a reference line, set in two columns
+ *
+ * Both are how the letter is written anyway, so the two files stay in step
+ * without either importing the other's idea of structure. A hand-edited body
+ * that abandons the conventions still prints correctly, just as prose.
+ *
+ * ── Why the layout carries meaning ────────────────────────────────────────
+ *   the company name, large, at the top   this came from a company
+ *   NOTICE, small and letter-spaced       what it is, before the words
+ *   a two-column reference block          what a commercial team files by
+ *   grey small-caps headings              scannable by someone after one fact
+ *   a footer with the reference           a page separated from the bundle is
+ *                                         still identifiable, which matters
+ *                                         because notices get photocopied
+ */
+export function noticeLetterPdf(
+  body: string,
+  meta: { companyName: string; documentType?: string; footer: string },
+): PdfDocument {
+  const blocks: PdfBlock[] = [];
+
+  blocks.push({ kind: 'text', text: meta.companyName, size: 17, bold: true, after: 2 });
+  blocks.push({
+    kind: 'text',
+    text: (meta.documentType ?? 'NOTICE OF A POTENTIAL VARIATION').toUpperCase(),
+    size: 8,
+    tracked: true,
+    color: [0.42, 0.45, 0.52],
+    after: 10,
+  });
+  blocks.push({ kind: 'rule', thickness: 1.2, color: [0.07, 0.09, 0.15], after: 14 });
+
+  // A reference line only counts while we are still in the block at the top.
+  // After the first paragraph, "Location: reception" is prose that happens to
+  // contain a colon, and setting it in two columns would look like a mistake.
+  let inReferenceBlock = true;
+
+  for (const raw of body.split('\n')) {
+    const text = raw.trimEnd();
+
+    if (text.trim() === '') {
+      blocks.push({ kind: 'space', height: 6 });
+      continue;
+    }
+
+    const isHeading = text === text.toUpperCase() && /[A-Z]/.test(text);
+    if (isHeading) {
+      inReferenceBlock = false;
+      blocks.push({ kind: 'keepWithNext' });
+      blocks.push({ kind: 'space', height: 8 });
+      blocks.push({
+        kind: 'text',
+        text,
+        size: 8,
+        bold: true,
+        tracked: true,
+        color: [0.31, 0.35, 0.44],
+        after: 3,
+      });
+      continue;
+    }
+
+    const field = text.match(/^([A-Z][A-Za-z /]{2,30}):\s+(.+)$/);
+    if (field?.[1] && field[2]) {
+      blocks.push({ kind: 'field', label: field[1], value: field[2] });
+      continue;
+    }
+
+    if (inReferenceBlock && text.startsWith('Dear ')) inReferenceBlock = false;
+
+    for (const wrapped of wrapText(text)) {
+      blocks.push({ kind: 'text', text: wrapped, size: 10 });
+    }
+  }
+
+  return { blocks, footer: meta.footer };
 }

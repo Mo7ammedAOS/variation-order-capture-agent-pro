@@ -48,7 +48,7 @@ export default async function BottlenecksPage() {
                 <TableHead>Risk</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="motion-stagger">
               {bottlenecks.map((bottleneck) => (
                 <TableRow key={bottleneck.id}>
                   <TableCell>

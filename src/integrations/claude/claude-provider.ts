@@ -239,6 +239,65 @@ export function toEnvelope(
   };
 }
 
+/**
+ * The rules the notice rewrite is held to.
+ *
+ * Written as prohibitions rather than aspirations, because the failure that
+ * matters here is not bad prose — it is a plausible sentence containing a fact
+ * nobody reported, served on a main contractor in the company's name and
+ * relied on months later.
+ */
+const NOTICE_NARRATIVE_PROMPT = [
+  'You restate a site report as the "what happened" section of a contractual',
+  'notice of a potential variation, for a fit-out contractor in the UAE.',
+  '',
+  'Write in the first person plural, past tense, plain professional English.',
+  'Two or three short paragraphs at most. Address the recipient as a peer, not',
+  'as an adversary and not as a customer being sold to.',
+  '',
+  'ABSOLUTE RULES. Every one of these is more important than the writing:',
+  '1. Use ONLY facts present in the report. Never add a date, a drawing or RFI',
+  '   number, a name, a quantity, a dimension, a rate, or an amount of money.',
+  '   If the report does not say it, it does not exist.',
+  '2. Never state or imply that anything is a variation as a matter of',
+  '   entitlement, that the other party is in breach, or that a cost or delay',
+  '   has been incurred. This document only says what happened.',
+  '3. Never say the work was instructed unless the report says it was.',
+  '   "The consultant asked" and "we were instructed" are different claims.',
+  '4. Where the report is unclear, leave the point out and name it in',
+  '   omitted_as_unclear. Never resolve an ambiguity by choosing a reading.',
+  '5. Plain ASCII punctuation only. No em dashes, no curly quotes.',
+  '',
+  'Set facts_all_from_report to false if you were not able to keep rule 1.',
+].join('\n');
+
+const NARRATIVE_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    narrative: {
+      type: 'string',
+      description: 'The account of what happened. Two or three short paragraphs.',
+    },
+    facts_all_from_report: {
+      type: 'boolean',
+      description: 'True only if every fact in the narrative appears in the report.',
+    },
+    omitted_as_unclear: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Points left out because the report was ambiguous.',
+    },
+  },
+  required: ['narrative', 'facts_all_from_report', 'omitted_as_unclear'],
+  additionalProperties: false,
+} as const;
+
+const narrativeSchema = z.object({
+  narrative: z.string().min(20).max(4000),
+  facts_all_from_report: z.boolean(),
+  omitted_as_unclear: z.array(z.string()).default([]),
+});
+
 export const claudeAiProvider: AiProvider = {
   name: 'claude',
   get model() {
@@ -298,6 +357,76 @@ export const claudeAiProvider: AiProvider = {
     }
 
     return toEnvelope(parsed.data, input.sourceType);
+  },
+
+  async draftNoticeNarrative(input) {
+    const env = getEnv();
+
+    const response = await getClient().messages.parse({
+      model: env.ANTHROPIC_MODEL,
+      // Two or three short paragraphs. The ceiling is what stops a model
+      // having a bad day from writing a page of invention into a contractual
+      // document — a wall again, not a request.
+      max_tokens: 900,
+      system: [
+        {
+          type: 'text',
+          text: NOTICE_NARRATIVE_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            'Rewrite the SITE REPORT below as the account of what happened, for a',
+            'notice of a potential variation. Facts may only come from the report.',
+            '',
+            `SUBJECT: ${input.title}`,
+            input.location ? `LOCATION ON SITE: ${input.location}` : null,
+            input.trade ? `TRADE: ${input.trade}` : null,
+            input.instructedBy ? `RAISED BY: ${input.instructedBy}` : null,
+            '',
+            'SITE REPORT:',
+            input.description,
+          ]
+            .filter((piece) => piece !== null)
+            .join('\n'),
+        },
+      ],
+      output_config: {
+        format: jsonSchemaOutputFormat(NARRATIVE_JSON_SCHEMA),
+        // Higher than extraction. This is the one piece of model output that
+        // is read by the other side's commercial team, and the difference
+        // between adequate and careful prose is worth a few cents on a
+        // document that is written once and read for years.
+        effort: 'medium',
+      },
+    });
+
+    if (response.stop_reason === 'refusal') {
+      throw new IntegrationError(
+        `Claude declined to draft the notice (${response.stop_details?.category ?? 'no category'})`,
+      );
+    }
+    if (response.stop_reason === 'max_tokens') {
+      throw new IntegrationError('Claude ran out of room before finishing the notice wording');
+    }
+
+    const parsed = narrativeSchema.safeParse(response.parsed_output);
+    if (!parsed.success) {
+      throw new IntegrationError(
+        `Claude returned something that was not the agreed shape: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
+      );
+    }
+
+    return {
+      extractedData: { narrative: parsed.data.narrative.trim() },
+      confidenceScore: parsed.data.facts_all_from_report ? 0.9 : 0.3,
+      sourceReferences: ['site-report'],
+      missingInformation: parsed.data.omitted_as_unclear,
+      suggestedNextAction: 'Read it against the original report before approving',
+    };
   },
 
   async transcribeVoiceNote() {
