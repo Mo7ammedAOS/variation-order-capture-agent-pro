@@ -69,10 +69,18 @@ question rather than guessing** — which project, whether this is a new change
 or evidence for an existing one, when the event happened, how many days notice
 the contract requires.
 
-The exchange is conversational. It understands a short reply ("the ceiling
-one", "yes", "thanks"), reads a photo caption as a strong signal, accepts
-several files at once, and closes the conversation politely instead of leaving
-an open loop.
+The exchange is conversational and asks one thing at a time: whether the work
+has started, when it happened, who asked for it, and which drawing it came
+from. It understands a short reply ("the ceiling one", "yes", "thanks"), reads
+a photo caption as a strong signal, accepts several files at once, reads the
+whole thing back for confirmation before anything is written, and closes the
+conversation politely instead of leaving an open loop.
+
+Answers are standardised as they arrive. "Yesterday", "last Monday", "the
+15th", "23rd of August" and "a couple of weeks back" all become one calendar
+date; "the consultants", "supervision consultant" and "MEP" all become one
+named party. What the reporter typed is kept word for word; what the register
+counts is consistent.
 
 ### Email capture
 Mail sent to the project inbox is parsed the same way, with attachments
@@ -174,8 +182,8 @@ back, and payments recorded against what is owed.
 ### Intelligence
 - Duplicate detection — flags when a change looks like one already raised
 - Semantic search across the project's commercial documents
-- Automatic extraction of dates, document references and work status from a
-  free-text report
+- Automatic extraction of dates, document references, work status and the
+  instructing party from a free-text report, standardised on the way in
 - **Every commercial figure is calculated in code.** The AI reads, suggests and
   routes; it never computes a number and never decides anything on its own.
 

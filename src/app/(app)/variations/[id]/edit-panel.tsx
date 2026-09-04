@@ -77,6 +77,7 @@ export interface EditPanelProps {
     trade: string;
     eventDate: string;
     workStatus: string;
+    instructedBy: string;
   };
 }
 
@@ -183,6 +184,23 @@ export function EditPanel({
                 <div className="flex min-w-0 flex-col gap-1.5">
                   <Label htmlFor="trade">Trade</Label>
                   <Input id="trade" name="trade" defaultValue={current.trade} />
+                </div>
+                <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
+                  <Label htmlFor="instructedBy">Asked by</Label>
+                  <Input
+                    id="instructedBy"
+                    name="instructedBy"
+                    defaultValue={current.instructedBy}
+                    placeholder="Consultant, landlord, Eng. Khalid…"
+                  />
+                  {/* Read out of the reporter's own sentence when it comes in
+                      by WhatsApp, so it is the field most likely to be nearly
+                      right. Whether the consultant asked or our own foreman did
+                      is the difference between a variation and rework we pay
+                      for, so nearly right is not good enough. */}
+                  <p className="text-xs text-muted-foreground">
+                    Who wanted the change, not who reported it.
+                  </p>
                 </div>
               </div>
 

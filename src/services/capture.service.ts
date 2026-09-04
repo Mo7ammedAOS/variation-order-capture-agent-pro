@@ -41,6 +41,7 @@ import {
   looksEvidenceOnly,
   parseDocumentReference,
   parseEventDate,
+  parseInstructedBy,
   parseWorkStatus,
 } from '@/lib/reply-intent';
 import { ambiguousSenderReason, resolveSender } from '@/services/sender-identity.service';
@@ -234,6 +235,7 @@ export async function captureFromChannel(
     eventDateKnown: parseEventDate(input.text, todayUtc()) !== null,
     documentReferenceKnown: parseDocumentReference(input.text) !== null,
     workStatusKnown: parseWorkStatus(input.text) !== null,
+    instructedByKnown: parseInstructedBy(input.text) !== null,
   });
 
   // Only one live job: there is nothing to be wrong about.
@@ -479,7 +481,7 @@ async function applyAnswer(
       reporterName: answer.userName,
       input: {
         ...input,
-        text: joinReport(answer.originalText, answer.replyText),
+        text: joinReport(answer.originalText, labelAnswer(answer.detailFields[0], answer.replyText)),
         attachments: mergeAttachments(pending, attachments),
       },
       integrationEventId: answer.integrationEventId,
@@ -517,6 +519,7 @@ async function applyAnswer(
         eventDateKnown: parseEventDate(answer.originalText, todayUtc()) !== null,
         documentReferenceKnown: parseDocumentReference(answer.originalText) !== null,
         workStatusKnown: parseWorkStatus(answer.originalText) !== null,
+        instructedByKnown: parseInstructedBy(answer.originalText) !== null,
       }),
       sourceMessageId: answer.sourceMessageId,
       sourceSubject: answer.sourceSubject,
@@ -638,6 +641,26 @@ async function applyAnswer(
  * drawing reference, the AI extraction — so an answer that lives only in a
  * reply variable is an answer nothing can see.
  */
+/**
+ * An answer that would not survive being folded into the report on its own.
+ *
+ * The pre-filing questions are answered, joined onto the report, and the whole
+ * thing is read again — which works for a date because "yesterday" still says
+ * yesterday wherever it lands. It does NOT work for who asked: "the mall guy"
+ * inside a paragraph is a person being mentioned, and the parser is
+ * deliberately unwilling to attribute a claim to whoever a report happens to
+ * name. So the answer carries its question with it.
+ *
+ * Left alone when he already phrased it that way, so a report never reads
+ * "Requested by: requested by the consultant".
+ */
+function labelAnswer(field: string | undefined, reply: string): string {
+  const text = reply.trim();
+  if (field !== 'instructed_by' || text === '') return reply;
+  if (/\b(?:REQUESTED|ASKED|INSTRUCTED|RAISED|ORDERED|DIRECTED)\s+BY\b/i.test(text)) return reply;
+  return `Requested by: ${text}`;
+}
+
 function joinReport(original: string, reply: string): string {
   const first = (original ?? '').trim();
   const second = (reply ?? '').trim();
@@ -696,6 +719,7 @@ async function fileAndFollowUp(args: {
           eventDateKnown: parseEventDate(args.input.text, todayUtc()) !== null,
           documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
           workStatusKnown: parseWorkStatus(args.input.text) !== null,
+          instructedByKnown: parseInstructedBy(args.input.text) !== null,
         });
 
   if (missing.length > 0 && args.integrationEventId) {
@@ -912,6 +936,7 @@ async function applyCaptureDetails(
       eventDate: true,
       sourceReference: true,
       workStatus: true,
+      instructedBy: true,
       project: {
         select: { projectCode: true, contractRules: { select: { noticePeriodDays: true } } },
       },
@@ -954,6 +979,19 @@ async function applyCaptureDetails(
     applied.push(`work ${work.replace(/_/g, ' ')}`);
   }
 
+  // Only when that is what was asked. A short answer to any other question
+  // reads as a name to a parser told to expect one — "last Monday" would be
+  // filed as the party who instructed the change, and a plausible wrong
+  // attribution is worse than an empty field, because nobody re-checks a field
+  // that is filled in.
+  if (answer.detailFields[0] === 'instructed_by') {
+    const instructedBy = parseInstructedBy(reply);
+    if (instructedBy && instructedBy !== change.instructedBy) {
+      data.instructedBy = instructedBy;
+      applied.push(`asked by ${instructedBy}`);
+    }
+  }
+
   data.description = `${change.description}\n\nFollow-up from ${answer.userName}: ${reply}`;
 
   await prisma.potentialChange.update({ where: { id: change.id }, data });
@@ -969,6 +1007,7 @@ async function applyCaptureDetails(
       eventDate: change.eventDate,
       sourceReference: change.sourceReference,
       workStatus: change.workStatus,
+      instructedBy: change.instructedBy,
     },
     newValue: { reply, applied },
     source: input.channel === 'whatsapp' ? 'whatsapp' : 'email',
@@ -1221,6 +1260,10 @@ export async function createChangeFromCapture(args: {
         // Work already under way on an uninstructed change is the expensive
         // case, and it changes how the assessment is read.
         workStatus: parseWorkStatus(input.text) ?? 'not_started',
+        // Who wanted it. The consultant asking for a different finish is a
+        // variation; the same words from our own foreman are rework we pay
+        // for, and nothing else on the record can tell the two apart.
+        instructedBy: parseInstructedBy(input.text),
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
         currentOwnerUserId: noticeOwner,
@@ -1640,6 +1683,7 @@ async function summariseCapture(projectId: string, input: CaptureInput): Promise
   const dated = parseEventDate(input.text, todayUtc());
   const status = parseWorkStatus(input.text);
   const reference = parseDocumentReference(input.text);
+  const instructedBy = parseInstructedBy(input.text);
   const text = input.text.trim();
 
   return {
@@ -1647,6 +1691,7 @@ async function summariseCapture(projectId: string, input: CaptureInput): Promise
     description: text.length > 220 ? `${text.slice(0, 220).trimEnd()}…` : text,
     eventDate: formatDate(dated?.date ?? todayUtc()),
     workStatus: status ? (WORK_STATUS_WORDS[status] ?? null) : null,
+    instructedBy,
     documentReference: reference ?? null,
     evidenceCount: input.attachments?.length ?? 0,
   };

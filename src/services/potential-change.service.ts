@@ -79,6 +79,13 @@ export const potentialChangeCreateSchema = z.object({
   sourceSenderName: z.string().trim().max(200).optional().nullable(),
   sourceSenderPhoneOrEmail: z.string().trim().max(200).optional().nullable(),
   requestedByContactId: z.string().uuid().optional().nullable(),
+  /**
+   * Who asked for the change, in words. Editable because it is READ out of a
+   * sentence when the report arrives by WhatsApp, and anything read out of a
+   * sentence is occasionally wrong. A fact that decides whether there is a
+   * claim has to be correctable by the person who was standing there.
+   */
+  instructedBy: z.string().trim().max(120).optional().nullable(),
   /** Free-text urgency from the mobile form, mapped to task priority. */
   urgency: z.enum(['low', 'normal', 'high', 'critical']).default('normal'),
 });
@@ -228,6 +235,7 @@ export async function createPotentialChange(
           sourceLocation: input.sourceLocation ?? null,
           sourceOccurredAt: input.sourceOccurredAt ?? null,
           sourceReference: input.sourceReference ?? null,
+          instructedBy: input.instructedBy ?? null,
           sourceMessageId: input.sourceMessageId ?? null,
           sourceSenderName: input.sourceSenderName ?? null,
           sourceSenderPhoneOrEmail: input.sourceSenderPhoneOrEmail ?? null,

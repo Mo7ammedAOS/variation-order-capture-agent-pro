@@ -150,6 +150,11 @@ export function parseEventDate(text: string, today: Date): ParsedDate | null {
   const upper = text.toUpperCase();
   const base = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
   const dayMs = 24 * 60 * 60 * 1000;
+  // A short reply is an ANSWER to "when did this happen?", so shapes that would
+  // be reckless to hunt for inside a paragraph — a bare "15th", a bare "Sat" —
+  // are safe here. In a report, "1st fix" and "the sun shade" are the words of
+  // the trade, not a date.
+  const brief = words(text).length <= 4;
 
   const relative = (days: number, phrase: string): ParsedDate => ({
     date: new Date(base - days * dayMs),
@@ -159,15 +164,32 @@ export function parseEventDate(text: string, today: Date): ParsedDate | null {
   if (/\b(TODAY|THIS MORNING|THIS AFTERNOON|THIS EVENING|JUST NOW|TODAY'?S)\b/.test(upper)) {
     return relative(0, 'today');
   }
+  if (/\bDAY BEFORE YESTERDAY\b/.test(upper)) return relative(2, 'the day before yesterday');
   if (/\b(YESTERDAY|LAST NIGHT|YESTERDAY'?S)\b/.test(upper)) {
     return relative(1, 'yesterday');
   }
 
-  const ago = upper.match(/\b(\d{1,3})\s*(DAY|DAYS|WEEK|WEEKS)\s+AGO\b/);
+  // "3 days ago", "two weeks ago", "a week back", "a couple of days ago".
+  const ago = upper.match(
+    /\b(\d{1,3}|[A-Z]+)\s+(?:OF\s+)?(DAYS?|WEEKS?|MONTHS?)\s+(?:AGO|BACK|EARLIER)\b/,
+  );
   if (ago) {
-    const count = Number(ago[1]);
-    const days = /WEEK/.test(ago[2] ?? '') ? count * 7 : count;
-    if (days >= 0 && days <= MAX_DAYS_BACK) return relative(days, ago[0].toLowerCase());
+    const raw = ago[1] ?? '';
+    const count = /^\d+$/.test(raw) ? Number(raw) : WORD_NUMBERS[raw];
+    const unit = ago[2] ?? '';
+    if (count !== undefined && count >= 0) {
+      if (unit.startsWith('MONTH')) {
+        const shifted = monthShift(today, -count);
+        // Clamped, not rolled. "One month ago" on 31 March is 28 February, and
+        // Date arithmetic would make it 3 March — a deadline three days out.
+        const day = Math.min(today.getUTCDate(), daysInMonth(shifted.year, shifted.month));
+        const parsed = accept(shifted.year, shifted.month, day, ago[0], base);
+        if (parsed) return parsed;
+      } else {
+        const days = unit.startsWith('WEEK') ? count * 7 : count;
+        if (days <= MAX_DAYS_BACK) return relative(days, ago[0].toLowerCase());
+      }
+    }
   }
   if (/\bLAST WEEK\b/.test(upper)) return relative(7, 'last week');
 
@@ -186,22 +208,94 @@ export function parseEventDate(text: string, today: Date): ParsedDate | null {
     if (parsed) return parsed;
   }
 
-  // 28 Aug, 28 August 2026, Aug 28
-  const dayMonth = upper.match(/\b(\d{1,2})\s+([A-Z]{3,9})\.?\s*(\d{4})?\b/);
-  if (dayMonth && MONTHS[dayMonth[2] ?? ''] !== undefined) {
-    const year = dayMonth[3] ? Number(dayMonth[3]) : today.getUTCFullYear();
-    const parsed = accept(year, MONTHS[dayMonth[2] ?? ''] ?? 0, Number(dayMonth[1]), dayMonth[0], base);
+  // 28 Aug · 28th August 2026 · 23rd of August. Every candidate is tried, not
+  // just the first: "2 rooms affected, happened 23 Aug" opens with a number and
+  // a word that is not a month, and stopping there would lose the real date.
+  for (const m of upper.matchAll(/\b(\d{1,2})(?:ST|ND|RD|TH)?\s*(?:OF\s+)?([A-Z]{3,9})\.?,?\s*(\d{4})?\b/g)) {
+    const month = MONTHS[m[2] ?? ''];
+    if (month === undefined) continue;
+    const year = m[3] ? Number(m[3]) : today.getUTCFullYear();
+    const parsed = accept(year, month, Number(m[1]), m[0], base);
     if (parsed) return parsed;
   }
 
-  const monthDay = upper.match(/\b([A-Z]{3,9})\.?\s+(\d{1,2})(?:,?\s*(\d{4}))?\b/);
-  if (monthDay && MONTHS[monthDay[1] ?? ''] !== undefined) {
-    const year = monthDay[3] ? Number(monthDay[3]) : today.getUTCFullYear();
-    const parsed = accept(year, MONTHS[monthDay[1] ?? ''] ?? 0, Number(monthDay[2]), monthDay[0], base);
+  // Aug 28 · August 28, 2026 · Aug 28th
+  for (const m of upper.matchAll(/\b([A-Z]{3,9})\.?\s+(\d{1,2})(?:ST|ND|RD|TH)?(?:,?\s*(\d{4}))?\b/g)) {
+    const month = MONTHS[m[1] ?? ''];
+    if (month === undefined) continue;
+    const year = m[3] ? Number(m[3]) : today.getUTCFullYear();
+    const parsed = accept(year, month, Number(m[2]), m[0], base);
+    if (parsed) return parsed;
+  }
+
+  // "15th of this month", "3rd of last month".
+  const ofMonth = upper.match(
+    /\b(?:THE\s+)?(\d{1,2})(?:ST|ND|RD|TH)?\s+OF\s+(THIS|CURRENT|LAST|PREVIOUS)\s+MONTH\b/,
+  );
+  if (ofMonth) {
+    const shifted = monthShift(today, /LAST|PREVIOUS/.test(ofMonth[2] ?? '') ? -1 : 0);
+    const parsed = accept(shifted.year, shifted.month, Number(ofMonth[1]), ofMonth[0], base);
+    if (parsed) return parsed;
+  }
+
+  // "last Monday", "on Friday", and — in a short answer only — a bare "Sat".
+  const weekday = upper.match(
+    /\b(LAST|THIS|PAST|ON)?\s*(SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUN|MON|TUES|TUE|WEDS|WED|THURS|THUR|THU|FRI|SAT)\b/,
+  );
+  if (weekday) {
+    const name = weekday[2] ?? '';
+    const qualified = Boolean(weekday[1]);
+    const target = WEEKDAYS[name];
+    // "Sat" is a word on a building site before it is a day. An abbreviation
+    // counts only when something in front of it says a day is meant, or when
+    // the whole message is the answer to "when did this happen?".
+    if (target !== undefined && (name.endsWith('DAY') || qualified || brief)) {
+      const back = (new Date(base).getUTCDay() - target + 7) % 7;
+      // Today, said as a weekday, means today — unless they said LAST, which
+      // can only mean the one before.
+      const days = back === 0 && weekday[1] === 'LAST' ? 7 : back;
+      return relative(days, weekday[0].trim().toLowerCase());
+    }
+  }
+
+  // "on the 15th", "the 3rd" — and a bare "15th" only in a short answer, where
+  // it cannot be the "1st fix" every fit-out programme is full of.
+  const ordinal = upper.match(/\b(ON\s+THE|ON|THE)?\s*(\d{1,2})(?:ST|ND|RD|TH)\b/);
+  if (ordinal && (ordinal[1] || brief)) {
+    const day = Number(ordinal[2]);
+    // This month if that day has already been; otherwise the same day last
+    // month, because an event that has not happened yet is not an event.
+    const future = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), day) > base;
+    const shifted = monthShift(today, future ? -1 : 0);
+    const parsed = accept(shifted.year, shifted.month, day, ordinal[0], base);
     if (parsed) return parsed;
   }
 
   return null;
+}
+
+/** Word forms of the small numbers people actually type. */
+const WORD_NUMBERS: Record<string, number> = {
+  A: 1, AN: 1, ONE: 1, COUPLE: 2, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5,
+  SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9, TEN: 10,
+};
+
+const WEEKDAYS: Record<string, number> = {
+  SUNDAY: 0, MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6,
+  SUN: 0, MON: 1, TUE: 2, TUES: 2, WED: 3, WEDS: 3, THU: 4, THUR: 4, THURS: 4, FRI: 5, SAT: 6,
+};
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+/** The same calendar month, so many months back. */
+function monthShift(today: Date, months: number): { year: number; month: number } {
+  const raw = today.getUTCMonth() + months;
+  return {
+    year: today.getUTCFullYear() + Math.floor(raw / 12),
+    month: ((raw % 12) + 12) % 12,
+  };
 }
 
 function fullYear(value: number): number {
@@ -271,6 +365,165 @@ export function parseDocumentReference(text: string, excludeCodes: string[] = []
   return `${generic[1]}${generic[2] ? generic[2].replace(/\s+/g, ' ') : ''}`.trim();
 }
 
+/* ────────────────────────── who asked for it ─────────────────────────────── */
+
+/**
+ * The parties who instruct a change on a fit-out job, and what each is called.
+ *
+ * A claim turns on WHO wanted it. The consultant asking for a different finish
+ * is a variation; the same words from our own foreman is rework we pay for.
+ * That distinction is decided months later by somebody reading the record, so
+ * the answer is standardised on the way in — "the consultants", "consultant",
+ * "supervision consultant" and "the engineer's rep" all have to be searchable
+ * as one party, or a register cannot be counted.
+ *
+ * Abbreviations are marked because they are only safe in a short answer. "PM"
+ * inside a paragraph is as likely to be four o'clock, and "CD" is anybody's
+ * guess.
+ */
+const PARTIES: { match: string; label: string; short?: boolean }[] = [
+  { match: 'MAIN\\s+CONTRACTOR', label: 'Main contractor' },
+  { match: 'MC', label: 'Main contractor', short: true },
+  { match: 'SUB\\s?CONTRACTOR|SUBBIE', label: 'Subcontractor' },
+  { match: 'SUPERVISION\\s+CONSULTANT|CONSULTANTS?|ENGINEER\'?S?\\s+REPRESENTATIVE', label: 'Consultant' },
+  { match: 'INTERIOR\\s+DESIGNER|DESIGNERS?', label: 'Interior designer' },
+  { match: 'ARCHITECTS?', label: 'Architect' },
+  { match: 'MEP\\s+CONSULTANT|MEP', label: 'MEP consultant' },
+  { match: 'LANDLORD|BUILDING\\s+MANAGEMENT|MALL\\s+MANAGEMENT', label: 'Landlord' },
+  { match: 'CIVIL\\s+DEFEN[CS]E', label: 'Civil Defence' },
+  { match: 'MUNICIPALITY|TRAKHEES|DEWA|AUTHORITY|AUTHORITIES', label: 'Authority' },
+  { match: 'DEVELOPER', label: 'Developer' },
+  { match: 'TENANT', label: 'Tenant' },
+  { match: 'CLIENT|EMPLOYER|OWNER', label: 'Client' },
+  { match: 'PROJECT\\s+MANAGER', label: 'Project manager' },
+  { match: 'PM', label: 'Project manager', short: true },
+  { match: 'QUANTITY\\s+SURVEYOR', label: 'Quantity surveyor' },
+  { match: 'QS', label: 'Quantity surveyor', short: true },
+  { match: 'CONSTRUCTION\\s+MANAGER', label: 'Construction manager' },
+  { match: 'SITE\\s+ENGINEER', label: 'Site engineer' },
+  { match: 'FOREMAN', label: 'Foreman' },
+];
+
+/** Said next to a party, this is the party who ASKED rather than one mentioned. */
+const REQUEST_VERBS =
+  'ASKED|ASKS|REQUESTED|REQUESTS|INSTRUCTED|INSTRUCTS|WANTS|WANTED|REQUIRES|REQUIRED|TOLD|ORDERED|DIRECTED|RAISED|DECIDED|CONFIRMED|APPROVED|ISSUED';
+
+/** Acronyms that are wrong in any other case, however the sentence is tidied. */
+const ACRONYMS = new Set(['MEP', 'QS', 'PM', 'RFI', 'HSE', 'HVAC', 'AC', 'MD', 'IT', 'BOQ']);
+
+/**
+ * Who asked for the change.
+ *
+ * ── Why it is read twice, differently ─────────────────────────────────────
+ * The same function reads a one-line ANSWER ("the consultant") and a whole
+ * REPORT ("we told the client the ceiling would not clear, so the consultant
+ * asked us to drop it"). Those need opposite instincts. In an answer, any
+ * party word is the answer. In a report, half the parties on the job get
+ * mentioned, and picking the first one would file "Client" against a change
+ * the client never asked for — a wrong attribution on a claim is worse than an
+ * empty field, because nobody goes back and checks a field that is filled in.
+ *
+ * So in a report a party counts only where the sentence says it instructed:
+ * after "by" or "from", or in front of a verb like "asked" or "wants".
+ */
+export function parseInstructedBy(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed === '' || looksEvidenceOnly(trimmed) || isPleasantry(trimmed)) return null;
+
+  const brief = words(trimmed).length <= 8;
+
+  // "Requested by: the consultant" — how the follow-up labels an answer, and
+  // how people write it themselves.
+  const labelled = trimmed.match(
+    /\b(?:REQUESTED|ASKED|INSTRUCTED|RAISED|ORDERED|DIRECTED)\s+BY\s*[:\-]?\s*([^\n.;]{2,60})/i,
+  );
+  const stated = labelled?.[1]?.trim() ?? null;
+  const scope = stated ?? trimmed;
+  const upper = scope.toUpperCase();
+  const anywhere = brief || stated !== null;
+
+  let party: string | null = null;
+  for (const candidate of PARTIES) {
+    if (candidate.short && !anywhere) continue;
+    const found = anywhere
+      ? new RegExp(`\\b(?:${candidate.match})\\b`).test(upper)
+      : new RegExp(
+          `\\b(?:BY|FROM)\\s+(?:THE\\s+)?(?:${candidate.match})\\b` +
+            `|\\b(?:${candidate.match})\\b\\s+(?:HAS\\s+|HAVE\\s+)?(?:${REQUEST_VERBS})\\b`,
+        ).test(upper);
+    if (found) {
+      party = candidate.label;
+      break;
+    }
+  }
+
+  // A named person, which is what actually gets quoted in a meeting six months
+  // later. Kept ALONGSIDE the party rather than instead of it: "Eng. Khalid"
+  // means nothing to a reader who does not know which side he is on.
+  const person = scope.match(/\b(MR|MRS|MS|DR|ENG|ENGR|ENGINEER)\.?\s+([A-Za-z][A-Za-z'-]{1,20})/i);
+  // "the engineer asked for" is a sentence, not a man called Asked. A title
+  // followed by a verb names nobody.
+  const candidate = person?.[2] ?? '';
+  const named =
+    person && !new RegExp(`^(?:${REQUEST_VERBS}|SAID|THINKS|FROM|THE|OF|ON|AT|AND|HAS|HAVE|IS|WAS|WILL|WANT)$`, 'i').test(candidate)
+      ? `${titleWord(person[1] ?? '')} ${capitalise(candidate)}`
+      : null;
+
+  if (named && party) return `${named} (${party})`;
+  if (named) return named;
+  if (party) return party;
+
+  // Nothing recognised. An explicit "requested by X" is taken at its word, and
+  // so is a short answer — he was asked who, and this is what he said. A long
+  // report that names nobody is left empty rather than guessed at.
+  if (stated) return tidy(stated);
+  if (brief) return tidy(trimmed);
+  return null;
+}
+
+function capitalise(word: string): string {
+  const upper = word.toUpperCase();
+  if (ACRONYMS.has(upper)) return upper;
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function titleWord(word: string): string {
+  const upper = word.toUpperCase();
+  if (upper === 'ENG' || upper === 'ENGR' || upper === 'ENGINEER') return 'Eng.';
+  return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+}
+
+/** House style for a free-text party: no leading article, no trailing full stop. */
+function tidy(value: string): string {
+  const cleaned = value
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:THE|A|AN|ITS|IT'?S|WAS|BY|FROM)\s+/i, '')
+    .replace(/[.,;:!?\s]+$/, '')
+    .trim();
+  if (cleaned === '') return value.trim().slice(0, 60);
+  const capped = cleaned.length > 60 ? `${cleaned.slice(0, 60).trimEnd()}…` : cleaned;
+  return capped
+    .split(' ')
+    .map((word, index) => (index === 0 ? capitalise(word) : ACRONYMS.has(word.toUpperCase()) ? word.toUpperCase() : word))
+    .join(' ');
+}
+
+/**
+ * Words that are TRYING to say when, without landing on a day.
+ *
+ * "Last month", "over the weekend", "during Ramadan", "before Eid". Each is an
+ * answer to "when did this happen?" and none of them is a date. Knowing the
+ * difference between one of these and an unrelated new report is what keeps a
+ * vague answer from being filed as a second change — see the detail branch of
+ * `interpret`.
+ */
+const TEMPORAL_WORDS =
+  /\b(TODAY|YESTERDAY|TOMORROW|MORNING|AFTERNOON|EVENING|NIGHT|WEEK|WEEKS|WEEKEND|MONTH|MONTHS|YEAR|YEARS|DAY|DAYS|AGO|BACK|EARLIER|RECENTLY|LATELY|SOMETIME|RAMADAN|EID|HOLIDAY|HOLIDAYS|SHUTDOWN|LAST|SINCE|BEFORE|AFTER|AROUND|BEGINNING|START|MIDDLE|MID|END)\b/;
+
+export function looksTemporal(text: string): boolean {
+  return TEMPORAL_WORDS.test(text.toUpperCase());
+}
+
 export type ReportedWorkStatus = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
 
 /**
@@ -295,7 +548,7 @@ export type ReportedWorkStatus = 'not_started' | 'in_progress' | 'completed' | '
  * is not `work_status`, yes and no still mean nothing.
  */
 export function parseAnswerForField(
-  field: 'work_status' | 'event_date' | 'document_reference',
+  field: 'work_status' | 'event_date' | 'instructed_by' | 'document_reference',
   text: string,
   today: Date = new Date(),
 ): ReportedWorkStatus | ParsedDate | string | null {
@@ -314,6 +567,7 @@ export function parseAnswerForField(
   }
 
   if (field === 'event_date') return parseEventDate(text, today);
+  if (field === 'instructed_by') return parseInstructedBy(text);
   return parseDocumentReference(text);
 }
 

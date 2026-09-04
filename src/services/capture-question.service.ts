@@ -11,6 +11,7 @@ import { briefOf, matchChangeByWords, matchChangeInText } from '@/lib/change-bri
 import {
   closingLine,
   isNewChangeRequest,
+  looksTemporal,
   isPleasantry,
   mentionsDocument,
   parseDocumentReference,
@@ -149,6 +150,13 @@ const DETAIL_ANSWER_MAX_WORDS = 25;
 /** Below this an unmatched reply to an ATTACH question is a typo, not a description. */
 const DESCRIPTION_MIN_WORDS = 3;
 
+/**
+ * A reply this short, while a question is open, is an answer to it — even when
+ * nothing can be parsed out of it. Longer than this and it is a new report,
+ * and swallowing a new report into the last one is the worse mistake.
+ */
+const BRIEF_ANSWER_MAX_WORDS = 6;
+
 export interface AskInput {
   integrationEventId: string;
   userId: string;
@@ -273,6 +281,22 @@ function replySubject(sourceSubject: string | null | undefined, token: string): 
  */
 const MAX_ASKS = 2;
 
+/**
+ * The whole conversation's ceiling, counted across every fact.
+ *
+ * `MAX_ASKS` stops one question being put a third time. On its own that was
+ * not enough once a fourth fact was added: asking work status, then the date,
+ * then who asked for it counts as three separate questions on the same
+ * capture, and the old rule read the third as a repeat and refused to send it
+ * — so the question Osman asked for on 2026-09-05 would have been silently
+ * dropped for every report that was missing more than one fact.
+ *
+ * Four, matching his instruction: three or four questions at most, then file
+ * with what we have. A man on a ladder answers four things. He does not answer
+ * eight.
+ */
+const MAX_DETAIL_QUESTIONS = 4;
+
 async function putQuestion(input: {
   integrationEventId: string;
   userId: string;
@@ -296,11 +320,20 @@ async function putQuestion(input: {
   // there rather than tracked in memory across two separate requests.
   const previous = await prisma.captureQuestion.findUnique({
     where: { integrationEventId: input.integrationEventId },
-    select: { kind: true, askCount: true },
+    select: { kind: true, askCount: true, detailFields: true, detailAsks: true },
   });
-  const repeat = previous?.kind === input.kind;
-  const askCount = repeat ? previous.askCount + 1 : 1;
+
+  // A repeat is the SAME question again, not merely the same kind. Asking for
+  // the date after the work status is the next question, and counting it as a
+  // repeat is how the third fact never gets asked at all.
+  const repeat =
+    previous?.kind === input.kind &&
+    (input.kind !== 'detail' || previous.detailFields[0] === input.detailFields?.[0]);
+  const askCount = repeat ? previous!.askCount + 1 : 1;
   if (askCount > MAX_ASKS) return false;
+
+  const detailAsks = (previous?.detailAsks ?? 0) + (input.kind === 'detail' ? 1 : 0);
+  if (input.kind === 'detail' && detailAsks > MAX_DETAIL_QUESTIONS) return false;
 
   const expiresAt = new Date();
   expiresAt.setUTCDate(expiresAt.getUTCDate() + EXPIRES_AFTER_DAYS[input.kind]);
@@ -323,6 +356,7 @@ async function putQuestion(input: {
       answeredAt: null,
       askedAt: new Date(),
       askCount,
+      detailAsks,
       expiresAt,
     };
 
@@ -593,7 +627,7 @@ export async function askForDescription(input: {
   return sent ? { token } : null;
 }
 
-export type DetailField = 'event_date' | 'document_reference' | 'work_status';
+export type DetailField = 'work_status' | 'event_date' | 'instructed_by' | 'document_reference';
 
 /**
  * Which facts are worth one more message, and which are not.
@@ -616,6 +650,7 @@ export function plannedDetailFields(input: {
   eventDateKnown: boolean;
   documentReferenceKnown: boolean;
   workStatusKnown: boolean;
+  instructedByKnown: boolean;
 }): DetailField[] {
   const fields: DetailField[] = [];
   // Work status leads. Whether the work has already been done is what decides
@@ -624,6 +659,11 @@ export function plannedDetailFields(input: {
   // later from a photograph.
   if (!input.workStatusKnown) fields.push('work_status');
   if (!input.eventDateKnown) fields.push('event_date');
+  // Third, because it is the fact that decides whether this is a claim at all
+  // and the one nobody can reconstruct from the file afterwards. It sits below
+  // the date only because a wrong date loses entitlement outright, where a
+  // missing instructor makes a claim arguable rather than dead.
+  if (!input.instructedByKnown) fields.push('instructed_by');
   if (!input.documentReferenceKnown && mentionsDocument(input.text)) {
     fields.push('document_reference');
   }
@@ -637,7 +677,13 @@ export function plannedDetailFields(input: {
 
 const DETAIL_PROMPTS: Record<DetailField, string> = {
   work_status: 'Has the work started on site?',
+  // Deliberately open. "What date?" gets a date or nothing; "when" gets
+  // "yesterday", "last Monday", "the 15th" — all of which are read, and all of
+  // which are what a person actually says. The answer is standardised before
+  // it is stored and read back to him as 04 Sep 2026, so an open question
+  // costs nothing and gets answered far more often.
   event_date: 'When did this happen?',
+  instructed_by: 'Who asked for this change?',
   document_reference: 'Which drawing or RFI is it from?',
 };
 
@@ -925,7 +971,10 @@ async function interpret(
     // times in a row on 2026-09-04.
     const asked = question.detailFields[0];
     const answered =
-      asked === 'work_status' || asked === 'event_date' || asked === 'document_reference'
+      asked === 'work_status' ||
+      asked === 'event_date' ||
+      asked === 'instructed_by' ||
+      asked === 'document_reference'
         ? parseAnswerForField(asked, rawText) !== null
         : false;
 
@@ -934,9 +983,27 @@ async function interpret(
       parseEventDate(rawText, new Date()) !== null ||
       parseDocumentReference(rawText) !== null ||
       parseWorkStatus(rawText) !== null;
-    if (!yieldsFact) return null;
+    if (yieldsFact) return { outcome: 'detailed', ...none };
 
-    return { outcome: 'detailed', ...none };
+    // A date answer that could not be pinned down — "last month", "over the
+    // weekend", "during Ramadan". It is unmistakably an attempt to answer
+    // WHEN, so it is carried into the same report and the question is put once
+    // more, rather than becoming a second change: that fallthrough is what
+    // produced the loop on 2026-09-04, where a reply turned into a fresh
+    // capture and the exchange restarted from "which project?".
+    //
+    // Deliberately narrow. "Wall moved again" is three words while a question
+    // is open and it is a NEW REPORT, not an answer, and swallowing it would
+    // be the worse mistake of the two. Only a reply reaching for time counts.
+    if (
+      asked === 'event_date' &&
+      looksTemporal(rawText) &&
+      !isNewChangeRequest(rawText) &&
+      wordCount(rawText) <= BRIEF_ANSWER_MAX_WORDS
+    ) {
+      return { outcome: 'detailed', ...none };
+    }
+    return null;
   }
 
   if (question.kind === 'describe') {
@@ -1116,6 +1183,7 @@ export interface CaptureSummary {
   description: string;
   eventDate: string | null;
   workStatus: string | null;
+  instructedBy: string | null;
   documentReference: string | null;
   evidenceCount: number;
 }
@@ -1157,6 +1225,7 @@ export async function askToConfirmCapture(input: {
     `Change: ${s.description}`,
     s.eventDate ? `Happened: ${s.eventDate}` : null,
     s.workStatus ? `Work: ${s.workStatus}` : null,
+    s.instructedBy ? `Asked by: ${s.instructedBy}` : null,
     s.documentReference ? `Reference: ${s.documentReference}` : null,
     s.evidenceCount > 0
       ? `Evidence: ${s.evidenceCount} ${s.evidenceCount === 1 ? 'file' : 'files'}`

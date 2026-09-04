@@ -556,6 +556,10 @@ export default async function PotentialChangeDetailPage({
                   )}
                 </Field>
                 <Field label="Reported by">{change.reportedBy?.fullName ?? '—'}</Field>
+                {/* Who WANTED it, which is not who reported it. The consultant
+                    asking for a different finish is a variation; the identical
+                    words from our own foreman are rework we pay for. */}
+                <Field label="Asked by">{change.instructedBy ?? '—'}</Field>
                 <Field label="Where on site" icon={MapPin}>{change.location ?? '—'}</Field>
                 <Field label="Trade">{change.trade ?? '—'}</Field>
                 <Field label="Event date">{formatDate(change.eventDate)}</Field>
@@ -648,6 +652,7 @@ export default async function PotentialChangeDetailPage({
               trade: change.trade ?? '',
               eventDate: toDateInputValue(change.eventDate),
               workStatus: change.workStatus,
+              instructedBy: change.instructedBy ?? '',
             }}
           />
 

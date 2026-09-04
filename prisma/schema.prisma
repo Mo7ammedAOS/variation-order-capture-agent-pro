@@ -857,6 +857,20 @@ model PotentialChange {
 
   reportedByUserId     String?  @map("reported_by_user_id") @db.Uuid
   requestedByContactId String?  @map("requested_by_contact_id") @db.Uuid
+  /// WHO ASKED FOR IT, in words, standardised on the way in — "Consultant",
+  /// "Landlord", "Eng. Khalid (Consultant)".
+  ///
+  /// Free text rather than a link to `requestedByContact`, and deliberately so.
+  /// The person who instructs a change on site is very often not in the
+  /// project's contact list — a visiting authority inspector, somebody from
+  /// the landlord's fit-out team, a consultant's junior nobody has met before —
+  /// and a field that can only hold a known contact records nothing at all in
+  /// exactly those cases. The contact link stays for when it IS somebody
+  /// known; this is what the reporter said.
+  ///
+  /// It decides whether there is a claim: the same instruction from the
+  /// consultant is a variation and from our own foreman is rework we pay for.
+  instructedBy         String?  @map("instructed_by")
 
   eventDate   DateTime @map("event_date") @db.Date
   captureDate DateTime @default(now()) @map("capture_date")
@@ -1093,6 +1107,11 @@ model CaptureQuestion {
   /// a question nobody answers twice is not going to be answered a third time,
   /// and asking again is how a system teaches people to ignore it.
   askCount            Int                   @default(1) @map("ask_count")
+  /// How many follow-up questions this capture has been asked in total, across
+  /// all the different facts. `askCount` caps repeats of ONE question; this
+  /// caps the conversation. Without it, four facts asked twice each is eight
+  /// messages to file one change, and nobody answers the eighth.
+  detailAsks          Int                   @default(0) @map("detail_asks")
   status              CaptureQuestionStatus @default(open)
   chosenProjectId     String?               @map("chosen_project_id") @db.Uuid
   askedAt             DateTime              @default(now()) @map("asked_at")

@@ -211,6 +211,7 @@ export async function updateChangeAction(
     description: formData.get('description') || undefined,
     location: formData.get('location') || undefined,
     trade: formData.get('trade') || undefined,
+    instructedBy: formData.get('instructedBy') || undefined,
     eventDate: formData.get('eventDate') || undefined,
     workStatus: formData.get('workStatus') || undefined,
   });
