@@ -38,10 +38,14 @@ import { cleanCapturedText } from '@/lib/email-cleanup';
 import { briefOf } from '@/lib/change-brief';
 import {
   isPleasantry,
+  isReportIntent,
+  mentionsDocument,
+  instructionRouteLabel,
   looksEvidenceOnly,
   parseDocumentReference,
   parseEventDate,
   parseInstructedBy,
+  parseInstructionRoute,
   parseWorkStatus,
 } from '@/lib/reply-intent';
 import { ambiguousSenderReason, resolveSender } from '@/services/sender-identity.service';
@@ -227,15 +231,30 @@ export async function captureFromChannel(
   // form of that question is a list of what is already open on the job.
   const evidenceOnly = attachments.length > 0 && looksEvidenceOnly(input.text);
 
+  // "I want to report a variation." An announcement, not a report — and taken
+  // literally it became the change: a record whose description, whose title,
+  // and whose printed words in a contractual notice were that sentence.
+  //
+  // Handled exactly like files with no caption, because it is the same
+  // situation: the project has to be settled and then there is still nothing
+  // to file. The difference is only which question comes next — "what are
+  // these of" for photographs, "what happened" for an announcement.
+  const intentOnly = attachments.length === 0 && isReportIntent(input.text);
+
   // What the report itself does not answer. Carried into whichever question
   // gets asked, so "which project?" and "has the work started?" arrive in one
   // message rather than as two exchanges an hour apart.
-  const missing = plannedDetailFields({
+  //
+  // Empty for an announcement: there is no report to read facts out of yet,
+  // and planning questions about a sentence that says nothing would ask him
+  // everything at once about a change he has not described.
+  const missing = intentOnly ? [] : plannedDetailFields({
     text: input.text,
     eventDateKnown: parseEventDate(input.text, todayUtc()) !== null,
     documentReferenceKnown: parseDocumentReference(input.text) !== null,
     workStatusKnown: parseWorkStatus(input.text) !== null,
     instructedByKnown: parseInstructedBy(input.text) !== null,
+    instructionRouteKnown: parseInstructionRoute(input.text) !== null,
   });
 
   // Only one live job: there is nothing to be wrong about.
@@ -263,6 +282,29 @@ export async function captureFromChannel(
             `${sender.fullName} sent ${attachments.length} file(s) with no message. ` +
             `Asked whether they belong to one of ${asked.offered} open changes on ` +
             `${only.project.projectCode} (${asked.token}).`,
+          candidateProjectIds: [only.projectId],
+        };
+      }
+    }
+
+    // He said he wants to report something. Ask what, rather than filing the
+    // sentence in which he said it.
+    if (intentOnly && integrationEventId) {
+      const asked = await askForDescription({
+        integrationEventId,
+        userId: sender.id,
+        projectId: only.projectId,
+        evidenceCount: 0,
+        originalText: input.text,
+        sourceMessageId: input.externalMessageId,
+        sourceSubject: input.sourceSubject ?? null,
+      });
+      if (asked) {
+        return {
+          kind: 'needs_triage',
+          reason:
+            `${sender.fullName} opened a report on ${only.project.projectCode} without saying ` +
+            `what changed. Asked what happened (${asked.token}).`,
           candidateProjectIds: [only.projectId],
         };
       }
@@ -375,6 +417,7 @@ async function applyAnswer(
     });
 
     await acknowledgeCapture({
+    channel: input.channel,
       userId: answer.userId,
       token: ackToken(answer),
       text: 'Cancelled. Nothing has been recorded against any project.',
@@ -416,6 +459,7 @@ async function applyAnswer(
   // thing that closes is the question.
   if (answer.outcome === 'declined') {
     await acknowledgeCapture({
+    channel: input.channel,
       userId: answer.userId,
       token: ackToken(answer),
       text: 'No problem, leaving it as it is.',
@@ -520,6 +564,7 @@ async function applyAnswer(
         documentReferenceKnown: parseDocumentReference(answer.originalText) !== null,
         workStatusKnown: parseWorkStatus(answer.originalText) !== null,
         instructedByKnown: parseInstructedBy(answer.originalText) !== null,
+        instructionRouteKnown: parseInstructionRoute(answer.originalText) !== null,
       }),
       sourceMessageId: answer.sourceMessageId,
       sourceSubject: answer.sourceSubject,
@@ -580,6 +625,28 @@ async function applyAnswer(
         reason: asked
           ? `Project settled. Asked ${answer.userName} what the ${carried.length} file(s) are of (${asked.token}).`
           : `Project settled, but we could not ask what the files are of.`,
+        candidateProjectIds: [answer.projectId],
+      };
+    }
+
+    // Same again for the announcement: the project is settled and there is
+    // still nothing to file, because "I want to report a variation" is not one.
+    if (isReportIntent(answer.originalText) && carried.length === 0) {
+      const asked = await askForDescription({
+        integrationEventId: answer.integrationEventId,
+        userId: answer.userId,
+        projectId: answer.projectId,
+        evidenceCount: 0,
+        originalText: answer.originalText,
+        sourceMessageId: answer.sourceMessageId,
+        sourceSubject: answer.sourceSubject,
+      });
+
+      return {
+        kind: 'needs_triage',
+        reason: asked
+          ? `Project settled. Asked ${answer.userName} what happened (${asked.token}).`
+          : `Project settled, but we could not ask what happened.`,
         candidateProjectIds: [answer.projectId],
       };
     }
@@ -720,6 +787,7 @@ async function fileAndFollowUp(args: {
           documentReferenceKnown: parseDocumentReference(args.input.text) !== null,
           workStatusKnown: parseWorkStatus(args.input.text) !== null,
           instructedByKnown: parseInstructedBy(args.input.text) !== null,
+          instructionRouteKnown: parseInstructionRoute(args.input.text) !== null,
         });
 
   if (missing.length > 0 && args.integrationEventId) {
@@ -805,6 +873,7 @@ async function fileAndFollowUp(args: {
     files > 0 ? `\n${files} ${files === 1 ? 'file' : 'files'} attached as evidence.` : '';
 
   await acknowledgeCapture({
+    channel: args.input.channel,
     userId: args.reporterId,
     token: outcome.pcNumber,
     potentialChangeId: outcome.potentialChangeId,
@@ -886,6 +955,7 @@ async function attachEvidenceToChange(
 
   const noun = filed.stored === 1 ? 'file' : 'files';
   await acknowledgeCapture({
+    channel: input.channel,
     userId: answer.userId,
     token: ackToken(answer),
     potentialChangeId: change.id,
@@ -937,6 +1007,7 @@ async function applyCaptureDetails(
       sourceReference: true,
       workStatus: true,
       instructedBy: true,
+      instructionRoute: true,
       project: {
         select: { projectCode: true, contractRules: { select: { noticePeriodDays: true } } },
       },
@@ -984,6 +1055,14 @@ async function applyCaptureDetails(
   // filed as the party who instructed the change, and a plausible wrong
   // attribution is worse than an empty field, because nobody re-checks a field
   // that is filled in.
+  if (answer.detailFields[0] === 'instruction_route') {
+    const route = parseInstructionRoute(reply);
+    if (route && route !== change.instructionRoute) {
+      data.instructionRoute = route;
+      applied.push(`came by ${instructionRouteLabel(route)?.toLowerCase() ?? route}`);
+    }
+  }
+
   if (answer.detailFields[0] === 'instructed_by') {
     const instructedBy = parseInstructedBy(reply);
     if (instructedBy && instructedBy !== change.instructedBy) {
@@ -1030,6 +1109,7 @@ async function applyCaptureDetails(
 
   const filesLine = stored > 0 ? ` ${stored} ${stored === 1 ? 'file' : 'files'} attached.` : '';
   await acknowledgeCapture({
+    channel: input.channel,
     userId: answer.userId,
     token: ackToken(answer),
     potentialChangeId: change.id,
@@ -1070,6 +1150,7 @@ async function closeCourteously(
     .toUpperCase()}`;
 
   await acknowledgeCapture({
+    channel: input.channel,
     userId: sender.id,
     token,
     text: recent
@@ -1264,6 +1345,10 @@ export async function createChangeFromCapture(args: {
         // variation; the same words from our own foreman are rework we pay
         // for, and nothing else on the record can tell the two apart.
         instructedBy: parseInstructedBy(input.text),
+        // How it travelled. Inferred from the report when it names a drawing,
+        // asked as a numbered list when it does not.
+        instructionRoute: parseInstructionRoute(input.text)
+          ?? (mentionsDocument(input.text) ? 'drawing' : null),
         potentialTimeImpact: extraction.extractedData.possibleTimeImpact,
         currentStatus: 'notice_assessment',
         currentOwnerUserId: noticeOwner,
@@ -1684,6 +1769,8 @@ async function summariseCapture(projectId: string, input: CaptureInput): Promise
   const status = parseWorkStatus(input.text);
   const reference = parseDocumentReference(input.text);
   const instructedBy = parseInstructedBy(input.text);
+  const route = parseInstructionRoute(input.text)
+    ?? (mentionsDocument(input.text) ? 'drawing' : null);
   const text = input.text.trim();
 
   return {
@@ -1692,6 +1779,7 @@ async function summariseCapture(projectId: string, input: CaptureInput): Promise
     eventDate: formatDate(dated?.date ?? todayUtc()),
     workStatus: status ? (WORK_STATUS_WORDS[status] ?? null) : null,
     instructedBy,
+    instructionRoute: instructionRouteLabel(route),
     documentReference: reference ?? null,
     evidenceCount: input.attachments?.length ?? 0,
   };

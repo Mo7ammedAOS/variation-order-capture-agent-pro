@@ -5,6 +5,7 @@ import { isAppError } from '@/lib/errors';
 import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { formatInstant } from '@/lib/dates';
 import { PasswordControls } from './password-form';
+import { PhoneControls } from './phone-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -125,6 +126,13 @@ export default async function UsersPage() {
                 <TableCell className="text-end">
                   {user.canAdministerCompany && row.id !== user.id ? (
                     <div className="flex flex-col items-end gap-1.5">
+                      {/* The handset, above the password, because on a fit-out
+                          job it changes hands far more often than a login. */}
+                      <PhoneControls
+                        userId={row.id}
+                        fullName={row.fullName}
+                        phone={row.phone}
+                      />
                       <PasswordControls userId={row.id} fullName={row.fullName} />
                       <form action={toggleUserActiveAction}>
                         <input type="hidden" name="userId" value={row.id} />

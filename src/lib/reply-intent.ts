@@ -120,6 +120,59 @@ export function isNewChangeRequest(text: string): boolean {
   return parts.every((word) => NEW_CHANGE_WORDS.has(word));
 }
 
+/**
+ * Announcing a report rather than making one.
+ *
+ * "I want to report a variation." Taken literally that sentence became the
+ * change: a Potential Change whose description, whose title, and whose printed
+ * words in a contractual notice were "i want to report a variation". It said
+ * nothing about what happened on site, and nobody reading the register a month
+ * later could tell what it was.
+ *
+ * A person opening a conversation this way is asking to be asked. So the text
+ * is thrown away and the exchange starts with "What happened?" — which is what
+ * a human on the other end would say.
+ *
+ * ── Why the vocabulary is closed ──────────────────────────────────────────
+ * Every word has to be in the list, AND one of them has to be an anchor. That
+ * is strict on purpose: mistaking a real report for an announcement asks a
+ * question the reporter has already answered, which is the irritation that
+ * makes people stop replying. "Issue on site today" carries no anchor and is
+ * filed as written, on the grounds that a thin report is still a report.
+ */
+const REPORT_INTENT = new Set([
+  // wanting
+  'I', 'WE', 'ME', 'MY', 'WANT', 'WANTED', 'WANNA', 'WOULD', 'LIKE', 'NEED',
+  'NEEDED', 'MUST', 'HAVE', 'HAS', 'GOT', 'THERE', 'IS', 'ARE', 'TO', 'A',
+  'AN', 'THE', 'ANOTHER', 'SOME', 'SOMETHING', 'PLEASE', 'PLS', 'KINDLY',
+  // doing
+  'REPORT', 'REPORTING', 'REPORTED', 'RAISE', 'RAISING', 'LOG', 'LOGGING',
+  'FILE', 'FILING', 'SUBMIT', 'SUBMITTING', 'ADD', 'ADDING', 'RECORD',
+  'RECORDING', 'OPEN', 'START', 'MAKE', 'CREATE', 'REGISTER', 'NEW',
+  // the thing
+  'VARIATION', 'VARIATIONS', 'VO', 'CHANGE', 'CHANGES', 'PC', 'CASE',
+  'CLAIM', 'ISSUE', 'ITEM', 'ONE', 'IT',
+  // greeting the message may open with
+  'HI', 'HELLO', 'HEY', 'DEAR', 'SIR', 'TEAM', 'GOOD', 'MORNING', 'AFTERNOON',
+  'EVENING', 'SALAM', 'ASSALAM', 'ALAIKUM',
+]);
+
+/** Without one of these the message is a report, however thin. */
+const REPORT_INTENT_ANCHORS = new Set([
+  'REPORT', 'REPORTING', 'RAISE', 'RAISING', 'LOG', 'LOGGING', 'FILE',
+  'FILING', 'SUBMIT', 'SUBMITTING', 'RECORD', 'RECORDING', 'REGISTER',
+  'VARIATION', 'VARIATIONS', 'VO', 'CHANGE', 'CHANGES',
+]);
+
+const REPORT_INTENT_MAX_WORDS = 10;
+
+export function isReportIntent(text: string): boolean {
+  const parts = words(text);
+  if (parts.length === 0 || parts.length > REPORT_INTENT_MAX_WORDS) return false;
+  if (!parts.some((word) => REPORT_INTENT_ANCHORS.has(word))) return false;
+  return parts.every((word) => REPORT_INTENT.has(word));
+}
+
 export interface ParsedDate {
   date: Date;
   /** What in the message said so, quoted back so a misread is visible. */
@@ -365,6 +418,99 @@ export function parseDocumentReference(text: string, excludeCodes: string[] = []
   return `${generic[1]}${generic[2] ? generic[2].replace(/\s+/g, ' ') : ''}`.trim();
 }
 
+/* ───────────────────────── how it reached him ────────────────────────────── */
+
+/**
+ * The route an instruction travelled, which is a contractual fact.
+ *
+ * A verbal instruction is worth the least and needs confirming in writing
+ * fastest — most contracts give days, not weeks, and the confirmation is what
+ * turns it into something enforceable. A drawing revision proves itself. An
+ * email is somewhere in between and already has its own date stamp. So "how
+ * did this come to you" is not administrivia: it decides how urgently somebody
+ * has to write back to the consultant, and it is the first question asked in
+ * any dispute about whether an instruction was ever given.
+ *
+ * The seven are offered as a numbered list, so the reply is one keystroke.
+ */
+export const INSTRUCTION_ROUTES = [
+  { value: 'verbal', label: 'Verbal on site' },
+  { value: 'site_instruction', label: 'Written site instruction' },
+  { value: 'drawing', label: 'Drawing or revision' },
+  { value: 'email', label: 'Email' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+export type InstructionRouteValue = (typeof INSTRUCTION_ROUTES)[number]['value'];
+
+/**
+ * What each route sounds like when somebody types it instead of the number.
+ *
+ * Ordered, and the order is the tie-break: "site instruction by email" is a
+ * site instruction that happened to travel by email, and the written document
+ * is the fact worth recording. Anything earlier in this list beats anything
+ * later, so the more probative route always wins.
+ */
+const ROUTE_WORDS: { value: InstructionRouteValue; pattern: RegExp }[] = [
+  { value: 'site_instruction', pattern: /\b(SITE\s+INSTRUCTION|INSTRUCTION|SI|CVI|EI|AI|WRITTEN|LETTER|MEMO|NOTICE)\b/ },
+  { value: 'drawing', pattern: /\b(DRAWING|DRAWINGS|DWG|DRG|REVISION|REV|SKETCH|DETAIL|IFC|MARK\s?UP|SHOP\s+DRAWING|LAYOUT)\b/ },
+  { value: 'meeting', pattern: /\b(MEETING|MEETINGS|MOM|MINUTES|SITE\s+MEETING|ZOOM|TEAMS|CALL|CALLED|PHONE)\b/ },
+  { value: 'whatsapp', pattern: /\b(WHATS\s?APP|WHATSAPP|WA|MESSAGE|MSG|TEXT|CHAT|GROUP)\b/ },
+  { value: 'email', pattern: /\b(EMAIL|E-?MAIL|MAIL|INBOX)\b/ },
+  { value: 'verbal', pattern: /\b(VERBAL|VERBALLY|ORAL|ORALLY|SPOKE|SPOKEN|SPEAKING|TOLD|SAID|TALKED|TALKING|WALK|FACE|PERSON|ONSITE|ON\s+SITE|SITE)\b/ },
+  { value: 'other', pattern: /\b(OTHER|OTHERS|ELSE|NOT\s+SURE|SOMETHING)\b/ },
+];
+
+/**
+ * Which of the seven he meant — by number, or in his own words.
+ *
+ * Both, because both happen. On a phone the number is one tap; typing
+ * "verbally on site" is what people do when they are not looking at the list
+ * any more. Neither is more correct, so neither is privileged: the number is
+ * read first only because it is unambiguous.
+ *
+ * A number outside 1-7 is not clamped to the nearest one. "9" means the person
+ * is answering a different question, or a list they remember wrongly, and
+ * guessing at it would put a made-up contractual fact on the record.
+ */
+export function parseInstructionRoute(text: string): InstructionRouteValue | null {
+  const trimmed = text.trim();
+  if (trimmed === '' || looksEvidenceOnly(trimmed)) return null;
+
+  const parts = words(trimmed);
+
+  // A bare number, tolerating the small words people put around it:
+  // "2", "no 2", "option 2", "its 2.", "#3".
+  const digits = parts.filter((word) => /^\d{1,2}$/.test(word));
+  if (digits.length === 1 && parts.every((word) => /^\d{1,2}$/.test(word) || ROUTE_FILLER.has(word))) {
+    const index = Number(digits[0]);
+    const picked = INSTRUCTION_ROUTES[index - 1];
+    if (picked) return picked.value;
+    return null;
+  }
+
+  const upper = trimmed.toUpperCase();
+  for (const route of ROUTE_WORDS) {
+    if (route.pattern.test(upper)) return route.value;
+  }
+
+  return null;
+}
+
+/** Words that can surround a list position without changing what it means. */
+const ROUTE_FILLER = new Set([
+  'NO', 'NUMBER', 'OPTION', 'ITS', 'IT', 'IS', 'THE', 'A', 'AN', 'WAS',
+  'ANSWER', 'CHOICE', 'PICK', 'SELECT', 'I', 'CHOOSE', 'THINK',
+]);
+
+/** The label, for reading a stored route back to a person. */
+export function instructionRouteLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return INSTRUCTION_ROUTES.find((route) => route.value === value)?.label ?? null;
+}
+
 /* ────────────────────────── who asked for it ─────────────────────────────── */
 
 /**
@@ -548,7 +694,7 @@ export type ReportedWorkStatus = 'not_started' | 'in_progress' | 'completed' | '
  * is not `work_status`, yes and no still mean nothing.
  */
 export function parseAnswerForField(
-  field: 'work_status' | 'event_date' | 'instructed_by' | 'document_reference',
+  field: 'work_status' | 'event_date' | 'instructed_by' | 'instruction_route' | 'document_reference',
   text: string,
   today: Date = new Date(),
 ): ReportedWorkStatus | ParsedDate | string | null {
@@ -568,6 +714,7 @@ export function parseAnswerForField(
 
   if (field === 'event_date') return parseEventDate(text, today);
   if (field === 'instructed_by') return parseInstructedBy(text);
+  if (field === 'instruction_route') return parseInstructionRoute(text);
   return parseDocumentReference(text);
 }
 

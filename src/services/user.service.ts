@@ -237,6 +237,102 @@ export async function setUserActive(
   });
 }
 
+/**
+ * Moving a WhatsApp number from one person to another.
+ *
+ * ── Why it has to be doable from the app ──────────────────────────────────
+ * A number was only settable at invite. When the handset changed hands — the
+ * site phone passed to a new engineer, a demo number moved onto somebody
+ * else's account — the only way to follow it was a database query, so in
+ * practice nobody did, and every WhatsApp report went on being filed under the
+ * name of whoever held the number first. Osman, 2026-09-05.
+ *
+ * ── Why it is not simply a text field ─────────────────────────────────────
+ * The number IS the identity on WhatsApp. Everything that arrives from that
+ * handset is filed under whoever holds it, so two people holding the same one
+ * is not a duplicate record, it is a wrong name on a claim.
+ *
+ * The capture path already refuses to guess between them — an ambiguous number
+ * parks the message instead of picking a colleague at random — but that is a
+ * safety net, and a safety net that catches everything means nothing works. So
+ * the number is TAKEN, not copied: moving it onto somebody clears it from the
+ * person who had it, in one transaction, and both halves are audited.
+ */
+export const phoneSchema = z.object({
+  // Digits, spaces and the punctuation people actually type. Deliberately not
+  // a strict E.164 rule: a number typed as "+971 50 123 4567" is the same
+  // number, and rejecting it teaches the administrator that the field is
+  // fussy rather than that the number is wrong.
+  phone: z
+    .string()
+    .trim()
+    .max(50)
+    .regex(/^[+()\d\s.-]*$/, 'Digits, spaces, + ( ) - and . only')
+    .transform((value) => value.replace(/[^+\d]/g, ''))
+    .refine((value) => value === '' || /^\+?\d{7,15}$/.test(value), 'That is not a phone number'),
+});
+
+export async function setUserPhone(
+  actor: AuthenticatedUser,
+  userId: string,
+  rawPhone: string,
+) {
+  await assertCapability(actor, 'user.manage');
+
+  const { phone } = phoneSchema.parse({ phone: rawPhone });
+  const value = phone === '' ? null : phone;
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) throw new NotFoundError('User not found');
+
+  return prisma.$transaction(async (tx) => {
+    // Taken from whoever else holds it, in the same transaction as the grant.
+    // Two people on one number means every WhatsApp from it is parked as
+    // ambiguous, and a number that works for nobody is worse than either
+    // person having it.
+    const takenFrom = value
+      ? await tx.user.findMany({
+          where: { phone: value, id: { not: userId } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+
+    if (takenFrom.length > 0) {
+      await tx.user.updateMany({
+        where: { id: { in: takenFrom.map((user) => user.id) } },
+        data: { phone: null },
+      });
+      for (const previous of takenFrom) {
+        await recordAudit({
+          db: tx,
+          userId: actor.id,
+          recordType: 'user',
+          recordId: previous.id,
+          actionType: 'updated',
+          oldValue: { phone: value },
+          newValue: { phone: null },
+          metadata: { movedTo: userId },
+        });
+      }
+    }
+
+    const updated = await tx.user.update({ where: { id: userId }, data: { phone: value } });
+
+    await recordAudit({
+      db: tx,
+      userId: actor.id,
+      recordType: 'user',
+      recordId: userId,
+      actionType: 'updated',
+      oldValue: { phone: target.phone },
+      newValue: { phone: value },
+      metadata: takenFrom.length > 0 ? { takenFrom: takenFrom.map((u) => u.fullName) } : undefined,
+    });
+
+    return { user: updated, takenFrom: takenFrom.map((user) => user.fullName) };
+  });
+}
+
 export async function setSystemRole(
   actor: AuthenticatedUser,
   userId: string,

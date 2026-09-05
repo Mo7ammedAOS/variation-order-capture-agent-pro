@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseEventDate, parseInstructedBy } from '@/lib/reply-intent';
+import {
+  isReportIntent,
+  parseEventDate,
+  parseInstructedBy,
+  parseInstructionRoute,
+} from '@/lib/reply-intent';
 import { plannedDetailFields } from '@/services/capture-question.service';
 
 /**
@@ -162,8 +167,9 @@ describe('what gets asked, and in what order', () => {
         documentReferenceKnown: true,
         workStatusKnown: false,
         instructedByKnown: false,
+        instructionRouteKnown: false,
       }),
-    ).toEqual(['work_status', 'event_date', 'instructed_by']);
+    ).toEqual(['work_status', 'event_date', 'instructed_by', 'instruction_route']);
   });
 
   it('asks nothing it can already read out of the report', () => {
@@ -174,6 +180,7 @@ describe('what gets asked, and in what order', () => {
         documentReferenceKnown: true,
         workStatusKnown: true,
         instructedByKnown: true,
+        instructionRouteKnown: true,
       }),
     ).toEqual([]);
   });
@@ -186,6 +193,97 @@ describe('what gets asked, and in what order', () => {
         documentReferenceKnown: false,
         workStatusKnown: true,
         instructedByKnown: true,
+        instructionRouteKnown: false,
+      }),
+    ).toEqual(['document_reference']);
+  });
+});
+
+describe('announcing a report is not making one', () => {
+  it('recognises the opening line for what it is', () => {
+    // Taken literally, this sentence became the change: its description, its
+    // title, and the words printed under WHAT HAPPENED in a contractual
+    // notice. It says nothing about site.
+    for (const opener of [
+      'I want to report a variation',
+      'i want to report a change',
+      'I need to raise a variation',
+      'report a change please',
+      'i have a new variation to log',
+      'Hi, I would like to report a change',
+      'new VO',
+    ]) {
+      expect(isReportIntent(opener), opener).toBe(true);
+    }
+  });
+
+  it('never mistakes a real report for one, however short', () => {
+    // The expensive direction. Asking "what happened?" about a message that
+    // already said what happened is the irritation that stops people replying.
+    for (const report of [
+      'client wants the reception ceiling 300mm lower',
+      'consultant asked us to change the marble',
+      'issue on site today',
+      'the landlord closed the loading bay',
+      'variation on the ceiling grid at reception, consultant instructed',
+    ]) {
+      expect(isReportIntent(report), report).toBe(false);
+    }
+  });
+
+  it('is not fooled by courtesy or by an empty message', () => {
+    expect(isReportIntent('thanks')).toBe(false);
+    expect(isReportIntent('')).toBe(false);
+  });
+});
+
+describe('how did this come to you', () => {
+  it('takes the number off the list', () => {
+    expect(parseInstructionRoute('1')).toBe('verbal');
+    expect(parseInstructionRoute('2')).toBe('site_instruction');
+    expect(parseInstructionRoute('no 3')).toBe('drawing');
+    expect(parseInstructionRoute('option 4')).toBe('email');
+    expect(parseInstructionRoute('its 5')).toBe('whatsapp');
+  });
+
+  it('takes the words when he is not looking at the list any more', () => {
+    expect(parseInstructionRoute('verbally on site')).toBe('verbal');
+    expect(parseInstructionRoute('he told me')).toBe('verbal');
+    expect(parseInstructionRoute('site instruction')).toBe('site_instruction');
+    expect(parseInstructionRoute('SI')).toBe('site_instruction');
+    expect(parseInstructionRoute('revised drawing')).toBe('drawing');
+    expect(parseInstructionRoute('by email')).toBe('email');
+    expect(parseInstructionRoute('whatsapp group')).toBe('whatsapp');
+    expect(parseInstructionRoute('in the site meeting')).toBe('meeting');
+  });
+
+  it('records the more probative route when a reply names two', () => {
+    // "Site instruction by email" is a site instruction that happened to
+    // travel by email. The written document is the fact worth keeping.
+    expect(parseInstructionRoute('site instruction by email')).toBe('site_instruction');
+    expect(parseInstructionRoute('drawing sent on whatsapp')).toBe('drawing');
+  });
+
+  it('refuses a number that is not on the list rather than rounding it', () => {
+    // Guessing here would put a made-up contractual fact on the record.
+    expect(parseInstructionRoute('9')).toBeNull();
+    expect(parseInstructionRoute('0')).toBeNull();
+    expect(parseInstructionRoute('2 3')).toBeNull();
+  });
+});
+
+describe('what it does not bother asking', () => {
+  it('skips how it arrived when the report already names a drawing', () => {
+    // A change that quotes a revision arrived by that revision. Asking anyway
+    // is the system pretending it has not read the message it is replying to.
+    expect(
+      plannedDetailFields({
+        text: 'ceiling drops per revised drawing AR-201 rev C',
+        eventDateKnown: true,
+        documentReferenceKnown: false,
+        workStatusKnown: true,
+        instructedByKnown: true,
+        instructionRouteKnown: false,
       }),
     ).toEqual(['document_reference']);
   });

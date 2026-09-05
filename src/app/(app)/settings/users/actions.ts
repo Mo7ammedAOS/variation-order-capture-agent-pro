@@ -10,6 +10,7 @@ import {
   sendPasswordResetLink,
   setCompanyAdmin,
   setUserActive,
+  setUserPhone,
 } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 
@@ -45,6 +46,40 @@ export async function inviteUserAction(
 
   revalidatePath('/settings/users');
   return { ok: `Invitation sent to ${parsed.data.email}` };
+}
+
+/**
+ * Moving the WhatsApp number onto whoever is holding the handset today.
+ *
+ * Reports the take-over explicitly. An administrator who moves a number and is
+ * told only "saved" has no way to know that somebody else just lost it, and
+ * that person's WhatsApp reports stop working silently.
+ */
+export async function setUserPhoneAction(
+  _prev: InviteState,
+  formData: FormData,
+): Promise<InviteState> {
+  const actor = await requirePageUser();
+  const userId = String(formData.get('userId') ?? '');
+  const phone = String(formData.get('phone') ?? '');
+
+  try {
+    const { user, takenFrom } = await setUserPhone(actor, userId, phone);
+    revalidatePath('/settings/users');
+    if (!user.phone) return { ok: 'Number removed. WhatsApp reports will no longer be theirs.' };
+    return {
+      ok:
+        takenFrom.length > 0
+          ? `${user.phone} moved here, and taken from ${takenFrom.join(', ')}.`
+          : `${user.phone} saved. WhatsApp from that handset is now filed as ${user.fullName}.`,
+    };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    if (error instanceof Error && error.name === 'ZodError') {
+      return { error: 'That is not a phone number' };
+    }
+    throw error;
+  }
 }
 
 export async function toggleUserActiveAction(formData: FormData) {

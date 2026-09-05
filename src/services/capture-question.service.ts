@@ -10,6 +10,7 @@ import { codePattern, describeMatch, type ProjectMatch } from '@/lib/project-mat
 import { briefOf, matchChangeByWords, matchChangeInText } from '@/lib/change-brief';
 import {
   closingLine,
+  INSTRUCTION_ROUTES,
   isNewChangeRequest,
   looksTemporal,
   isPleasantry,
@@ -316,6 +317,20 @@ async function putQuestion(input: {
   const recipients = await loadRecipients([input.userId]);
   if (recipients.length === 0) return false;
 
+  // A question goes back the way the message came in, and no other way.
+  //
+  // Read from the event rather than passed down through six call sites,
+  // because it cannot then drift: the source of a conversation is a fact about
+  // the conversation, and every ask already has the event id in its hand.
+  // Osman, 2026-09-05, having received the same question twice — once on
+  // WhatsApp and once by email — which is how a system teaches somebody that
+  // half of what it sends can be ignored.
+  const event = await prisma.integrationEvent.findUnique({
+    where: { id: input.integrationEventId },
+    select: { source: true },
+  });
+  const channel: 'email' | 'whatsapp' = event?.source === 'whatsapp' ? 'whatsapp' : 'email';
+
   // A re-ask lands on the same row, so the count is read from what is already
   // there rather than tracked in memory across two separate requests.
   const previous = await prisma.captureQuestion.findUnique({
@@ -375,6 +390,7 @@ async function putQuestion(input: {
       on: new Date(),
       replyToMessageId: input.sourceMessageId,
       potentialChangeId: input.potentialChangeId ?? null,
+      channels: [channel],
     });
   });
 
@@ -607,7 +623,7 @@ export async function askForDescription(input: {
   const token = newToken();
 
   const body =
-    `${project.projectCode} — ${project.projectName}.\n\nWhat changed?`;
+    `${project.projectCode} — ${project.projectName}.\n\nWhat happened? Describe the change in one line.`;
 
   const sent = await putQuestion({
     integrationEventId: input.integrationEventId,
@@ -627,7 +643,12 @@ export async function askForDescription(input: {
   return sent ? { token } : null;
 }
 
-export type DetailField = 'work_status' | 'event_date' | 'instructed_by' | 'document_reference';
+export type DetailField =
+  | 'work_status'
+  | 'event_date'
+  | 'instructed_by'
+  | 'instruction_route'
+  | 'document_reference';
 
 /**
  * Which facts are worth one more message, and which are not.
@@ -651,6 +672,7 @@ export function plannedDetailFields(input: {
   documentReferenceKnown: boolean;
   workStatusKnown: boolean;
   instructedByKnown: boolean;
+  instructionRouteKnown: boolean;
 }): DetailField[] {
   const fields: DetailField[] = [];
   // Work status leads. Whether the work has already been done is what decides
@@ -664,6 +686,12 @@ export function plannedDetailFields(input: {
   // the date only because a wrong date loses entitlement outright, where a
   // missing instructor makes a claim arguable rather than dead.
   if (!input.instructedByKnown) fields.push('instructed_by');
+  // Not asked when the report already names a drawing. A change that quotes a
+  // revision arrived by that revision, and asking anyway is the system
+  // pretending it has not read the message it is replying to.
+  if (!input.instructionRouteKnown && !mentionsDocument(input.text)) {
+    fields.push('instruction_route');
+  }
   if (!input.documentReferenceKnown && mentionsDocument(input.text)) {
     fields.push('document_reference');
   }
@@ -684,6 +712,12 @@ const DETAIL_PROMPTS: Record<DetailField, string> = {
   // costs nothing and gets answered far more often.
   event_date: 'When did this happen?',
   instructed_by: 'Who asked for this change?',
+  // The only question offered as a list, and it earns it: "how did this come
+  // to you" asked open gets "from the consultant", which answers who and not
+  // how. Seven options make the distinction obvious and the reply one tap.
+  instruction_route:
+    'How did this come to you?\n' +
+    INSTRUCTION_ROUTES.map((route, index) => `${index + 1}. ${route.label}`).join('\n'),
   document_reference: 'Which drawing or RFI is it from?',
 };
 
@@ -765,6 +799,8 @@ export async function acknowledgeCapture(input: {
   userId: string;
   token: string;
   text: string;
+  /** The channel the report came in on. The reply never leaves it. */
+  channel?: 'whatsapp' | 'email';
   potentialChangeId?: string | null;
   sourceMessageId?: string | null;
   sourceSubject?: string | null;
@@ -787,6 +823,7 @@ export async function acknowledgeCapture(input: {
       on: new Date(),
       replyToMessageId: input.sourceMessageId ?? null,
       potentialChangeId: input.potentialChangeId ?? null,
+      channels: [input.channel ?? 'email'],
     });
   });
 
@@ -974,6 +1011,7 @@ async function interpret(
       asked === 'work_status' ||
       asked === 'event_date' ||
       asked === 'instructed_by' ||
+      asked === 'instruction_route' ||
       asked === 'document_reference'
         ? parseAnswerForField(asked, rawText) !== null
         : false;
@@ -1184,6 +1222,7 @@ export interface CaptureSummary {
   eventDate: string | null;
   workStatus: string | null;
   instructedBy: string | null;
+  instructionRoute: string | null;
   documentReference: string | null;
   evidenceCount: number;
 }
@@ -1226,6 +1265,7 @@ export async function askToConfirmCapture(input: {
     s.eventDate ? `Happened: ${s.eventDate}` : null,
     s.workStatus ? `Work: ${s.workStatus}` : null,
     s.instructedBy ? `Asked by: ${s.instructedBy}` : null,
+    s.instructionRoute ? `Came by: ${s.instructionRoute}` : null,
     s.documentReference ? `Reference: ${s.documentReference}` : null,
     s.evidenceCount > 0
       ? `Evidence: ${s.evidenceCount} ${s.evidenceCount === 1 ? 'file' : 'files'}`

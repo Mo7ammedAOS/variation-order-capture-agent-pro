@@ -231,19 +231,26 @@ describe('the daily chase', () => {
     expect(state.created.map((r) => r.channel)).toEqual(['in_app']);
   });
 
-  it('queues email and WhatsApp as well once those lanes exist', async () => {
+  it('chases by email, and never on WhatsApp', async () => {
+    // Osman's rule, 2026-09-05. A person hears from this system on WhatsApp
+    // only while they are TALKING to it. Being chased for a decision is work,
+    // it arrives where the rest of the working day already is, and it does not
+    // turn a personal handset into a task list that pings at eleven at night.
+    //
+    // The WhatsApp lane being configured is deliberately not enough. It was,
+    // and the result was the same words arriving twice.
     state.emailUrl = 'https://n8n.example.com/webhook/email';
     state.whatsappUrl = 'https://n8n.example.com/webhook/whatsapp';
     state.tasks = [task()];
 
     await runReminderSweep(new Date('2026-09-01T09:00:00Z'));
 
-    expect(state.created.map((r) => r.channel).sort()).toEqual(['email', 'in_app', 'whatsapp']);
+    expect(state.created.map((r) => r.channel).sort()).toEqual(['email', 'in_app']);
   });
 
-  it('skips WhatsApp for someone with no phone number rather than inventing one', async () => {
-    state.whatsappUrl = 'https://n8n.example.com/webhook/whatsapp';
-    state.tasks = [task({ assignedTo: { ...ASSIGNEE, phone: null } })];
+  it('still records in-app for someone with no email address', async () => {
+    state.emailUrl = 'https://n8n.example.com/webhook/email';
+    state.tasks = [task({ assignedTo: { ...ASSIGNEE, email: null } })];
 
     await runReminderSweep(new Date('2026-09-01T09:00:00Z'));
 

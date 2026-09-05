@@ -106,6 +106,14 @@ export async function recordTaskNotifications(
   input: TaskNotificationInput,
 ): Promise<number> {
   const available = configuredChannels();
+  // Tasks, reminders and escalations go by EMAIL, never WhatsApp.
+  //
+  // Osman's rule, 2026-09-05: a person hears from the system on WhatsApp only
+  // while they are talking to it. Being assigned work, and being chased for a
+  // decision, is email — it arrives where the rest of the working day already
+  // is, it can be forwarded, and it does not turn a personal handset into a
+  // task list that pings at eleven at night.
+  const allowed = new Set<'email' | 'whatsapp'>(['email']);
   const rows: Prisma.NotificationLogCreateManyInput[] = [];
 
   for (const recipient of input.recipients) {
@@ -133,7 +141,7 @@ export async function recordTaskNotifications(
       dedupeKey: buildDedupeKey(input.taskId, input.kind, input.on, 'in_app', recipient.userId),
     });
 
-    if (available.email && recipient.email) {
+    if (allowed.has('email') && available.email && recipient.email) {
       rows.push({
         ...common,
         channel: 'email',
@@ -143,7 +151,7 @@ export async function recordTaskNotifications(
       });
     }
 
-    if (available.whatsapp && recipient.phone) {
+    if (allowed.has('whatsapp') && available.whatsapp && recipient.phone) {
       rows.push({
         ...common,
         channel: 'whatsapp',
@@ -192,9 +200,27 @@ export async function recordDirectNotifications(
      * opening.
      */
     replyToMessageId?: string | null;
+    /**
+     * Which outside channels this message may use. In-app is always written.
+     *
+     * ── Why this is an argument and not "everything configured" ────────────
+     * It used to fan out to every channel that had a URL, so a reporter who
+     * asked a question on WhatsApp got the answer on WhatsApp AND by email —
+     * the same words, twice, from a system that was supposed to be replacing
+     * his paperwork. Osman's call, 2026-09-05.
+     *
+     * The rule now: a CONVERSATION stays on the channel it started on, and
+     * everything else — being told a colleague reported something, being
+     * chased for a decision — is email. Nobody wants a WhatsApp about somebody
+     * else's paperwork, and nobody reads an email thread as a conversation.
+     */
+    channels?: ('email' | 'whatsapp')[];
   },
 ): Promise<number> {
   const available = configuredChannels();
+  // Email, unless the caller says otherwise. The default is the quiet one:
+  // a new channel should have to be asked for, never inherited.
+  const allowed = new Set(input.channels ?? ['email']);
   const rows: Prisma.NotificationLogCreateManyInput[] = [];
 
   for (const recipient of input.recipients) {
@@ -217,7 +243,7 @@ export async function recordDirectNotifications(
       dedupeKey: `${input.dedupeSeed}:in_app:${recipient.userId}`,
     });
 
-    if (available.email && recipient.email) {
+    if (allowed.has('email') && available.email && recipient.email) {
       rows.push({
         ...common,
         channel: 'email' as const,
@@ -227,7 +253,7 @@ export async function recordDirectNotifications(
       });
     }
 
-    if (available.whatsapp && recipient.phone) {
+    if (allowed.has('whatsapp') && available.whatsapp && recipient.phone) {
       rows.push({
         ...common,
         // NO SUBJECT on WhatsApp.

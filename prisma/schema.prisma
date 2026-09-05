@@ -156,6 +156,20 @@ enum AuthorityStatus {
   pending_verification
 }
 
+/// How an instruction actually reached the person who reported it, which is a
+/// contractual fact rather than an administrative one. A verbal instruction is
+/// worth the least and needs confirming in writing fastest; a drawing revision
+/// proves itself. It decides how urgently somebody has to write back.
+enum InstructionRoute {
+  verbal
+  site_instruction
+  drawing
+  email
+  whatsapp
+  meeting
+  other
+}
+
 enum ContactType {
   client
   client_representative
@@ -871,6 +885,9 @@ model PotentialChange {
   /// It decides whether there is a claim: the same instruction from the
   /// consultant is a variation and from our own foreman is rework we pay for.
   instructedBy         String?  @map("instructed_by")
+  /// HOW it reached him. Asked as a numbered list on WhatsApp, and inferred
+  /// without asking when the report already names a drawing.
+  instructionRoute     InstructionRoute? @map("instruction_route")
 
   eventDate   DateTime @map("event_date") @db.Date
   captureDate DateTime @default(now()) @map("capture_date")
