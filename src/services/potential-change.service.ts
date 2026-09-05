@@ -777,6 +777,118 @@ export async function cancelPotentialChange(
 }
 
 /**
+ * Destroying a Potential Change, permanently.
+ *
+ * ── Why this exists at all, having argued against it ──────────────────────
+ * Everywhere else this system refuses to delete, and the reasoning holds: the
+ * record is the proof that a claim was raised on a date, and a deleted record
+ * is indistinguishable from one never raised. Cancelling covers the claim the
+ * company decided not to pursue.
+ *
+ * It does NOT cover the record that should never have existed. A test capture
+ * during a demo, the same change filed twice by two people, a WhatsApp message
+ * that turned out to be a question. Cancelling those leaves them in the
+ * register wearing a "cancelled" chip forever, and a register carrying fifteen
+ * cancelled ghosts is one nobody scans with any confidence. Osman's call,
+ * 2026-09-05: give the people who answer for the company a way to remove them
+ * outright.
+ *
+ * ── What it will not do, and why the refusals are narrow ──────────────────
+ * Two cases where a permanent delete stops being tidying and becomes the
+ * destruction of something that is not ours alone:
+ *
+ *   A NOTICE THAT HAS BEEN SERVED. The client already holds a copy. Deleting
+ *   ours removes our own record of a document they can produce, which is the
+ *   worst possible side of that asymmetry to be standing on.
+ *
+ *   MONEY THAT HAS BEEN INVOICED. An invoice is an accounting record. It is
+ *   not ours to erase because the change behind it looks untidy.
+ *
+ * Both remain cancellable. Neither refusal will ever fire on the junk this is
+ * actually for, which is the test of whether a guard is well drawn.
+ *
+ * ── What survives ─────────────────────────────────────────────────────────
+ * The audit row, written BEFORE the delete and carrying the record as it
+ * stood, so "who deleted PC-DXB-002-0007, when, and what did it say" stays
+ * answerable. Evidence documents are detached rather than destroyed and the
+ * files themselves are never touched — this system does not delete bytes.
+ * Delivery history is detached too: proof that something was sent is not the
+ * change's to take with it.
+ */
+export async function deletePotentialChange(user: AuthenticatedUser, id: string) {
+  const existing = await prisma.potentialChange.findUnique({
+    where: { id },
+    include: {
+      notices: { select: { id: true, status: true } },
+      variationOrder: { select: { id: true, _count: { select: { invoices: true } } } },
+      _count: { select: { documents: true, tasks: true, approvals: true } },
+    },
+  });
+  if (!existing) throw new NotFoundError('Potential Change not found');
+
+  const { projectRoles } = await assertProjectAccess(user, existing.projectId);
+  if (!(await hasCapability(user.systemRole, projectRoles, 'potentialChange.delete'))) {
+    throw new ForbiddenError(
+      'Removing a change destroys the record permanently, so it needs the delete permission. Cancelling keeps the trail and is open to more people.',
+    );
+  }
+
+  const served = existing.notices.some(
+    (notice) => notice.status === 'sent' || notice.status === 'acknowledged',
+  );
+  if (served) {
+    throw new ValidationError(
+      'A notice on this change has already been served. The client holds a copy, so removing ours would leave them with a document we have no record of. Cancel it instead.',
+    );
+  }
+
+  if (existing.variationOrder && existing.variationOrder._count.invoices > 0) {
+    throw new ValidationError(
+      'This change has been invoiced. An invoice is an accounting record and is not ours to erase — cancel it, or raise a credit note.',
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // Written FIRST, and it carries the record rather than a summary of it.
+    // After the next statement this row is the only place the change exists.
+    await recordAudit({
+      db: tx,
+      projectId: existing.projectId,
+      userId: user.id,
+      recordType: 'potential_change',
+      recordId: id,
+      actionType: 'deleted',
+      oldValue: {
+        pcNumber: existing.pcNumber,
+        title: existing.title,
+        description: existing.description,
+        eventDate: existing.eventDate,
+        currentStatus: existing.currentStatus,
+        instructedBy: existing.instructedBy,
+        reportedByUserId: existing.reportedByUserId,
+        capturedAt: existing.captureDate,
+      },
+      metadata: {
+        tasks: existing._count.tasks,
+        approvals: existing._count.approvals,
+        // Named because it is what SURVIVES, and somebody reading this row a
+        // year from now needs to know where those photographs went.
+        documentsDetached: existing._count.documents,
+      },
+    });
+
+    // Evidence rows are cut loose rather than cascaded away — the schema sets
+    // `onDelete: SetNull` on project_documents — so the photographs stay in
+    // the project library and the Drive files are never touched. Everything
+    // genuinely internal to this change (tasks, approvals, pricing lines, the
+    // embedding, an unissued notice) goes with it by cascade.
+    await tx.potentialChange.delete({ where: { id } });
+
+    return { pcNumber: existing.pcNumber, projectId: existing.projectId };
+  });
+}
+
+/**
  * Undoing a cancellation.
  *
  * People cancel the wrong record, and the alternative to reinstating is

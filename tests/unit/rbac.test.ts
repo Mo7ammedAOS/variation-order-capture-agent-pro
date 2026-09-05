@@ -181,3 +181,59 @@ describe('correcting a report', () => {
     expect(systemHas('managing_director', 'potentialChange.update')).toBe(true);
   });
 });
+
+describe('who decides whether a notice is required', () => {
+  it('gives it to the project manager, because routing goes looking for holders', () => {
+    // The live failure of 2026-09-05: two changes captured on two projects and
+    // neither project manager got the assessment task. Work is routed to the
+    // members who HOLD this capability — never by job title — so a project
+    // staffed with a PM, a QS and site engineers produced an EMPTY holder
+    // list, the change was created unowned, and the task landed in nobody's
+    // My Tasks while the notice clock ran on.
+    expect(projectHas('project_manager', 'potentialChange.assessNotice')).toBe(true);
+  });
+
+  it('keeps the commercial roles holding it too', () => {
+    expect(projectHas('commercial_manager', 'potentialChange.assessNotice')).toBe(true);
+    expect(projectHas('contract_administrator', 'potentialChange.assessNotice')).toBe(true);
+  });
+
+  it('never gives it to the people who only report', () => {
+    expect(projectHas('site_engineer', 'potentialChange.assessNotice')).toBe(false);
+    expect(projectHas('foreman', 'potentialChange.assessNotice')).toBe(false);
+    expect(projectHas('quantity_surveyor', 'potentialChange.assessNotice')).toBe(false);
+  });
+
+  it('keeps the administrator away from notices altogether', () => {
+    // Osman's call, 2026-09-04. Setting the system up and serving a
+    // contractual document in the company's name are different acts.
+    expect(systemHas('company_admin', 'potentialChange.assessNotice')).toBe(false);
+    expect(systemHas('company_admin', 'notice.draft')).toBe(false);
+    expect(systemHas('company_admin', 'notice.acknowledge')).toBe(false);
+  });
+});
+
+describe('deleting a change permanently', () => {
+  it('belongs to the people who answer for the company', () => {
+    expect(systemHas('company_owner', 'potentialChange.delete')).toBe(true);
+    expect(systemHas('company_admin', 'potentialChange.delete')).toBe(true);
+    expect(systemHas('managing_director', 'potentialChange.delete')).toBe(true);
+  });
+
+  it('is held by no project role at all', () => {
+    // The value of the record is that the people working the project cannot
+    // make it disappear. A PM under pressure to explain a missed deadline is
+    // exactly who this is kept away from.
+    for (const role of Object.keys(DEFAULT_PROJECT_ROLE_CAPABILITIES) as ProjectRole[]) {
+      expect(projectHas(role, 'potentialChange.delete'), role).toBe(false);
+    }
+  });
+
+  it('is not implied by being allowed to cancel', () => {
+    // Cancelling keeps the trail; deleting destroys it. Two different rights,
+    // and the commercial roles hold only the first.
+    expect(systemHas('commercial_manager', 'potentialChange.delete')).toBe(false);
+    expect(systemHas('contract_administrator', 'potentialChange.delete')).toBe(false);
+    expect(systemHas('standard_user', 'potentialChange.delete')).toBe(false);
+  });
+});

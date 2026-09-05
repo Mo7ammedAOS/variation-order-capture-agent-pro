@@ -2,11 +2,11 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AlertCircle, Archive, CheckCircle2, Undo2 } from 'lucide-react';
+import { AlertCircle, Archive, CheckCircle2, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label, Textarea } from '@/components/ui/input';
-import { cancelChangeAction, type EditState } from './actions';
+import { cancelChangeAction, deleteChangeAction, type EditState } from './actions';
 
 /**
  * Ending a claim, or bringing one back.
@@ -31,9 +31,14 @@ function Submit({ label, busy }: { label: string; busy: string }) {
 export function CasePanel({
   potentialChangeId,
   cancelled,
+  canCancel,
+  canDelete,
 }: {
   potentialChangeId: string;
   cancelled: boolean;
+  canCancel: boolean;
+  /** Held by the administrator and the director, and nobody on the project. */
+  canDelete: boolean;
 }) {
   const [state, action] = useActionState<EditState, FormData>(cancelChangeAction, {});
   const [open, setOpen] = useState(false);
@@ -52,12 +57,12 @@ export function CasePanel({
         <p className="text-sm leading-relaxed text-muted-foreground">
           {cancelled
             ? 'It stays on the file with the reason and who decided, and it can be brought back with its original capture date.'
-            : 'Cancelling stops the work and the reminders. Nothing is deleted — the record, its evidence and its dates stay, because they are what prove the claim existed at all.'}
+            : 'Cancelling stops the work and the reminders. The record, its evidence and its dates stay, because they are what prove the claim existed at all.'}
         </p>
       </CardHeader>
 
       <CardContent>
-        {open ? (
+        {!canCancel ? null : open ? (
           <form action={action} className="flex flex-col gap-2.5">
             <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
             <input type="hidden" name="mode" value={cancelled ? 'reinstate' : 'cancel'} />
@@ -126,7 +131,89 @@ export function CasePanel({
             ) : null}
           </div>
         )}
+
+        {canDelete ? <DeleteControl potentialChangeId={potentialChangeId} /> : null}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The permanent one, and it looks like it.
+ *
+ * ── Why it is here and not in a menu ──────────────────────────────────────
+ * Osman's call, 2026-09-05. Hiding a destructive action behind a menu does not
+ * make it safer; it makes it undiscoverable, so the person who needs it hunts,
+ * gives up, and leaves the junk record in the register. Red and in the open is
+ * the honest arrangement: easy to find, impossible to mistake for anything
+ * else.
+ *
+ * ── The one tap in between ────────────────────────────────────────────────
+ * Not a modal, not typing the PC number back. One tap that replaces the button
+ * with what is about to happen and two choices. It costs a second, it is the
+ * difference between a fat thumb on a phone and a destroyed claim, and it is
+ * the last cheap moment — after this there is no undo anywhere in the system.
+ */
+function DeleteControl({ potentialChangeId }: { potentialChangeId: string }) {
+  const [state, action] = useActionState<EditState, FormData>(deleteChangeAction, {});
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      {confirming ? (
+        <form action={action} className="flex flex-col gap-2">
+          <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
+          <p className="text-sm font-semibold text-risk-red">
+            Delete permanently? This cannot be undone.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The change, its tasks, its pricing and any unissued notice go. Photographs and
+            documents stay in the project library, and the deletion is recorded against your name.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <DeleteSubmit />
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              No, keep it
+            </button>
+          </div>
+          {state.error ? (
+            <p role="alert" className="flex items-start gap-2 text-sm text-risk-red">
+              <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
+              {state.error}
+            </p>
+          ) : null}
+        </form>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2 aria-hidden className="size-4" />
+            Delete permanently
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            For a record that should never have existed — a test, or the same change filed twice.
+            A real claim gets cancelled, not deleted.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeleteSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+      <Trash2 aria-hidden className="size-4" />
+      {pending ? 'Deleting…' : 'Yes, delete it'}
+    </Button>
   );
 }

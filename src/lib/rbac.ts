@@ -47,6 +47,7 @@ export const ALL_CAPABILITIES = [
   'approval.projectManager',
   'approval.managingDirector',
   'potentialChange.cancel',
+  'potentialChange.delete',
   'pricing.submit',
   'task.assign',
   'task.complete',
@@ -82,6 +83,7 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'notice.draft', 'notice.acknowledge',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
+    'potentialChange.delete',
     'user.manage', 'companySettings.manage',
   ],
   // Osman's call, 2026-09-04: the administrator does NOT touch notices.
@@ -101,6 +103,7 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'potentialChange.create', 'potentialChange.update',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
+    'potentialChange.delete',
     'user.manage', 'companySettings.manage',
   ],
   managing_director: [
@@ -110,6 +113,7 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'notice.draft', 'notice.acknowledge',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'task.assign', 'task.complete', 'bottleneck.manage',
+    'potentialChange.delete',
   ],
   operations_director: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
@@ -147,10 +151,17 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
 
 /** Defaults for project roles. See the note above — seed data, not runtime. */
 export const DEFAULT_PROJECT_ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
+  // `assessNotice` was missing here until 2026-09-05, and its absence was a
+  // live failure rather than a tidy-up: routing looks for the members who HOLD
+  // the capability, so on a project with no commercial manager the notice
+  // assessment was assigned to nobody and appeared in nobody's task list. The
+  // preference list below even named `project_manager` as a fallback — a role
+  // that could never match, because it was never granted the right.
   project_manager: [
     'project.update', 'project.manageMembers', 'contact.manage', 'document.upload',
     'document.manageRegister',
     'potentialChange.create', 'potentialChange.update', 'potentialChange.changeStatus',
+    'potentialChange.assessNotice',
     'notice.draft', 'notice.acknowledge', 'variationOrder.manage',
     'task.assign', 'task.complete', 'bottleneck.manage',
   ],

@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { requirePageUser } from '@/lib/auth/session';
 import { assessNotice, noticeAssessmentSchema } from '@/services/notice.service';
+import { redirect } from 'next/navigation';
 import {
   cancelPotentialChange,
   cancelSchema,
   changeStatus,
+  deletePotentialChange,
   potentialChangeUpdateSchema,
   reinstatePotentialChange,
   reopenPotentialChange,
@@ -363,6 +365,38 @@ export async function cancelChangeAction(
     if (isAppError(error)) return { error: error.message };
     throw error;
   }
+}
+
+/**
+ * The permanent one.
+ *
+ * Redirects rather than revalidating, because the page this was submitted from
+ * no longer exists — staying on it would render a 404 a second after a
+ * successful action, which reads as a failure. The register is where the
+ * person wants to be anyway: they came to tidy it.
+ *
+ * The redirect sits OUTSIDE the try. Next implements it by throwing, so a
+ * catch around it would swallow the navigation and report a made-up error on
+ * a delete that actually succeeded.
+ */
+export async function deleteChangeAction(
+  _prev: EditState,
+  formData: FormData,
+): Promise<EditState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+
+  try {
+    await deletePotentialChange(user, id);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath('/variations');
+  revalidatePath('/my-tasks');
+  revalidatePath('/dashboard');
+  redirect('/variations');
 }
 
 export interface NoticeState {

@@ -159,9 +159,10 @@ export default async function PotentialChangeDetailPage({
     hasCapability(user.systemRole, projectRoles, 'document.upload'),
   ]);
 
-  const [mayCancel, mayPrice] = await Promise.all([
+  const [mayCancel, mayPrice, mayDelete] = await Promise.all([
     hasCapability(user.systemRole, projectRoles, 'potentialChange.cancel'),
     hasCapability(user.systemRole, projectRoles, 'pricing.submit'),
+    hasCapability(user.systemRole, projectRoles, 'potentialChange.delete'),
   ]);
 
   /*
@@ -631,10 +632,16 @@ export default async function PotentialChangeDetailPage({
             />
           ) : null}
 
-          {mayCancel && change.currentStatus !== 'included_scope' ? (
+          {/* Either right is enough to show the card. They travel together in
+              the default matrix, but an administrator is free to separate
+              them, and a delete button that disappears because somebody
+              untied CANCEL would be baffling. */}
+          {mayDelete || (mayCancel && change.currentStatus !== 'included_scope') ? (
             <CasePanel
               potentialChangeId={change.id}
               cancelled={change.currentStatus === 'cancelled'}
+              canCancel={mayCancel && change.currentStatus !== 'included_scope'}
+              canDelete={mayDelete}
             />
           ) : null}
 
