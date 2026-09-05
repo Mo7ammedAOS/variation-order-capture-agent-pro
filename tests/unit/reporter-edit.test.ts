@@ -34,6 +34,7 @@ vi.mock('@/services/permissions.service', () => ({
     state.capabilities.has(capability),
   pickResponsibleMember: async () => null,
   listMembersWithCapability: async () => [],
+  listCompanyWideHolders: async () => [],
 }));
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async () => [],

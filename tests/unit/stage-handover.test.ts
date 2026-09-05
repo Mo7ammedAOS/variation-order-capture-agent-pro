@@ -27,6 +27,7 @@ vi.mock('@/services/permissions.service', () => ({
     return state.owner;
   },
   listMembersWithCapability: async () => [],
+  listCompanyWideHolders: async () => [],
 }));
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.filter(Boolean).map((id) => ({ userId: id })),

@@ -78,7 +78,8 @@ vi.mock('@/integrations/claude', () => ({
   }),
 }));
 
-vi.mock('@/services/permissions.service', () => ({ pickResponsibleMember: async () => 'daniel', listMembersWithCapability: async () => [], }));
+vi.mock('@/services/permissions.service', () => ({ pickResponsibleMember: async () => 'daniel', listMembersWithCapability: async () => [],
+  listCompanyWideHolders: async () => [], }));
 
 vi.mock('@/services/notification.service', () => ({
   loadRecipients: async (ids: string[]) => ids.filter(Boolean).map((id) => ({ userId: id })),

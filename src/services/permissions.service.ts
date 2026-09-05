@@ -176,6 +176,39 @@ export async function pickResponsibleMember(
   return holders[0]?.userId ?? null;
 }
 
+/**
+ * Everybody in the company who holds a capability by SYSTEM role alone.
+ *
+ * ── The gap this closes ───────────────────────────────────────────────────
+ * `listMembersWithCapability` walks the project's MEMBERS. That is right for
+ * work belonging to the job — you cannot assess a notice on a project you were
+ * never put on. It is wrong for the people whose authority is the company's
+ * rather than the project's: a managing director is not a member of anything,
+ * because being added to forty projects one at a time is not how a director
+ * works.
+ *
+ * The consequence was silent. On 2026-09-05 the managing director had been
+ * told about no capture at all, on any project, since the system went live —
+ * the code asked for the directors "on the project", the honest answer was
+ * none, and an empty list is not an error.
+ *
+ * Deactivated people are excluded. Their authority is a fact about the past.
+ */
+export async function listCompanyWideHolders(capability: Capability): Promise<string[]> {
+  const matrix = await getPermissionMatrix();
+
+  const roles = (Object.keys(matrix.system) as SystemRole[]).filter((role) =>
+    matrix.system[role]?.has(capability),
+  );
+  if (roles.length === 0) return [];
+
+  const users = await prisma.user.findMany({
+    where: { active: true, systemRole: { in: roles } },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+}
+
 export async function hasCompanyWideProjectAccess(systemRole: SystemRole): Promise<boolean> {
   return systemRoleHasCapability(systemRole, 'project.viewAll');
 }

@@ -19,6 +19,10 @@ const state = {
   memberships: [] as Record<string, unknown>[],
   allProjects: [] as Record<string, unknown>[],
   asked: [] as Record<string, unknown>[],
+  tasks: [] as Record<string, unknown>[],
+  directors: [] as string[],
+  directorsWithReach: [] as string[],
+  assessor: 'cm-1' as string | null,
   confirmed: [] as Record<string, unknown>[],
   created: [] as Record<string, unknown>[],
   evidence: [] as Record<string, unknown>[],
@@ -55,7 +59,12 @@ const tx = {
       return { id: 'pc-1', ...args.data };
     },
   },
-  task: { create: async () => ({ id: 'task-1' }) },
+  task: {
+    create: async (args: { data: Record<string, unknown> }) => {
+      state.tasks.push(args.data);
+      return { id: `task-${state.tasks.length}`, ...args.data };
+    },
+  },
 };
 
 vi.mock('@/lib/prisma', () => ({
@@ -157,15 +166,23 @@ vi.mock('@/integrations/claude', () => ({
 
 vi.mock('@/services/audit-log.service', () => ({ recordAudit: async () => ({}) }));
 vi.mock('@/services/notification.service', () => ({
-  loadRecipients: async () => [],
+  // Echoes back whoever was asked for, so a caller that resolves nobody is
+  // visibly different from a caller that resolves somebody. Returning a flat
+  // [] made every notification path look identical from a test.
+  loadRecipients: async (ids: (string | null | undefined)[]) =>
+    (ids ?? [])
+      .filter((id): id is string => Boolean(id))
+      .map((id) => ({ userId: id, fullName: id, email: `${id}@example.com`, phone: null })),
   recordTaskNotifications: async () => 0,
   recordDirectNotifications: async () => 0,
   dispatchNow: async () => undefined,
   dispatchPendingNotifications: async () => ({ queued: 0, sent: 0, failed: 0 }),
 }));
 vi.mock('@/services/permissions.service', () => ({
-  pickResponsibleMember: async () => 'cm-1',
+  pickResponsibleMember: async () => state.assessor,
   listMembersWithCapability: async () => [],
+  listCompanyWideHolders: async (capability: string) =>
+    capability === 'project.viewAll' ? state.directorsWithReach : state.directors,
 }));
 vi.mock('@/services/integration.service', () => ({
   closeEvent: async () => undefined,
@@ -208,6 +225,10 @@ describe('choosing the project a captured message belongs to', () => {
     state.asked = [];
     state.confirmed = [];
     state.created = [];
+    state.tasks = [];
+    state.directors = [];
+    state.directorsWithReach = [];
+    state.assessor = 'cm-1';
     state.evidence = [];
     state.answer = null;
     state.eventPayload = null;
@@ -808,5 +829,102 @@ describe('the rest of the conversation', () => {
     // Refusing to file here would punish honesty by losing a real change.
     expect(outcome.kind).toBe('created');
     expect(state.askedForDetail).toHaveLength(0);
+  });
+});
+
+describe('who is put on the decision', () => {
+  beforeEach(() => {
+    state.user = { id: 'ahmed', fullName: 'Ahmed' };
+    state.memberships = memberOf('proj-a');
+    state.allProjects = PROJECTS;
+    state.asked = [];
+    state.confirmed = [];
+    state.created = [];
+    state.tasks = [];
+    state.directors = [];
+    state.evidence = [];
+    state.answer = null;
+    state.eventPayload = null;
+    state.senders = null;
+    state.acknowledged = [];
+    state.askedWhichChange = [];
+    state.askedToDescribe = [];
+    state.askedForDetail = [];
+    state.readBack = [];
+    state.confirmationEnabled = false;
+    state.detailFields = [];
+    state.recentExchange = false;
+  });
+
+  it('tasks the assessor and the managing director, and says they share it', async () => {
+    // Osman's call, 2026-09-05. A notification is read once and scrolled past;
+    // a task is chased daily and shows up overdue. The notice clock does not
+    // care which of the two was busy, so both carry it.
+    //
+    // Two rows rather than two names on one, because a task holds a single
+    // assignee and the chase, the escalation ladder and "my tasks" all read
+    // that field. A shared task would be chased on behalf of nobody.
+    state.memberships = memberOf('proj-a');
+    state.directors = ['md'];
+    state.directorsWithReach = ['md'];
+
+    await captureFromChannel({
+      channel: 'whatsapp',
+      senderIdentifier: '+971500000001',
+      text: 'consultant asked for the reception ceiling to drop 300mm yesterday, not started, verbally on site',
+      externalMessageId: 'wa-directors-1',
+      confirmed: true,
+      skipQuestions: true,
+    } as Parameters<typeof captureFromChannel>[0]);
+
+    const assessments = state.tasks.filter((t) => t.taskType === 'notice_assessment');
+    expect(assessments).toHaveLength(2);
+    expect(assessments.map((t) => t.assignedToUserId)).toContain('md');
+
+    // The director's copy says he is not alone on it. A director who thinks
+    // he is the only one deciding acts on something already handled; one who
+    // assumes somebody else has it lets the clock run out.
+    const directorTask = assessments.find((t) => t.assignedToUserId === 'md');
+    expect(String(directorTask?.description ?? '')).toContain('Either of you can decide');
+  });
+
+  it('does not task the same person twice when the director is also the assessor', async () => {
+    state.memberships = memberOf('proj-a');
+    state.directors = ['cm-1'];
+    state.directorsWithReach = ['cm-1'];
+
+    await captureFromChannel({
+      channel: 'whatsapp',
+      senderIdentifier: '+971500000001',
+      text: 'client wants the corridor lighting changed, started already, told me on site yesterday',
+      externalMessageId: 'wa-directors-2',
+      confirmed: true,
+      skipQuestions: true,
+    } as Parameters<typeof captureFromChannel>[0]);
+
+    const assessments = state.tasks.filter((t) => t.taskType === 'notice_assessment');
+    expect(assessments).toHaveLength(1);
+  });
+
+  it('will not task a director who cannot open the project', async () => {
+    // A task in his list and a 403 when he taps it is worse than not being
+    // told: it asks somebody for a decision the app would then refuse from
+    // him. Company-wide authority has to include company-wide reach.
+    state.memberships = memberOf('proj-a');
+    state.directors = ['md'];
+    state.directorsWithReach = [];
+
+    await captureFromChannel({
+      channel: 'whatsapp',
+      senderIdentifier: '+971500000001',
+      text: 'landlord closed the loading bay yesterday, work not started, told us on site',
+      externalMessageId: 'wa-directors-3',
+      confirmed: true,
+      skipQuestions: true,
+    } as Parameters<typeof captureFromChannel>[0]);
+
+    const assessments = state.tasks.filter((t) => t.taskType === 'notice_assessment');
+    expect(assessments).toHaveLength(1);
+    expect(assessments.map((t) => t.assignedToUserId)).not.toContain('md');
   });
 });

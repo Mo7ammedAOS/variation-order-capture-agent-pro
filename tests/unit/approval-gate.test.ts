@@ -36,6 +36,7 @@ vi.mock('@/services/project-access.service', () => ({
 vi.mock('@/services/permissions.service', () => ({
   hasCapability: async () => state.canFill,
   listMembersWithCapability: async () => [],
+  listCompanyWideHolders: async () => [],
   pickResponsibleMember: async () => state.nextStageOwner,
 }));
 vi.mock('@/services/notification.service', () => ({
