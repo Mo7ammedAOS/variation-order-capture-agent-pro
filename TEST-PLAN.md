@@ -51,6 +51,48 @@ and each move is itself a test.
 
 Throughout, **the number** means your real WhatsApp number.
 
+## The clock, and how to move it
+
+Most of what this system does is a function of **dates**. A notice is due 28
+days after the event. A client is chased every 7. An assessment turns red when
+its deadline passes. Somebody who has not answered gets escalated after so many
+days of silence.
+
+None of that can be tested by waiting for a schedule to fire, because on the
+day you enter the data **nothing is due yet** — and the honest answer from
+every sweep is "nothing to do". Waiting a month to find out whether the chase
+works is not a test.
+
+So there are two levers, and you will use them from Stage 13 onwards.
+
+**Lane M in n8n — run a job now.** Open the `VO Capture & Control · MASTER`
+workflow, find **Lane M**, open **`M2 · Choose the job and the date`**, set
+`JOB`, and press **Test workflow**. The four jobs:
+
+| `JOB` | What it does |
+|---|---|
+| `reminder_sweep` | Chases whoever owes a decision, and escalates what is late |
+| `bottleneck_sweep` | Finds what is stuck and puts it on **Held Up** |
+| `client_followup` | Chases the **client** for an answer on a submitted variation |
+| `notification_dispatch` | Pushes anything still pending, and files unfiled notices |
+
+**`AS_OF` — run it as if it were another day.** In the same node, set
+`AS_OF = '2026-10-04'`. The sweep then reads the world as it will be on that
+date. Nothing is faked and nothing is back-dated: the same code runs against
+the same rows and decides for itself whether something is due.
+
+Read the answer on **`M4 · Run it`**. It tells you `ran_as_of`, whether the run
+was `simulated`, and the counts — so an execution in the n8n list still
+explains itself a week later.
+
+> **`AS_OF` needs `ALLOW_JOB_TIME_TRAVEL=true`** in `.env.production`, and the
+> app restarted. Without it the request is refused with that exact reason.
+>
+> **There is no test mode at the far end.** A reminder is a real WhatsApp
+> message and a client chase is a real email to the client's real inbox. That
+> is the point — a test that stops short of the message has not tested the part
+> that can be wrong. Turn the flag off when you have finished testing.
+
 ---
 
 # Stage 0 · Empty the system and get in
@@ -551,15 +593,20 @@ Submit the priced variation. Approve as PM, then as MD.
 
 **Goal** — the only thing the system sends to somebody outside the company.
 
-Submit to the client. To test the chase without waiting two weeks, temporarily
-set DXB-002's **client response days** to `0` and run the follow-up sweep.
+Submit to the client. Then chase, without waiting two weeks — Lane M,
+`JOB = 'client_followup'`.
+
+Run it **twice**: once with `AS_OF` empty, and once with `AS_OF` set past
+DXB-002's response window. The first should write nothing, and that is a pass,
+not a failure — the chase is not due yet.
 
 ### Pass when
 
 - [ ] `mo@mohammedosman.studio` receives the submission
-- [ ] A chase goes out **only after** the response period has passed
+- [ ] With `AS_OF` empty, the sweep writes **nothing** — it is not due
+- [ ] With `AS_OF` past the response window, the chase goes out
 - [ ] It states facts and asks a question — no pressure, no threats
-- [ ] Running the sweep twice in a day sends **once**
+- [ ] Running it twice on the **same** `AS_OF` sends **once**
 - [ ] Marking the client as having responded stops the chasing immediately
 - [ ] DXB-004, where chasing is switched off, sends **nothing** ever
 
@@ -593,6 +640,51 @@ open `Held Up`.
 - [ ] The stuck change is listed with an owner and a number of days
 - [ ] The value waiting behind it is shown
 - [ ] Acting on it removes it from the list
+
+---
+
+# Stage 19b · The clock — every timed step, on demand
+
+**Goal** — prove that everything which is supposed to happen after N days
+actually happens, without spending N days finding out.
+
+By now you have a notice with a deadline, an assessment somebody owes a
+decision on, and a variation sitting with a client. All three are waiting on
+dates. This stage walks the clock forward past each one.
+
+### Do
+
+For each row: open Lane M → `M2` → set `JOB` and `AS_OF` → **Test workflow** →
+read the answer on `M4`.
+
+| # | `JOB` | `AS_OF` | What should happen |
+|---|---|---|---|
+| 1 | `reminder_sweep` | *(empty)* | Almost nothing. Whatever is genuinely due today, and no more |
+| 2 | `reminder_sweep` | the day **before** the notice deadline | The owner is chased about the notice |
+| 3 | `reminder_sweep` | a week **after** the deadline | It escalates — the chase goes above the person who did not act |
+| 4 | `bottleneck_sweep` | a week after the deadline | The overdue assessment appears on **Held Up**, with value at risk |
+| 5 | `client_followup` | past the client response window | The client is chased |
+| 6 | `notification_dispatch` | *(empty)* | Anything stuck pending goes out; any unfiled notice PDF is filed |
+
+Then repeat row 2 **immediately**, unchanged.
+
+### Pass when
+
+- [ ] Row 1 writes little or nothing, and says so in the counts
+- [ ] Row 2 chases the right person — the one who owes the decision, not everybody
+- [ ] Row 3 escalates **above** them, and names why
+- [ ] Row 4 puts it on Held Up with the money attached
+- [ ] Row 5 emails the client, and only the client
+- [ ] **Repeating row 2 sends nothing the second time** — this is the one that
+      matters most. A system that double-chases gets muted, and a muted system
+      is worth nothing on the day a notice is actually due
+- [ ] Every response carries `ran_as_of` and `simulated: true`
+- [ ] With `ALLOW_JOB_TIME_TRAVEL` off, `AS_OF` is refused with that reason —
+      not ignored silently
+
+> Turn `ALLOW_JOB_TIME_TRAVEL` back off when this stage is done. Left on, one
+> mistyped date in a schedule node chases a client about a deadline six months
+> out, and the client has no way of telling that from a real one.
 
 ---
 
@@ -685,6 +777,18 @@ WIPE=yes npm run db:wipe
 # The browser route is /admin-signin → "Set up the company", which is the
 # one the test plan uses. This is here for scripted deployments.
 npm run db:bootstrap -- --email you@company.ae --name "Your Name" --company "Your Company"
+```
+
+## Running a scheduled job by hand
+
+n8n → `VO Capture & Control · MASTER` → **Lane M** → `M2` → set `JOB` and
+`AS_OF` → **Test workflow**. Jobs: `reminder_sweep`, `bottleneck_sweep`,
+`client_followup`, `notification_dispatch`.
+
+`AS_OF` needs this on the server, and off again afterwards:
+
+```
+ALLOW_JOB_TIME_TRAVEL=true
 ```
 
 ## The addresses, in one place

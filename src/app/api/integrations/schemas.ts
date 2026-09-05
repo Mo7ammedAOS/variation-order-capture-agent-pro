@@ -114,6 +114,18 @@ export const scheduledJobSchema = z.object({
     'notification_dispatch',
     'client_followup',
   ]),
+  /**
+   * The date the sweep should believe it is. Testing only, and refused
+   * outright unless ALLOW_JOB_TIME_TRAVEL is on.
+   *
+   * Accepts a date or a full timestamp, so `2026-10-04` is as valid as an ISO
+   * instant — an n8n Set node is a bad place to have to remember a format.
+   */
+  as_of: z
+    .string()
+    .datetime({ offset: true })
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+    .optional(),
 });
 
 export type WhatsappIncoming = z.infer<typeof whatsappIncomingSchema>;

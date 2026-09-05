@@ -121,8 +121,12 @@ export async function resolveBottleneck(user: AuthenticatedUser, bottleneckId: s
  * exist in Phase 1 and nothing beyond. The remaining twenty-odd bottleneck
  * types in the schema arrive with the stages that produce them.
  */
-export async function runDetectionSweep(): Promise<{ detected: number }> {
-  const today = todayUtc();
+export async function runDetectionSweep(now: Date = new Date()): Promise<{ detected: number }> {
+  // Takes the date rather than reading the clock, so the same sweep can be run
+  // against a future date to prove it detects what it should. The other two
+  // sweeps already worked this way; this one did not, which made it the only
+  // scheduled job that could not be tested without waiting.
+  const today = todayUtc(now);
   let detected = 0;
 
   const overdueAssessments = await prisma.potentialChange.findMany({

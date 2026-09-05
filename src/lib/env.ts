@@ -49,6 +49,27 @@ const serverSchema = z.object({
    */
   ENABLE_SCHEDULER: z.enum(['true', 'false']).default('false'),
 
+  /**
+   * Whether a scheduled job may be told what day it is.
+   *
+   * Everything contractual in this system is a function of dates: a notice is
+   * due 28 days after the event, a client is chased every 7, an assessment
+   * goes red when its deadline passes. None of that can be exercised by
+   * pressing a button, because none of it is true today — you would have to
+   * wait a month to find out whether the thing you built works.
+   *
+   * With this on, `run-job` accepts an `as_of` and the sweep reads the state
+   * of the world as it will be on that date. Nothing is faked and nothing is
+   * back-dated: the same code runs against the same rows, and it either
+   * decides something is due or it does not.
+   *
+   * Off in normal operation. On it, a stray edit to an n8n schedule node could
+   * chase a client about a deadline six months out, and the client would have
+   * no way of knowing it was a test. Turn it on for a test window, and off
+   * again after.
+   */
+  ALLOW_JOB_TIME_TRAVEL: z.enum(['true', 'false']).default('false'),
+
   JOB_DRIVER: z.enum(['memory', 'bullmq']).default('memory'),
   REDIS_URL: z.string().default(''),
 

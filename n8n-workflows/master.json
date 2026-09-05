@@ -1285,6 +1285,224 @@
         -192,
         1072
       ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "3f400c8c-8f91-5a62-95a2-d18265874772",
+      "name": "S4 · Daily 06:30 · Chase the client",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -304,
+        2096
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ts: String(Date.now()), payload: JSON.stringify({ job: 'client_followup' }) } }];"
+      },
+      "id": "dbf8cb62-6189-524d-aa1a-3ac36bdd1445",
+      "name": "S4a · Build client_followup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        2096
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "value": "={{ $json.ts + '.' + $json.payload }}",
+        "dataPropertyName": "signature"
+      },
+      "id": "bba797f6-c35b-56a9-aa7f-b65f11a4901e",
+      "name": "S4b · Sign",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        144,
+        2096
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vo.osmanflow.com/api/integrations/n8n/run-job",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-vo-timestamp",
+              "value": "={{ $json.ts }}"
+            },
+            {
+              "name": "x-vo-signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.payload }}",
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "id": "6ffd7d44-c6c3-550c-b240-ba69c48eb430",
+      "name": "S4c · Run client_followup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        2096
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {},
+      "id": "047875e5-244b-558d-9ae3-820a488ee1a9",
+      "name": "M1 · Run now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── EDIT THESE TWO, THEN PRESS \"TEST WORKFLOW\" ──────────────────────────────\n\nconst JOB = 'reminder_sweep';\n// reminder_sweep       chase whoever owes a decision, and escalate what is late\n// bottleneck_sweep     find what is stuck and put it on the Held Up page\n// client_followup      chase the CLIENT for an answer on a submitted variation\n// notification_dispatch  push anything still sitting pending, and file notices\n\nconst AS_OF = '';\n// '' runs as today.\n// 'YYYY-MM-DD' runs the sweep as if it were that day — which is the only way to\n// test anything contractual without waiting for it. A notice due in 28 days is\n// not overdue now, so \"run now\" against real data honestly answers \"nothing is\n// due\", and you learn nothing. Set a date past the deadline and the same code\n// runs against the same rows and decides it IS due.\n//\n// Needs ALLOW_JOB_TIME_TRAVEL=true on the app, or the request is refused.\n// Whatever this sends is a real message to a real person — there is no test\n// mode at the far end. Turn the flag off when you have finished.\n\n// ───────────────────────────────────────────────────────────────────────────\nconst body = AS_OF ? { job: JOB, as_of: AS_OF } : { job: JOB };\nreturn [{ json: { ts: String(Date.now()), payload: JSON.stringify(body) } }];"
+      },
+      "id": "003f6b0b-8765-5fff-bed1-a3cc74c62cd5",
+      "name": "M2 · Choose the job and the date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "value": "={{ $json.ts + '.' + $json.payload }}",
+        "dataPropertyName": "signature"
+      },
+      "id": "5ac4cb92-913e-5a2f-9fc4-42e75b43eeb5",
+      "name": "M3 · Sign",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        144,
+        2480
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "EogdgPinyRBSGG6B",
+          "name": "VO · sign requests to the app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vo.osmanflow.com/api/integrations/n8n/run-job",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-vo-timestamp",
+              "value": "={{ $json.ts }}"
+            },
+            {
+              "name": "x-vo-signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.payload }}",
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "id": "e4206885-6fea-5c99-9724-c838b964b434",
+      "name": "M4 · Run it",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        2480
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "### Lane M · Run a scheduled job now\n\nEverything contractual in this system is a function of dates — a notice is due\n28 days after the event, a client is chased every 7, an assessment turns red\nwhen its deadline passes. So you cannot test any of it by waiting for a\nschedule to fire: on the day you entered the data, the honest answer to every\nsweep is \"nothing is due yet\".\n\n**Open `M2`, set `JOB`, optionally set `AS_OF` to a date past the deadline,\nthen Test workflow.** The sweep runs against the real rows and decides for\nitself whether something is due.\n\nRead the response on `M4`. `simulated: true` and `ran_as_of` say which day it\nbelieved it was, so an execution in the list explains itself later.\n\n⚠️ There is no test mode at the far end. A reminder is a real WhatsApp\nmessage and a client chase is a real email to the client. `AS_OF` needs\n`ALLOW_JOB_TIME_TRAVEL=true` on the app — turn it off when you have finished.",
+        "height": 340,
+        "width": 520,
+        "color": 4
+      },
+      "id": "e48cda3f-c692-5308-bb29-ef73017332d6",
+      "name": "Note M",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        2440
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Lane S4 · Chase the client\n\n`client_followup` had no schedule at all until now — it was reachable from\nrun-job and nothing ever called it, so the only chase a client received was\none a person remembered to send.\n\nThe CADENCE is per project, in the contract rules, not here. This fires every\nmorning and most mornings writes nothing, so a schedule edited by accident\ncannot turn a weekly chase into a daily one — the mistake that costs a client\nrelationship rather than a record.",
+        "height": 240,
+        "width": 520,
+        "color": 3
+      },
+      "id": "2733e304-cc79-53ba-8413-9ec39e35e2fd",
+      "name": "Note S4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        2056
+      ]
     }
   ],
   "connections": {
@@ -1731,6 +1949,72 @@
         [
           {
             "node": "E2 · Recompute Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S4 · Daily 06:30 · Chase the client": {
+      "main": [
+        [
+          {
+            "node": "S4a · Build client_followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S4a · Build client_followup": {
+      "main": [
+        [
+          {
+            "node": "S4b · Sign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S4b · Sign": {
+      "main": [
+        [
+          {
+            "node": "S4c · Run client_followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M1 · Run now (manual)": {
+      "main": [
+        [
+          {
+            "node": "M2 · Choose the job and the date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M2 · Choose the job and the date": {
+      "main": [
+        [
+          {
+            "node": "M3 · Sign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M3 · Sign": {
+      "main": [
+        [
+          {
+            "node": "M4 · Run it",
             "type": "main",
             "index": 0
           }
