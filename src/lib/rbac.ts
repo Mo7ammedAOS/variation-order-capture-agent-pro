@@ -48,6 +48,7 @@ export const ALL_CAPABILITIES = [
   'approval.managingDirector',
   'potentialChange.cancel',
   'potentialChange.delete',
+  'capture.triage',
   'pricing.submit',
   'task.assign',
   'task.complete',
@@ -83,7 +84,7 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'notice.draft', 'notice.acknowledge',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
-    'potentialChange.delete',
+    'potentialChange.delete', 'capture.triage',
     'user.manage', 'companySettings.manage',
   ],
   // Osman's call, 2026-09-04: the administrator does NOT touch notices.
@@ -103,9 +104,16 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'potentialChange.create', 'potentialChange.update',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'potentialChange.changeStatus', 'task.assign', 'task.complete', 'bottleneck.manage',
-    'potentialChange.delete',
+    'potentialChange.delete', 'capture.triage',
     'user.manage', 'companySettings.manage',
   ],
+  // The director sees every door the administrator does. Osman's call,
+  // 2026-09-05 — the two of them answer for the company, and a director who
+  // cannot open the users screen has to ask somebody junior to do it.
+  //
+  // The capture inbox is the exception, and deliberately: it is a desk of
+  // other people's half-understood messages, and working it is
+  // administration rather than direction.
   managing_director: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',
     'project.manageContractRules', 'contact.manage', 'document.upload', 'document.manageRegister',
@@ -113,7 +121,7 @@ export const DEFAULT_SYSTEM_ROLE_CAPABILITIES: Record<SystemRole, readonly Capab
     'notice.draft', 'notice.acknowledge',
     'variationOrder.manage', 'invoice.manage', 'payment.record',
     'task.assign', 'task.complete', 'bottleneck.manage',
-    'potentialChange.delete',
+    'potentialChange.delete', 'user.manage', 'companySettings.manage',
   ],
   operations_director: [
     'project.create', 'project.update', 'project.viewAll', 'project.manageMembers',

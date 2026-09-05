@@ -86,8 +86,32 @@ describe('default capabilities', () => {
     );
   });
 
-  it('keeps user management away from directors who are not admins', () => {
-    expect(combined('managing_director', ['project_manager'], 'user.manage')).toBe(false);
+  it('gives the managing director the administrator\'s doors', () => {
+    // REVERSED on Osman's instruction, 2026-09-05. It used to be withheld on
+    // the reasoning that administration is not direction — but a director who
+    // cannot open the users screen has to ask somebody junior to add a person
+    // to a project, and in a company this size the two people who answer for
+    // it are the administrator and him.
+    expect(systemHas('managing_director', 'user.manage')).toBe(true);
+    expect(systemHas('managing_director', 'companySettings.manage')).toBe(true);
+  });
+
+  it('still keeps every door shut for the people who only report', () => {
+    // The point of the change was the top of the company, not the bottom.
+    for (const capability of ['user.manage', 'companySettings.manage', 'capture.triage'] as const) {
+      expect(combined('standard_user', ['site_engineer'], capability), capability).toBe(false);
+      expect(combined('standard_user', ['project_manager'], capability), capability).toBe(false);
+      expect(combined('standard_user', ['quantity_surveyor'], capability), capability).toBe(false);
+    }
+  });
+
+  it('leaves the capture inbox with the administrator', () => {
+    // The triage queue is other people's half-understood messages from every
+    // project. Reading it is reading everybody's post, and it is
+    // administration rather than direction — his call, not an oversight.
+    expect(systemHas('company_admin', 'capture.triage')).toBe(true);
+    expect(systemHas('company_owner', 'capture.triage')).toBe(true);
+    expect(systemHas('managing_director', 'capture.triage')).toBe(false);
   });
 });
 

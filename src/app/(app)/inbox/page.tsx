@@ -21,7 +21,11 @@ export const dynamic = 'force-dynamic';
  */
 export default async function InboxPage() {
   const user = await requirePageUser();
-  await assertCapability(user, 'potentialChange.create');
+  // NOT `potentialChange.create`, which every site engineer holds and which
+  // had left this queue open to the whole company. The inbox is other
+  // people's half-understood messages, from every project, including ones the
+  // reader is not on — reading it is reading everybody's post.
+  await assertCapability(user, 'capture.triage');
 
   const [items, projects] = await Promise.all([listTriageQueue(), listProjects(user)]);
 

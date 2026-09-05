@@ -3,10 +3,11 @@ import { Bell, HardHat, LogOut } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
 import { countMyUnread } from '@/services/notification.service';
-import { SYSTEM_ROLE_LABELS } from '@/lib/rbac';
+import { SYSTEM_ROLE_LABELS, type Capability } from '@/lib/rbac';
+import { hasCapability } from '@/services/permissions.service';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/(auth)/login/actions';
-import { MobileNav, ReportChangeFab, SidebarNav } from './nav';
+import { MobileNav, NAV_LINKS, ReportChangeFab, SidebarNav } from './nav';
 import { CommandPalette } from './command-palette';
 import { CommandTrigger } from './command-trigger';
 import { PageTransition } from '@/components/domain/page-transition';
@@ -40,13 +41,44 @@ function NotificationBell({ unread, className }: { unread: number; className?: s
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePageUser();
-  const [settings, unread] = await Promise.all([
+  const [settings, unread, projectRoles] = await Promise.all([
     prisma.companySettings
       .findFirst({ select: { displayCompanyName: true } })
       .catch(() => null),
     // A failure to count must never cost someone the whole application shell.
     countMyUnread(user).catch(() => 0),
+    // EVERY project role this person holds, anywhere. The nav is not on a
+    // project, so a project manager on one job and nothing on another should
+    // still see the menu his job needs. Asked once for the whole shell; the
+    // matrix behind the checks below is memoised for the request.
+    prisma.projectMember
+      .findMany({
+        where: { userId: user.id, active: true },
+        select: { projectRole: true },
+        distinct: ['projectRole'],
+      })
+      .then((rows) => rows.map((row) => row.projectRole))
+      .catch(() => []),
   ]);
+
+  // What this person can actually reach. A menu full of doors that open onto a
+  // polite refusal teaches people that most of the app is not for them, and
+  // then they stop reading the part that is.
+  //
+  // The pages refuse on the server too. This is about what is worth showing.
+  const links = (
+    await Promise.all(
+      NAV_LINKS.map(async (link) => {
+        if (!link.capability) return link;
+        const allowed = await hasCapability(
+          user.systemRole,
+          projectRoles,
+          link.capability as Capability,
+        );
+        return allowed ? link : null;
+      }),
+    )
+  ).filter((link): link is (typeof NAV_LINKS)[number] => link !== null);
 
   return (
     <div
@@ -68,7 +100,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex-1 px-3">
           <CommandTrigger />
-          <SidebarNav />
+          <SidebarNav links={links} />
         </div>
 
         <div className="p-3">
@@ -125,7 +157,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <MobileNav />
       <ReportChangeFab />
-      <CommandPalette />
+      <CommandPalette links={links} />
     </div>
   );
 }

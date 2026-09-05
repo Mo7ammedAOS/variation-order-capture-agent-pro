@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { RegisterFilters } from './filters';
 import { PeekDrawer } from './peek-drawer';
 
-export const metadata: Metadata = { title: 'Potential Changes' };
+export const metadata: Metadata = { title: 'Variations' };
 export const dynamic = 'force-dynamic';
 
 export default async function VariationsPage({
@@ -42,7 +42,10 @@ export default async function VariationsPage({
     <div className="mx-auto flex max-w-[110rem] flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Potential Changes</h1>
+          {/* The page carries the same word as the menu item that opens it.
+              A control that says one thing and lands on a page that says
+              another is how people stop trusting either. */}
+          <h1 className="text-2xl font-semibold tracking-tight">Variations</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {changes.length} {changes.length === 1 ? 'change' : 'changes'} in your projects
           </p>

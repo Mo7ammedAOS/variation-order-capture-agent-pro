@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  AlertOctagon, FileText, FileWarning, FolderKanban, LayoutDashboard,
-  ListChecks, Loader2, Plus, Search, Settings,
+  AlertOctagon, Building2, FileText, FileWarning, FolderKanban, Inbox,
+  LayoutDashboard, ListChecks, Loader2, Plus, Search, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,17 +53,55 @@ interface Item {
   tone?: string | null;
 }
 
-const NAVIGATION: Item[] = [
-  { id: 'nav-dashboard', label: 'Overview', href: '/dashboard', icon: LayoutDashboard, group: 'Go to' },
-  { id: 'nav-tasks', label: 'My Tasks', href: '/my-tasks', icon: ListChecks, group: 'Go to' },
-  { id: 'nav-changes', label: 'Potential Changes', href: '/variations', icon: FileWarning, group: 'Go to' },
-  { id: 'nav-held-up', label: 'Held Up', href: '/bottlenecks', icon: AlertOctagon, group: 'Go to' },
-  { id: 'nav-projects', label: 'Projects', href: '/projects', icon: FolderKanban, group: 'Go to' },
-  { id: 'nav-settings', label: 'Settings', href: '/settings/users', icon: Settings, group: 'Go to' },
-  { id: 'act-report', label: 'Report a change', hint: 'Capture a new potential change', href: '/report-change', icon: Plus, group: 'Do' },
-];
+/**
+ * Where the palette can take you.
+ *
+ * Built from the links the shell decided this person may see, rather than from
+ * a second list beside the sidebar. Two lists of destinations is how a page
+ * that was removed from the menu stays one keystroke away — and a search box
+ * that offers a door it knows is locked is worse than one that never mentions
+ * it.
+ *
+ * Reporting a change is offered to everybody, because everybody may.
+ */
+const PALETTE_ICONS: Record<string, Item['icon']> = {
+  '/dashboard': LayoutDashboard,
+  '/my-tasks': ListChecks,
+  '/variations': FileWarning,
+  '/bottlenecks': AlertOctagon,
+  '/inbox': Inbox,
+  '/projects': FolderKanban,
+  '/settings/company': Building2,
+  '/settings/users': Settings,
+  '/settings/permissions': ShieldCheck,
+};
 
-export function CommandPalette() {
+const REPORT_ACTION: Item = {
+  id: 'act-report',
+  label: 'Report a change',
+  hint: 'Capture a new potential change',
+  href: '/report-change',
+  icon: Plus,
+  group: 'Do',
+};
+
+export function CommandPalette({ links }: { links: { href: string; label: string }[] }) {
+  // Memoised on the links themselves: rebuilt on every render it would be a
+  // new array each time, which quietly defeats the memo below that filters it.
+  const NAVIGATION: Item[] = useMemo(
+    () => [
+      ...links.map((link) => ({
+        id: `nav-${link.href}`,
+        label: link.label,
+        href: link.href,
+        icon: PALETTE_ICONS[link.href] ?? LayoutDashboard,
+        group: 'Go to',
+      })),
+      REPORT_ACTION,
+    ],
+    [links],
+  );
+
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -177,7 +215,7 @@ export function CommandPalette() {
     }));
 
     return [...changes, ...projects, ...reports, ...navigation];
-  }, [results, query]);
+  }, [results, query, NAVIGATION]);
 
   useEffect(() => {
     setActive(0);

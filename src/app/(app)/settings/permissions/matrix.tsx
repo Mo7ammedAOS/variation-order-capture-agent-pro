@@ -31,6 +31,7 @@ export interface PermissionCell {
 const CAPABILITY_LABELS: Record<Capability, string> = {
   'potentialChange.cancel': 'Cancel or reinstate a change',
   'potentialChange.delete': 'Delete a change permanently',
+  'capture.triage': 'Open the capture inbox',
   'pricing.submit': 'Price a change',
   'potentialChange.updateOwn': 'Edit a change they reported',
   'potentialChange.reopen': 'Reopen a change for rework',
