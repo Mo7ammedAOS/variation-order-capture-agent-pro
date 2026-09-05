@@ -69,6 +69,17 @@ cannot quietly come back on the next deploy.
 ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
 ```
 
+**There are two front doors, and they are not the same page.**
+
+| Address | Who | What is on it |
+|---|---|---|
+| `/signin` | everybody | The password box, and nothing else |
+| `/admin-signin` | whoever sets the company up | The same box, plus **Set up the company** |
+
+`/admin-signin` grants nothing `/signin` does not — same form, same checks,
+same server. The split is so that a site engineer is not shown a button that
+is not for them.
+
 Then, in a browser, go to:
 
 ```
@@ -106,13 +117,43 @@ defaults, creates the company record, and creates one owner account.
 
 ### Pass when
 
-- [ ] You are signed in at `https://vo.osmanflow.com` as Aryia
+- [ ] You are signed in at `https://vo.osmanflow.com` under the name you typed
 - [ ] The sidebar shows **Overview, My Tasks, Variations, Held Up, Capture Inbox, Projects, Company, Users, Permissions**
 - [ ] Overview is empty — no changes, no value, no tasks
 - [ ] Sign out, then open `/admin-signup` directly. It redirects to sign-in and
       offers no set-up button. **Set-up has closed behind you.**
 - [ ] `/signin` shows the same form with no set-up button at all
 
+
+---
+
+# Stage 0b · Point Supabase at the live site
+
+**Goal** — every invitation email in Stage 2 lands on the app instead of on
+somebody's laptop.
+
+Stage 0 needs none of this, because you typed your password directly. **Stage
+2 does.** The seven staff accounts are invited by email, and the link in that
+email goes wherever Supabase says — not wherever the app says. Left at its
+default the address is `http://localhost:3000`, which resolves to nothing on
+anybody's phone. This is a real fault that has already happened once.
+
+### Do
+
+In the Supabase dashboard → **Authentication** → **URL Configuration**:
+
+| Field | Value |
+|---|---|
+| Site URL | `https://vo.osmanflow.com` |
+| Redirect URLs | add `https://vo.osmanflow.com/set-password` |
+
+### Pass when
+
+- [ ] Site URL is the live domain, not `localhost`
+- [ ] `/set-password` is listed under Redirect URLs
+
+> Do this before Stage 2 and it costs a minute. Do it after and you have seven
+> dead links and seven people who cannot get in.
 
 ---
 
@@ -156,11 +197,26 @@ business number. Leave the amber threshold at **7 days**.
 > **project role**, granted in Stage 5. A system role is what somebody can do
 > company-wide, and a PM should be able to do nothing company-wide.
 
+### What each person sees
+
+An email with a link. It opens **`/set-password`**, where they choose their own
+password and are then sent to `/signin` to use it. You never see their
+password, and neither does anybody else — it cannot be looked up later, only
+replaced.
+
+**If a link is dead**, that is routine rather than a fault: they expire, and
+some mail apps spend them by opening every link in a message to build a
+preview. The `/set-password` screen offers a new one — or use
+`Users` → the person → **Email a reset link**.
+
 ### Pass when
 
 - [ ] Seven accounts listed, all Active
 - [ ] Each person receives an invitation email
-- [ ] At least two of them set a password and sign in
+- [ ] The link opens `/set-password` on the live domain — **not** `localhost`
+- [ ] At least two of them set a password and sign in at `/signin`
+- [ ] Ask one of them to try their link a second time. It refuses, and the
+      screen offers to send another rather than dead-ending
 
 ---
 
@@ -270,7 +326,7 @@ Sign in as each person and look at the sidebar.
 
 | Signed in as | Should see |
 |---|---|
-| Aryia (Owner) | All nine items |
+| You (Owner) | All nine items |
 | Mohammed (MD) | All except **Capture Inbox** |
 | Abdelmoneim (PM) | Overview · My Tasks · Variations · Held Up · **Projects** |
 | Ahmed (SE) | Overview · My Tasks · Variations · Held Up — **four only** |
@@ -279,10 +335,15 @@ Sign in as each person and look at the sidebar.
 Then, still signed in as **Ahmed**, type these into the browser bar directly:
 `/settings/permissions`, `/settings/users`, `/inbox`.
 
+Then sign out and open **`/admin-signup`** directly.
+
 ### Pass when
 
 - [ ] Each person sees exactly the rows above
 - [ ] Ahmed is refused all three pages, with a page that explains rather than a crash
+- [ ] `/admin-signup` redirects to sign-in and offers no set-up button —
+      **the door closed behind Stage 0 and stays closed**
+- [ ] `/admin-signin` shows no set-up button either, and says set-up is closed
 
 > Hiding a link is not the enforcement. If any of those three opened for Ahmed,
 > stop and report it.
@@ -620,6 +681,18 @@ ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
 # Empty everything (irreversible)
 WIPE=yes npm run db:wipe
 
-# Restore permissions + company + one owner account
+# Restore permissions + company + one owner account, from a terminal.
+# The browser route is /admin-signin → "Set up the company", which is the
+# one the test plan uses. This is here for scripted deployments.
 npm run db:bootstrap -- --email you@company.ae --name "Your Name" --company "Your Company"
 ```
+
+## The addresses, in one place
+
+| Address | What it is |
+|---|---|
+| `/signin` | Everybody signs in here |
+| `/admin-signin` | The same, plus set-up while the company is empty |
+| `/admin-signup` | The set-up form. Closes for good once an owner exists |
+| `/set-password` | Where an invitation or a reset link lands |
+| `/login` | Kept alive; redirects to `/signin` |
