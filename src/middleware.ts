@@ -11,7 +11,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
  * enforced only here is enforced only until someone calls the API directly.
  */
 
-const PUBLIC_PATHS = ['/login', '/auth'];
+// `/set-password` is public for the same reason `/login` is: everybody who
+// needs it is by definition not signed in yet.
+const PUBLIC_PATHS = ['/login', '/auth', '/set-password'];
 
 /**
  * Pages and API routes fail differently on purpose.

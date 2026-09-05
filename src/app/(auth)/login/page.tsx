@@ -48,6 +48,11 @@ const SIGN_OUT_REASONS: Record<string, string> = {
   account_deactivated:
     'Your access has been switched off, so you have been signed out. Your administrator can switch it back on.',
   signed_out: 'You have been signed out.',
+  // Not a sign-out at all — the arrival from /set-password. It shares this
+  // map because it needs the same thing: a line of explanation above the
+  // form, and a `reason` in the URL so middleware does not bounce a
+  // still-warm session straight back to the dashboard.
+  password_set: 'Your password is set. Sign in with it.',
 };
 
 export default async function LoginPage({

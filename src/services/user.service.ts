@@ -56,7 +56,7 @@ export async function inviteUser(actor: AuthenticatedUser, input: z.infer<typeof
   const env = getEnv();
 
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(input.email, {
-    redirectTo: `${env.APP_URL}/login`,
+    redirectTo: `${env.APP_URL}/set-password`,
     data: { full_name: input.fullName },
   });
 
@@ -187,7 +187,7 @@ export async function sendPasswordResetLink(actor: AuthenticatedUser, userId: st
   const env = getEnv();
 
   const { error } = await supabase.auth.resetPasswordForEmail(target.email, {
-    redirectTo: `${env.APP_URL}/login`,
+    redirectTo: `${env.APP_URL}/set-password`,
   });
   if (error) throw new IntegrationError(`Could not send the link: ${error.message}`);
 

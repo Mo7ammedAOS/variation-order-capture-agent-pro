@@ -149,10 +149,23 @@ async function main() {
     },
   });
 
+  // APP_URL, not NEXT_PUBLIC_APP_URL — the latter has never existed in this
+  // project, so this read was always undefined and every invitation fell back
+  // to whatever Site URL the Supabase dashboard happened to hold. On a laptop
+  // that is `http://localhost:3000`, which is where the first owner's
+  // set-password link landed. The whole app agrees on `env.APP_URL`; this
+  // script is a plain node process outside the Zod-validated env, so it reads
+  // the variable directly and says so when it is missing rather than sending a
+  // link to nowhere.
+  const appUrl = process.env.APP_URL;
+  if (!appUrl) {
+    console.warn(
+      '\n!! APP_URL is not set. The set-password link will use whatever Site URL',
+    );
+    console.warn('   Supabase holds, which is usually http://localhost:3000.');
+  }
   const { error: linkError } = await admin.auth.resetPasswordForEmail(email, {
-    redirectTo: process.env.NEXT_PUBLIC_APP_URL
-      ? `${process.env.NEXT_PUBLIC_APP_URL}/login`
-      : undefined,
+    redirectTo: appUrl ? `${appUrl}/set-password` : undefined,
   });
 
   console.log(`\nowner created: ${fullName} <${email}>`);
