@@ -7,7 +7,11 @@ import { SYSTEM_ROLE_LABELS, type Capability } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/(auth)/actions';
-import { MobileNav, NAV_LINKS, ReportChangeFab, SidebarNav } from './nav';
+import { MobileNav, ReportChangeFab, SidebarNav } from './nav';
+// Plain data, from a module with no 'use client'. Importing it from './nav'
+// hands a server component a client-reference proxy instead of the array,
+// which builds and typechecks and then 500s every page in production.
+import { NAV_LINKS, type NavLink } from './nav-links';
 import { CommandPalette } from './command-palette';
 import { CommandTrigger } from './command-trigger';
 import { PageTransition } from '@/components/domain/page-transition';
@@ -78,7 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         return allowed ? link : null;
       }),
     )
-  ).filter((link): link is (typeof NAV_LINKS)[number] => link !== null);
+  ).filter((link): link is NavLink => link !== null);
 
   return (
     <div

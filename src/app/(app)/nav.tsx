@@ -7,46 +7,7 @@ import {
   Building2, Inbox, ListChecks, Plus, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-/**
- * Navigation is ordered by how a working day starts: what needs me, then what
- * is at risk, then everything else. Directors and PMs open this on a laptop;
- * site engineers open it on a phone in a corridor.
- *
- * ── The first four belong to everybody ────────────────────────────────────
- * Osman's call, 2026-09-05. A site engineer needs what is owed by him, what he
- * reported, and what is stuck. Everything below that is somebody's job and
- * nobody else's, and a menu full of doors that open onto a polite refusal
- * teaches people that half the app is not for them — after which they stop
- * reading the half that is.
- *
- * ── Hiding is not the enforcement ─────────────────────────────────────────
- * Every gated page refuses on the server as well. This decides what is worth
- * showing; it decides nothing about what is allowed, and it must never be the
- * only thing standing between somebody and a page.
- */
-export interface NavLink {
-  href: string;
-  label: string;
-  /** Null means everybody. Otherwise the capability that reveals it. */
-  capability: string | null;
-}
-
-export const NAV_LINKS: NavLink[] = [
-  { href: '/dashboard', label: 'Overview', capability: null },
-  { href: '/my-tasks', label: 'My Tasks', capability: null },
-  { href: '/variations', label: 'Variations', capability: null },
-  { href: '/bottlenecks', label: 'Held Up', capability: null },
-  // The triage queue for messages the system could not place. It is the
-  // administrator's desk, not a shared inbox: it holds other people's
-  // half-understood reports, and the answer to most of them is a question
-  // somebody has to ask by hand.
-  { href: '/inbox', label: 'Capture Inbox', capability: 'capture.triage' },
-  { href: '/projects', label: 'Projects', capability: 'project.update' },
-  { href: '/settings/company', label: 'Company', capability: 'companySettings.manage' },
-  { href: '/settings/users', label: 'Users', capability: 'user.manage' },
-  { href: '/settings/permissions', label: 'Permissions', capability: 'user.manage' },
-];
+import { NAV_LINKS, type NavLink } from './nav-links';
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
   '/dashboard': LayoutDashboard,
