@@ -87,3 +87,6 @@ desktop.ini
 
 # The Arabic sales catalog. Kept out of a PUBLIC repo until you say otherwise.
 docs/VO-CATALOG-AR.*
+
+# Generated test-plan PDF. The markdown is the source and is tracked.
+docs/VO-TEST-PLAN.*

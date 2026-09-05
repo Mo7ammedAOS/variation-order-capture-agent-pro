@@ -1,354 +1,609 @@
-# Acceptance Test — Phase 1
+# VO Capture & Control — Full Test Plan
 
-`https://vo.osmanflow.com` · every account's password is `ChangeMe!2026`
+Twenty-two stages, in order. Each builds on the last, so do not skip.
+By the end, every part of the system has been exercised by hand, with real
+inboxes and one real handset.
 
-Work top to bottom. **Each test says what should happen. If it does, tick it. If
-it does not, stop and write down what you saw** — a test that "sort of worked"
-is a failure, because the thing it was checking is the thing a client will
-argue about later.
-
-Roughly 40 minutes. Sections 1 to 8 are the ones that must pass before the next
-stage of the build. Section 9 lists what is deliberately not built yet, so you
-do not waste time hunting for it.
+**Nothing is created for you.** The database is empty on purpose. Every person,
+project, contact and change below is made by you, through the app — so what you
+are testing is exactly what a client does on their first day.
 
 ---
 
 ## The cast
 
-| Who | Email | On which projects |
+Nine people. Seven work for the company, two are clients. Every address is a
+real inbox, so every message the system sends can actually be read.
+
+| # | Role | Name | Email |
+|---|---|---|---|
+| 1 | Company Owner / Administrator | Aryia | `sumunit2@gmail.com` |
+| 2 | Managing Director | Mohammed | `mohammed@osmanflow.com` |
+| 3 | Quantity Surveyor | Osman | `guided369@gmail.com` |
+| 4 | Project Manager 1 | Abdelmoneim | `osman.constructionsystems@hotmail.com` |
+| 5 | Project Manager 2 | Hashim | `mohammedosman2400@outlook.com` |
+| 6 | Site Engineer 1 | Ahmed | `org3700@gmail.com` |
+| 7 | Site Engineer 2 | Hassan | `mohammedossidahmed@gmail.com` |
+| 8 | **Client 1** | Mohammed Hassan | `mo@mohammedosman.studio` |
+| 9 | **Client 2** | Mohammed Yasseen | `mohammed@osmansidahmed.com` |
+
+Clients are **contacts**, not users. They never sign in. They receive notices
+and priced variations by email.
+
+## The four projects
+
+| Code | Project | Client | PM | Site Engineer |
+|---|---|---|---|---|
+| DXB-001 | DIFC Gate Avenue Office Fit-Out | Client 1 | Abdelmoneim | Ahmed |
+| DXB-002 | Dubai Hills Mall Flagship Retail | Client 1 | Abdelmoneim | Ahmed |
+| AUH-003 | Al Maryah Clinic Interior Works | Client 2 | Hashim | Hassan |
+| DXB-004 | Business Bay Serviced Apartments | Client 2 | Hashim | Hassan |
+
+Each PM carries two. Each site engineer carries two. Each client owns two.
+That shape is deliberate: it is the smallest arrangement that can prove a
+person on one project cannot reach another.
+
+## The one handset
+
+You have a single WhatsApp number, and it belongs to **one person at a time**.
+Whoever holds it is the name on every report from it. The plan moves it twice,
+and each move is itself a test.
+
+Throughout, **the number** means your real WhatsApp number.
+
+---
+
+# Stage 0 · Empty the system and get in
+
+**Goal** — a system with nothing in it, and one account that can start.
+
+The database has already been emptied. That included the permission matrix, so
+right now **nobody can do anything at all, including an administrator**. A
+missing permission is a denial by design, so that a right somebody revoked
+cannot quietly come back on the next deploy.
+
+### Do
+
+```bash
+# 1 — put the latest build on the server
+ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
+
+# 2 — restore the matrix, the company, and one account
+npm run db:bootstrap -- \
+  --email sumunit2@gmail.com \
+  --name "Aryia" \
+  --company "Osman Contracting"
+```
+
+Run step 2 wherever your `.env` points at the live database.
+
+It restores the permission matrix from the code defaults, creates the company
+record, and creates **one** account. Nothing else.
+
+The password is never printed anywhere. A set-password email is sent instead.
+
+### Expect
+
+- `permissions restored: ~200`
+- `company settings created: Osman Contracting`
+- `owner created: Aryia <sumunit2@gmail.com>`
+- An email arrives at that address. Follow it, set a password, sign in.
+
+### Pass when
+
+- [ ] You are signed in at `https://vo.osmanflow.com` as Aryia
+- [ ] The sidebar shows **Overview, My Tasks, Variations, Held Up, Capture Inbox, Projects, Company, Users, Permissions**
+- [ ] Overview is empty — no changes, no value, no tasks
+
+> If the email never arrives, run the command again with a different `--email`.
+> It reuses an existing identity rather than creating a second one.
+
+---
+
+# Stage 1 · Company settings
+
+**Goal** — the details that appear on every notice and every email.
+
+### Do
+
+`Company` in the sidebar. Set the legal and display name, currency **AED**,
+timezone **Asia/Dubai**, the email sender name and address, and the WhatsApp
+business number. Leave the amber threshold at **7 days**.
+
+### Pass when
+
+- [ ] The company name appears at the top of the sidebar
+- [ ] Reloading keeps every value
+
+---
+
+# Stage 2 · Create the seven staff accounts
+
+**Goal** — everybody who works for the company, with the right authority.
+
+### Do
+
+`Users` → `Invite`. Create these six — you are already the seventh.
+
+| Name | Email | System role |
 |---|---|---|
-| **Aryia** — administrator | `sumunit2@gmail.com` | none; adds projects, people and permissions |
-| **Mohammed** — managing director | `mohammed@osmanflow.com` | none, and **sees all four** |
-| **Osman** — quantity surveyor | `guided369@gmail.com` | all four, prices them |
-| **Abdelmoneim** — project manager | `osman.constructionsystems@hotmail.com` | DXB-001, AUH-003 |
-| **Hashim** — project manager | `mohammedosman2400@outlook.com` | DXB-002, DXB-004 |
-| **Ahmed** — site engineer | `org3700@gmail.com` | DXB-001, DXB-002 |
-| **Hassan** — site engineer | `mohammedossidahmed@gmail.com` | AUH-003, DXB-004 |
+| Mohammed | `mohammed@osmanflow.com` | Managing Director |
+| Osman | `guided369@gmail.com` | Standard User |
+| Abdelmoneim | `osman.constructionsystems@hotmail.com` | Standard User |
+| Hashim | `mohammedosman2400@outlook.com` | Standard User |
+| Ahmed | `org3700@gmail.com` | Standard User |
+| Hassan | `mohammedossidahmed@gmail.com` | Standard User |
 
-These are real inboxes, so every message the system sends can actually be read.
-An email to `khalid@abcfitout.example` proved nothing.
+**Leave every phone number empty.** The handset is given out in Stage 8.
 
-**Every PM and site engineer carries two projects.** Two is also exactly what
-proves the two rules that matter: the pair someone is *not* on must refuse them,
-and reporting without naming a job must make the system **ask** which of their
-two they meant.
+> Why Standard User for a project manager: authority on a job comes from the
+> **project role**, granted in Stage 5. A system role is what somebody can do
+> company-wide, and a PM should be able to do nothing company-wide.
 
-**The database starts empty.** No changes, no tasks, no contacts — the company,
-the people and the four projects, and nothing else. Everything you see, you
-made.
+### Pass when
 
-⚠️ **All six share one phone number** (`+971565951887`) so the WhatsApp half of
-every message is visible while testing. WhatsApp therefore cannot tell them
-apart — a reply matches whoever has a question outstanding. Fine for testing,
-wrong for a real deployment.
-
-⚠️ **Aryia's address is the mailbox lane B watches.** Do not activate lane B
-while that is true: a notification sent to her lands unread in the capture
-mailbox, is read back as a new report from her, and parks in triage. The system
-would fill its own inbox with its own messages.
-
-## 1 · Sign in
-
-- [ ] **1.1** Open the site on a laptop. Two panels: lavender on the left with
-      *"Capture the change. Keep the entitlement."*, sign-in on the right.
-- [ ] **1.2** Sign in as **Ahmed**. You land on Overview.
-- [ ] **1.3** Sign out. Sign in with a **wrong password** — you get an error, and
-      you are *not* let in.
-- [ ] **1.4** Open the site on your **phone**. The lavender panel is gone and the
-      password field is visible without scrolling.
+- [ ] Seven accounts listed, all Active
+- [ ] Each person receives an invitation email
+- [ ] At least two of them set a password and sign in
 
 ---
 
-## 2 · The administrator sets up a company
+# Stage 3 · Create the four projects
 
-Sign in as **Mohammed**.
+**Goal** — four live jobs.
 
-- [ ] **2.1** **Settings → Company** exists and shows ABC Fit-Out.
-- [ ] **2.2** Change the display name to `ABC Fit-Out LLC`, save. It changes in
-      the sidebar. **Change it back.**
-- [ ] **2.3** Timezone reads `Asia/Dubai`, working week Monday to Friday.
-- [ ] **2.4** **Projects → New project**. Enter code `TST-001`, name
-      `Acceptance Test Project`, client `Test Client Ltd`. Create.
-- [ ] **2.5** You land on the new project's **Team** tab, not on a list.
-- [ ] **2.6** Add **Ahmed** as **Site engineer**, and tick *"tell them when a
-      change is raised here"*. He appears in the table marked **Notified**.
-- [ ] **2.7** Add **Abdelmoneim** as **Project manager**, and leave the tick **off**.
-      He appears marked **Not notified**.
-- [ ] **2.8** Click **Not notified** next to Abdelmoneim. It flips to **Notified**.
-      Click again — back to **Not notified**.
-- [ ] **2.9** **Contacts** tab. Add `Sara Kelly`, company `Test Client Ltd`,
-      phone `+971500000111`, tick **Can request a change** and nothing else.
-- [ ] **2.10** Sara shows a **Request** badge and no others. She has *not*
-      silently gained approval rights.
+### Do
+
+`Projects` → `New project`, four times, using the codes and names above. For
+each: client name, consultant, location, contract number, contract start and
+completion, original contract value, currency AED, status **Active**.
+
+### Pass when
+
+- [ ] Four projects listed, all Active
+- [ ] Opening one shows eight tabs: Overview, Potential Changes, Contract Rules, Contacts, Team, Documents, Tasks, Activity
 
 ---
 
-## 3 · Who can see what
+# Stage 4 · Contract rules on every project
 
-This is the section that matters most. It is the rule the whole product rests
-on, and the one that costs you a client if it is wrong.
+**Goal** — the contractual clock, per job. **This is the most important
+configuration in the system.** Get it wrong and every deadline is wrong.
 
-- [ ] **3.1** Still as **Mohammed**, open a change on **AUH-003** and copy its web
-      address.
-- [ ] **3.2** Sign out. Sign in as **Ahmed** (DXB-001 and DXB-004 only).
-- [ ] **3.3** Projects shows **DXB-001, DXB-004 and TST-001** — three, not five.
-- [ ] **3.4** Paste the AUH-003 address. You get **not found**, not the change.
-- [ ] **3.5** Report a change. The project picker offers only his three.
-- [ ] **3.6** Sign in as **Mohammed** (MD, member of nothing). Projects shows
-      **all** of them.
-- [ ] **3.7** As Mohammed, open a change on **DXB-002** — it opens, without him
-      ever having been added to it.
+### Do
 
-> **3.4 is the one to be strictest about.** If Ahmed sees that page, stop
-> testing and tell me. Nothing else in the app matters if this leaks.
+For each project, `Contract Rules`. Use different numbers on purpose — a single
+value everywhere proves nothing.
 
----
+| Field | DXB-001 | DXB-002 | AUH-003 | DXB-004 |
+|---|---|---|---|---|
+| Notice period (days) | 28 | **14** | 28 | 21 |
+| Detailed claim period | 42 | 28 | 42 | 42 |
+| Client response days | 14 | 14 | 21 | 14 |
+| Follow-up interval | 7 | 7 | 7 | 7 |
+| Chase the client | On | On | On | **Off** |
+| Retention % | 5 | 5 | **10** | 5 |
+| Payment terms (days) | 30 | 30 | 45 | 30 |
 
-## 4 · Capture, which is the product
+Leave the notice recipient blank for now — Stage 6 fills it.
 
-Sign in as **Ahmed**.
+### Pass when
 
-- [ ] **4.1** **Report Change** on DXB-001. Fill *what changed*, *describe it*,
-      *where on site*.
-- [ ] **4.2** Set *How did this come to you?* to **WhatsApp**. Two more fields
-      appear — where, and when you were told.
-- [ ] **4.3** **Attach a real photo from your phone.** File it.
-- [ ] **4.4** A `PC-DXB-001-00NN` appears with an owner, a next action, a notice
-      deadline and a countdown.
-- [ ] **4.5** **No amber warning about evidence.** If you see one, the photo did
-      not reach storage — tell me.
-- [ ] **4.6** The photo is listed. Click it — it opens. *(This proves it went to
-      Google Drive and came back through the access check.)*
-- [ ] **4.7** Set the *when did it happen* date to **two months ago** on a new
-      change. The notice deadline moves back with it, and the risk chip turns
-      **red**.
-
-> 4.7 is the commercial heart of it: the clock runs from when it happened, not
-> from when someone wrote it up.
+- [ ] Each project keeps its own numbers
+- [ ] DXB-002 shows a 14-day notice period
 
 ---
 
-## 5 · The chain of authority
+# Stage 5 · Teams
 
-- [ ] **5.1** As **Ahmed**, open his own change. There is **no** button to assess
-      the notice. He captures; he does not decide.
-- [ ] **5.2** Sign in as **Abdelmoneim** (PM on DXB-001). Open the same change. He can
-      move it forward.
-- [ ] **5.3** Sign in as **Osman** (QS). He can open it and reach the pricing
-      fields; he **cannot** approve it.
-- [ ] **5.4** Sign in as **Mohammed** (MD). He can approve.
+**Goal** — who is on which job, and with what authority.
 
-> The rule underneath: whoever prices is not whoever approves, and neither is
-> whoever captured it. That separation is what makes the file defensible when
-> the client's QS challenges it.
-
----
-
-## 6 · Permissions are yours, not mine
-
-Sign in as **Mohammed**.
-
-- [ ] **6.1** **Settings → Permissions**. Roles down the side, capabilities
-      across the top.
-- [ ] **6.2** Find **Site Engineer** under *Project roles*. **Raise a change** is
-      ticked. Click it — it goes off.
-- [ ] **6.3** In another browser, sign in as **Ahmed**. The Report Change button
-      is gone. *(Give it up to 15 seconds.)*
-- [ ] **6.4** As Mohammed, tick it back on. Ahmed can file again.
-- [ ] **6.5** **Client Viewer** and **Consultant Viewer** show padlocks and
-      cannot be clicked. They are people on the other side of a dispute.
-- [ ] **6.6** **Settings → Users** has an **Administers** column, and Mohammed is
-      the only one with it.
-- [ ] **6.7** Try to remove Mohammed's own administration. It **refuses** — a
-      company with no administrator cannot recover without me.
-
----
-
-## 7 · Deactivating
-
-- [ ] **7.1** As **Mohammed**, Settings → Users, deactivate **Hassan**.
-- [ ] **7.2** Try to sign in as Hassan. You **cannot**.
-- [ ] **7.3** Her name still appears on the changes she raised. History is not
-      rewritten because someone left.
-- [ ] **7.4** Reactivate her. She can sign in again.
-
----
-
-## 8 · On a phone, on mobile data
-
-Turn Wi-Fi **off**. This is how a site engineer actually uses it.
-
-- [ ] **8.1** Sign in as Ahmed. Every page fits — **nothing scrolls sideways**.
-- [ ] **8.2** The bottom bar has five items and the **Report Change** button
-      floats above it.
-- [ ] **8.3** File a change with a photo taken **just now**. It works.
-- [ ] **8.4** Buttons are big enough to hit with a thumb, first time.
-
----
-
-## 9 · Not built yet — do not test these
-
-| | |
+| Project | Members |
 |---|---|
-| **Document register** | No upload panel. The Documents tab is read-only, and revisions do not supersede. |
-| **Document intelligence** | Nothing reads a PDF. No drawing versions, no "not in scope" detection, no document search. |
-| **AI vision and OCR** | Nothing reads a photograph or a scanned drawing. Text extraction from PDFs and spreadsheets works; images do not. |
-| **Voice notes** | Stored as evidence, not transcribed. Claude has no speech-to-text. |
+| DXB-001 | Abdelmoneim (Project Manager) · Ahmed (Site Engineer) · Osman (Quantity Surveyor) |
+| DXB-002 | Abdelmoneim (Project Manager) · Ahmed (Site Engineer) · Osman (Quantity Surveyor) |
+| AUH-003 | Hashim (Project Manager) · Hassan (Site Engineer) · Osman (Quantity Surveyor) |
+| DXB-004 | Hashim (Project Manager) · Hassan (Site Engineer) · Osman (Quantity Surveyor) |
 
-### Built since this plan was written — these ARE testable now
+**Do not add Mohammed (MD) to any project.** He is company-wide and must reach
+everything without being a member of anything. That is a test in itself.
 
-| | |
+### Pass when
+
+- [ ] Ahmed is on DXB-001 and DXB-002 only
+- [ ] Hassan is on AUH-003 and DXB-004 only
+- [ ] Mohammed is on no project
+
+---
+
+# Stage 6 · Client contacts and notice recipients
+
+**Goal** — where a notice actually goes.
+
+### Do
+
+**A.** On each project, `Contacts` → `Add contact`. Add the contact **on each
+project separately** — a contact belongs to one job.
+
+| Projects | Name | Email | Type | Authority |
+|---|---|---|---|---|
+| DXB-001, DXB-002 | Mohammed Hassan | `mo@mohammedosman.studio` | Client | Request change · Approve cost |
+| AUH-003, DXB-004 | Mohammed Yasseen | `mohammed@osmansidahmed.com` | Client | Request change · Approve cost |
+
+**B.** Back in `Contract Rules` on each project, set the **notice recipient**
+name, email and company to the matching client.
+
+> Two different places on purpose. The contact list is who you deal with; the
+> notice recipient is the contractual address for service, and on a real
+> contract those are often not the same person.
+
+### Pass when
+
+- [ ] Each project lists exactly one client contact
+- [ ] Each project's contract rules name that client as the notice recipient
+
+---
+
+# Stage 7 · Who sees what
+
+**Goal** — prove the menu and the pages agree.
+
+### Do
+
+Sign in as each person and look at the sidebar.
+
+| Signed in as | Should see |
 |---|---|
-| **QS pricing** | Rates, prelims, overhead and profit, a real build-up, and "this is not a variation". Section 10. |
-| **Bottleneck detection** | Now runs on a schedule from n8n. Its first real run found 3. |
-| **Notifications** | The in-app bell works. Email and WhatsApp are recorded and wait on a mailbox decision. |
-| **Capture inbox** | `/inbox`, for messages that could not be placed. Section 11. |
-| **WhatsApp and email capture** | The n8n lanes exist and are built. Not activated. |
-| **The notice** | Drafted, approved, filed as a PDF, queued to the client, and only "served" when the courier says so. Section 12. |
-| **The money end** | Variation orders, monthly progress applications with retention and VAT, payments, and the approved-but-unbilled figure. Section 13. |
-| **Real capture extraction** | Off by default. Set `AI_PROVIDER=claude` with a key and captured messages are read by Claude instead of a keyword matcher. |
+| Aryia (Owner) | All nine items |
+| Mohammed (MD) | All except **Capture Inbox** |
+| Abdelmoneim (PM) | Overview · My Tasks · Variations · Held Up · **Projects** |
+| Ahmed (SE) | Overview · My Tasks · Variations · Held Up — **four only** |
+| Osman (QS) | Overview · My Tasks · Variations · Held Up — **four only** |
+
+Then, still signed in as **Ahmed**, type these into the browser bar directly:
+`/settings/permissions`, `/settings/users`, `/inbox`.
+
+### Pass when
+
+- [ ] Each person sees exactly the rows above
+- [ ] Ahmed is refused all three pages, with a page that explains rather than a crash
+
+> Hiding a link is not the enforcement. If any of those three opened for Ahmed,
+> stop and report it.
 
 ---
 
-## 10 · The QS prices it
+# Stage 8 · Give the handset to Site Engineer 1
 
-**As Osman**, open a change that has passed both approvals and reached pricing.
+**Goal** — the number belongs to Ahmed.
 
-- [ ] Add a line with a **BOQ rate**, and a second with a **star rate**
-- [ ] The star rate carries a warning; a BOQ rate does not
-- [ ] Set prelims and overhead/profit, and check the total against your own sum
-- [ ] Submit
-- [ ] It reaches **Abdelmoneim** and **Mohammed** for final approval
+### Do
 
-Then, on a different change:
+As Aryia: `Users` → Ahmed → **Add WhatsApp number** → the number → Save.
 
-- [ ] Use **"This is not a variation"**, with a reason
-- [ ] It ends as *Already in the contract*, and stops asking anyone anything
+### Pass when
+
+- [ ] The message says reports from that handset are now filed as Ahmed
+- [ ] Nobody else shows a number
 
 ---
 
-## 11 · The system asks who reported it
+# Stage 9 · The capture conversation
 
-This is the one to test hardest, because it replaces a guess.
+**Goal** — the heart of the product. One message becomes a tracked contractual
+record without anybody opening the app.
 
-**As Ahmed** (on three projects), report a change **without naming a project** —
-"client wants the reception wall moved 400mm".
+### Do
 
-- [ ] No Potential Change is created
-- [ ] Ahmed receives **"Which project? [XXXX]"** listing his three, numbered
-- [ ] It arrives by email (and WhatsApp, once real numbers are set)
-- [ ] `/inbox` shows the message as *waiting for a reply*, not as a guess
+From the handset, send to the company WhatsApp number, **one message at a
+time**, waiting for each reply:
 
-Now reply:
+| # | You send |
+|---|---|
+| 1 | `I want to report a variation` |
+| 2 | `dxb 2` |
+| 3 | `consultant wants the reception ceiling 300mm lower` |
+| 4 | `no` |
+| 5 | `last monday` |
+| 6 | `the consultant` |
+| 7 | `1` |
+| 8 | `OK` |
 
-- [ ] Reply **`2`** → the change is created on the second project listed
-- [ ] It is recorded as **Ahmed's**, not the person who read the inbox
-- [ ] The change carries **the original wording**, not the word "2"
+### Expect at each step
 
-Then the refusals that matter:
+| Step | What must happen |
+|---|---|
+| 1 | It asks **which project** and nothing else, listing your two, numbered. It must **not** file "I want to report a variation" as the change. |
+| 2 | `dxb 2` resolves to DXB-002. It then asks **what happened** — one question. |
+| 3 | It asks whether the work has started. One question per message, always. |
+| 4 | `no` is read as "not started". It does **not** ask which project again. |
+| 5 | `last monday` becomes a real calendar date. |
+| 6 | It may **skip** this — it can read "consultant" out of step 3. That is correct, not a miss. |
+| 7 | A numbered list of seven routes. `1` is Verbal on site. Words work too. |
+| 8 | A summary: Project, Change, Happened, Work, Asked by, Came by. Then a PC number and a notice due date. |
 
-- [ ] Reply **"moving 2 sockets on level 2"** to a fresh question → treated as a
-      **new report**, not as "project 2". Reading it as an answer would throw a
-      real change away.
-- [ ] Reply **`9`** → nothing happens; 9 is not on the list
-- [ ] Answer the same question twice → **one** change, not two
+### Pass when
 
----
+- [ ] Never two questions in one message
+- [ ] "Which project?" is asked **once**
+- [ ] No `[XXXX]` reference codes appear anywhere in the WhatsApp text
+- [ ] The date shown is the real Monday, not today
+- [ ] The final message gives `PC-DXB-002-0001` and a notice due date **14 days** after the event
+- [ ] **No email arrives at Ahmed's address for any of these questions**
 
-## 12 · The notice, which is what the product is for
-
-**As Osman**, take a change through the notice assessment and mark it
-**Notice required**.
-
-- [ ] A **draft notice appears immediately**, referenced `NOT-<project>-0001`
-- [ ] It quotes the contract clause from the project's contract rules, the
-      event date, and the notice period
-- [ ] Read it properly. It should say it is a **notice only**, quantify
-      nothing, and reserve time only if you flagged a time impact
-- [ ] Edit a line and save it
-
-Then approve it, as both seats.
-
-- [ ] The wording goes **read-only** and says it is fixed at approval
-- [ ] It shows as **queued, not yet served** — not "sent"
-- [ ] Within a minute a **PDF appears** in the project's `08 Notices` folder in
-      Drive, named after the reference, and the panel links to it
-- [ ] Open that link. It streams through the app, not a Drive URL
-
-Now reject one instead, on a different change.
-
-- [ ] The draft is marked superseded, not edited
-- [ ] Re-assessing produces **version 2**, and version 1 is still on file
-
-The two things to try to break:
-
-- [ ] Approve a notice on a project with **no notice recipient email** set.
-      It should approve, say plainly that there is nowhere to send it, and turn
-      up in bottlenecks as *drafted, not sent*
-- [ ] Try to record an acknowledgement dated **tomorrow**. It should refuse
-
-What you cannot test yet: an actual email leaving. That waits on the lane B
-mailbox decision, because the capture mailbox and the admin's address are
-currently the same account.
+> That last one matters. A conversation stays on the channel it started on.
+> If the same questions also arrived by email, stop and report it.
 
 ---
 
-## 13 · The money, end to end
+# Stage 10 · Correct something before it is filed
 
-The one to check with a calculator in your hand. If a figure here disagrees
-with your own sum, the software is wrong.
+**Goal** — the read-back is real, not decoration.
 
-**Set up first.** On the project's contract rules, set **retention** and
-**payment terms**. Defaults are 5% and 30 days.
+### Do
 
-**As Osman**, take a change all the way through pricing and both approvals so
-it reaches *Variation approved*.
+Send a second report and, at the summary, reply with a correction instead of
+`OK`:
 
-- [ ] A **Put it to the client** panel appears. Raise the VO
-- [ ] It is numbered `VO-<project>-0001` — its **own** series, not the PC number
-- [ ] The value is the figure the two seats approved, unchanged
-- [ ] Record the submission with **yesterday's date**
+| # | You send |
+|---|---|
+| 1 | `landlord closed the loading bay so we cannot get the joinery in` |
+| 2 | `dxb 1` |
+| 3 | *answer the questions* |
+| 4 | at the summary: `no it was the 2nd of september not yesterday` |
 
-Now record the client's answer. Do this twice, on two different changes:
+### Pass when
 
-- [ ] **Agreed in full** → the agreed value equals what you submitted
-- [ ] **Agreed at a lower figure**, say 95,000 against 120,000 → it shows
-      **Conceded 25,000**, and the submitted figure is still there
-- [ ] Either way, someone gets a task to invoice it
-
-Then apply for the money. Enter **40%** for the first period.
-
-- [ ] Check the build-up against your own arithmetic. On 120,000 at 5%
-      retention and 5% VAT: gross 48,000, retention 2,400, net 45,600,
-      VAT 2,280, **total 47,880**
-- [ ] Issue it. The due date should be the issue date plus your payment terms
-- [ ] Apply again at **75%**. It should claim **42,000**, not 90,000
-- [ ] Record a **part payment**. It should say *Part paid*
-- [ ] Record the balance. It should say *Paid*
-
-The four things to try to break:
-
-- [ ] Apply for money on a VO the client has **not** answered → refused
-- [ ] Apply at **30%** after 40% was already certified → refused, going backwards
-- [ ] Record a payment **larger** than what is outstanding → refused
-- [ ] Record the client agreeing **more** than you submitted → refused
-
-Finally, open the **dashboard**.
-
-- [ ] **Approved, not invoiced** matches what you have agreed and not yet
-      applied for
-- [ ] **Overdue payment** is zero, until you issue an invoice dated far enough
-      back to be past its terms
+- [ ] The correction is **not** filed as a separate change
+- [ ] It reads back again with the corrected date
+- [ ] Only after `OK` does a PC number appear
 
 ---
 
-## When you finish
+# Stage 11 · What the capture actually produced
 
-**All of 1 to 8 pass** → tell me and I start the document register: Document
-Controller uploads, revision chains that supersede, then extraction and
-embedding, then the scope check, then QS pricing.
+**Goal** — the record matches the conversation.
 
-**Anything failed** → tell me the number and what you saw. Include the project
-code and the person you were signed in as; both change what the answer is.
+Sign in as Abdelmoneim and open `Variations` → the new change.
 
-**Then delete `TST-001`** — or leave it and tell me, and I will.
+### Pass when
+
+- [ ] **Reported by** Ahmed
+- [ ] **Asked by** Consultant
+- [ ] **Event date** the Monday you named, not the day you sent it
+- [ ] **Notice due** = event date + 14 days, with a live countdown and a colour
+- [ ] The description is **your exact words**, not a tidied version
+- [ ] The Activity tab shows the capture with a timestamp
+
+---
+
+# Stage 12 · Who was told, and how
+
+**Goal** — the right people, on the right channel, immediately.
+
+### Pass when
+
+- [ ] **Abdelmoneim** (PM) has an email: a notice assessment is needed
+- [ ] **Mohammed** (MD) has the same email — **even though he is on no project**
+- [ ] Both have the task in `My Tasks`, with a due date
+- [ ] The notification bell shows a count for both
+- [ ] **Neither received a WhatsApp** about it
+- [ ] Ahmed, who reported it, has **no** task
+
+> The MD is a member of nothing. If he was not told, the company-wide lookup is
+> broken, and that is the most important failure on this page.
+
+---
+
+# Stage 13 · Notice assessment
+
+**Goal** — the decision, and that it clears for everybody.
+
+Sign in as **Mohammed (MD)** — not the PM — and assess it: `Notice required`,
+with a short reason.
+
+### Pass when
+
+- [ ] The status moves off `notice_assessment`
+- [ ] **Abdelmoneim's task disappears too**, without him doing anything
+- [ ] The change now shows a notice section
+
+> Two people, one decision. Whoever acts first clears it for both.
+
+---
+
+# Stage 14 · Draft, approve and issue the notice
+
+**Goal** — a formal document leaves the building.
+
+### Do
+
+1. As **Abdelmoneim**, open the notice draft and read the AI-written narrative
+2. Edit a line of it, and save
+3. Approve as the project manager seat
+4. Sign in as **Mohammed**, approve as the managing director seat
+5. Issue it
+
+### Pass when
+
+- [ ] The draft quotes the reporter's own words and reads like a letter
+- [ ] Your edit survives into the issued PDF
+- [ ] It takes **both** seats before it can be issued
+- [ ] The PDF opens, is laid out properly, and is addressed to Mohammed Hassan
+- [ ] The address used is the one from contract rules
+- [ ] Delivery is recorded, and shows **pending** until the send is confirmed
+- [ ] As **Aryia**, you can neither draft nor approve a notice
+
+> An administrator sets the system up. A notice is a contractual act, served in
+> the company's name, and the person who signs it must be the one who assessed
+> it.
+
+---
+
+# Stage 15 · Pricing
+
+**Goal** — a value built from line items, not typed in.
+
+As **Osman (QS)**, price the change: labour, materials, plant, subcontract.
+Then add preliminaries % and overhead & profit %.
+
+### Pass when
+
+- [ ] The total is calculated, not entered
+- [ ] Changing one line changes the total
+- [ ] The percentages apply to the whole build-up, not to single lines
+- [ ] As Ahmed, you **cannot** price it
+
+---
+
+# Stage 16 · Approval gates
+
+**Goal** — value cannot leave the building unapproved.
+
+Submit the priced variation. Approve as PM, then as MD.
+
+### Pass when
+
+- [ ] The submitted value is **frozen** — reprice afterwards and the submitted figure does not move
+- [ ] Approving as MD alone carries the money gate
+- [ ] The activity trail names who approved, and when
+
+---
+
+# Stage 17 · Submission and chasing the client
+
+**Goal** — the only thing the system sends to somebody outside the company.
+
+Submit to the client. To test the chase without waiting two weeks, temporarily
+set DXB-002's **client response days** to `0` and run the follow-up sweep.
+
+### Pass when
+
+- [ ] `mo@mohammedosman.studio` receives the submission
+- [ ] A chase goes out **only after** the response period has passed
+- [ ] It states facts and asks a question — no pressure, no threats
+- [ ] Running the sweep twice in a day sends **once**
+- [ ] Marking the client as having responded stops the chasing immediately
+- [ ] DXB-004, where chasing is switched off, sends **nothing** ever
+
+---
+
+# Stage 18 · The money
+
+**Goal** — from approved variation to cash.
+
+Raise an application, then an invoice, record a part payment, then a credit
+note.
+
+### Pass when
+
+- [ ] Retention is held at the project's own percentage — **10% on AUH-003**, 5% elsewhere
+- [ ] The invoice due date follows the project's payment terms
+- [ ] The commercial position updates: claimed, approved, invoiced, paid, retained, outstanding
+- [ ] A credit note reduces the outstanding figure
+
+---
+
+# Stage 19 · Held Up
+
+**Goal** — what is blocked, who owns it, and how much is waiting on it.
+
+Leave one change untouched, or set its next-action date into the past, then
+open `Held Up`.
+
+### Pass when
+
+- [ ] The stuck change is listed with an owner and a number of days
+- [ ] The value waiting behind it is shown
+- [ ] Acting on it removes it from the list
+
+---
+
+# Stage 20 · Correcting, cancelling, deleting
+
+**Goal** — three different things, and only one of them destroys anything.
+
+### Do
+
+**A.** As **Ahmed**, correct the description on a change he reported. Then try
+to edit one he did not report.
+
+**B.** As **Abdelmoneim**, cancel a change with a reason. Then reinstate it.
+
+**C.** As **Aryia**, delete a test change permanently.
+
+### Pass when
+
+- [ ] Ahmed can fix his own report and **not** somebody else's
+- [ ] Cancelling closes the open tasks and keeps the record, the reason and the name
+- [ ] Reinstating brings it back with its **original capture date**
+- [ ] The red **Delete permanently** button shows for Aryia and Mohammed only — **never** for Abdelmoneim, Osman or Ahmed
+- [ ] Deleting asks once, then removes it and returns you to the register
+- [ ] Deleting a change whose notice has been **served** is refused
+- [ ] The deletion appears in the activity trail, with who did it
+
+---
+
+# Stage 21 · Isolation — move the handset
+
+**Goal** — the sharpest test in the plan. A person on one project cannot reach
+another, by any route.
+
+### Do
+
+**A.** As Aryia: `Users` → **Hassan** → add the same WhatsApp number → Save
+
+**B.** From the handset: `I want to report a change`
+
+**C.** Sign in as **Ahmed** and paste the URL of an AUH-003 change directly
+
+### Pass when
+
+- [ ] The save message says the number was **taken from Ahmed**
+- [ ] Ahmed's profile no longer shows a number
+- [ ] The WhatsApp reply now offers **AUH-003 and DXB-004** — Hassan's projects — not Ahmed's
+- [ ] The report is filed under **Hassan**
+- [ ] Ahmed gets **403** on the AUH-003 change, not an empty page
+- [ ] Ahmed's register never lists an AUH-003 or DXB-004 change
+
+> If a search or a register anywhere shows Ahmed something from Hassan's
+> projects, stop. That is the one failure this product cannot have.
+
+---
+
+# Stage 22 · Reports and the register
+
+**Goal** — what a commercial manager looks at on a Monday morning.
+
+Open `Overview` as Mohammed, then the per-project report from a project page.
+
+### Pass when
+
+- [ ] Overview totals match what you created — no more, no fewer
+- [ ] Charts render and are readable
+- [ ] The register filters by project, status, risk and search
+- [ ] On a phone the register becomes cards, not a sideways-scrolling table
+- [ ] The project report prints to PDF cleanly
+
+---
+
+## What to record
+
+For each stage: **Pass / Fail**. If failed — what you did, what you expected,
+what happened, and a screenshot of anything visual.
+
+A stage that half-works is a **fail**. Note it and carry on; later stages still
+tell you something.
+
+## The commands, in one place
+
+```bash
+# Deploy the latest build
+ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
+
+# Empty everything (irreversible)
+WIPE=yes npm run db:wipe
+
+# Restore permissions + company + one owner account
+npm run db:bootstrap -- --email you@company.com --name "Your Name" --company "Your Company"
+```
