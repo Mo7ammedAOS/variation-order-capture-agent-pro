@@ -185,7 +185,7 @@ export function SetPasswordForm() {
           Password set. Sign in with it now.
         </p>
         <Button asChild size="lg" className="w-full">
-          <a href="/login?reason=password_set">Go to sign in</a>
+          <a href="/signin?reason=password_set">Go to sign in</a>
         </Button>
       </div>
     );

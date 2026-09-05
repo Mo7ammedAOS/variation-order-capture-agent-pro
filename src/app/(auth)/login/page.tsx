@@ -1,141 +1,23 @@
-import type { Metadata } from 'next';
-import { Camera, Clock, HardHat, Info, ShieldCheck } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
-import { LoginForm } from './login-form';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
 
 /**
- * The mosaic language, applied where it is first seen.
- *
- * Two panels on the light ground: the sign-in card, and beside it what the
- * product actually promises. The second panel is hidden below `lg`, because a
- * site engineer signing in on a phone in a corridor needs the password field
- * above the fold and nothing else competing for it.
+ * `/login` became `/signin` on 2026-09-05. This stays because the old address
+ * is already in the wild — in sent invitation emails, in browser bookmarks, in
+ * TEST-PLAN.md, and in whatever anybody wrote down. A dead front door is a
+ * support call, and the cost of keeping it alive is this file.
  */
-
-const PROMISES = [
-  {
-    icon: Clock,
-    title: 'The notice clock starts on capture',
-    body: 'Counted from the date it happened, not the date someone wrote it up.',
-  },
-  {
-    icon: Camera,
-    title: 'Evidence, filed where it belongs',
-    body: 'Photographs land against the change, in the project folder, dated.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Only your projects',
-    body: 'Enforced on the server, not merely hidden in the interface.',
-  },
-];
-
-/**
- * Why a session ended, said in words rather than left as a mystery.
- *
- * Someone arriving here involuntarily has just had a page taken away from
- * them. If the screen simply asks for a password again they will assume they
- * mistyped it, try the same one, and be no wiser. The two account states are
- * worth distinguishing because the remedy differs: one is "use your other
- * account", the other is "your administrator has to act".
- */
-const SIGN_OUT_REASONS: Record<string, string> = {
-  account_missing:
-    'That account is no longer set up in this company, so you have been signed out. Sign in with a current account, or ask your administrator to add you.',
-  account_deactivated:
-    'Your access has been switched off, so you have been signed out. Your administrator can switch it back on.',
-  signed_out: 'You have been signed out.',
-  // Not a sign-out at all — the arrival from /set-password. It shares this
-  // map because it needs the same thing: a line of explanation above the
-  // form, and a `reason` in the URL so middleware does not bounce a
-  // still-warm session straight back to the dashboard.
-  password_set: 'Your password is set. Sign in with it.',
-};
-
-export default async function LoginPage({
+export default async function LoginRedirect({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; reason?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { next, reason } = await searchParams;
-  const notice = reason ? SIGN_OUT_REASONS[reason] : undefined;
-
-  // Branding comes from company settings so a deployment looks like the client
-  // company rather than like our product. Failing to read it must not block
-  // sign-in, which is why this is wrapped.
-  const settings = await prisma.companySettings
-    .findFirst({ select: { displayCompanyName: true } })
-    .catch(() => null);
-
-  const companyName = settings?.displayCompanyName ?? 'VO Capture & Control';
-
-  return (
-    <main
-      className="flex min-h-dvh items-center justify-center px-4 py-10"
-      style={{ background: 'var(--mosaic-ground)' }}
-    >
-      <div className="grid w-full max-w-4xl gap-4 lg:grid-cols-[1fr_1.1fr]">
-        <section className="panel panel-search hidden flex-col justify-between p-8 lg:flex">
-          <div>
-            <span className="panel-chip h-9 text-sm font-medium text-[#131313]">
-              <HardHat aria-hidden className="size-4" />
-              Variation control
-            </span>
-            <h2 className="mt-7 text-[1.75rem] font-extrabold leading-[1.15] tracking-[-0.028em] text-[#0d0d10]">
-              Capture the change.
-              <br />
-              Keep the entitlement.
-            </h2>
-          </div>
-
-          <ul className="mt-8 flex flex-col gap-5">
-            {PROMISES.map(({ icon: Icon, title, body }) => (
-              <li key={title} className="flex gap-3">
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-[#3d3a63]">
-                  <Icon aria-hidden className="size-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#191826]">{title}</p>
-                  <p className="mt-0.5 text-sm leading-snug text-[#4a4763]">{body}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="panel flex flex-col justify-center bg-card p-7 sm:p-9">
-          <div className="mb-7 flex flex-col gap-3">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <HardHat aria-hidden className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-[-0.02em]">{companyName}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Variation capture, notice control and approvals
-              </p>
-            </div>
-          </div>
-
-          {notice ? (
-            <p
-              role="status"
-              className="mb-5 flex items-start gap-2 rounded-xl bg-risk-amber-bg px-3.5 py-2.5 text-sm leading-snug text-risk-amber"
-            >
-              <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
-              {notice}
-            </p>
-          ) : null}
-
-          <LoginForm next={next} />
-
-          <p className="mt-6 text-xs text-muted-foreground">
-            Accounts are created by your administrator. There is no self sign-up.
-          </p>
-        </section>
-      </div>
-    </main>
-  );
+  const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'string') query.set(key, value);
+  }
+  const suffix = query.toString();
+  redirect(suffix ? `/signin?${suffix}` : '/signin');
 }

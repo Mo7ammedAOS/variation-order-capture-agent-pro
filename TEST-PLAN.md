@@ -65,38 +65,54 @@ cannot quietly come back on the next deploy.
 ### Do
 
 ```bash
-# 1 — put the latest build on the server
+# put the latest build on the server
 ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
-
-# 2 — restore the matrix, the company, and one account
-npm run db:bootstrap -- \
-  --email sumunit2@gmail.com \
-  --name "Aryia" \
-  --company "Osman Contracting"
 ```
 
-Run step 2 wherever your `.env` points at the live database.
+Then, in a browser, go to:
 
-It restores the permission matrix from the code defaults, creates the company
-record, and creates **one** account. Nothing else.
+```
+https://vo.osmanflow.com/admin-signin
+```
 
-The password is never printed anywhere. A set-password email is sent instead.
+Press **Set up the company** and fill in the company name, your name, your
+email, and a password you choose. That is the whole of it — no terminal, no
+email round trip.
+
+**The button is there only because the company is empty.** Creating this
+account closes set-up permanently: `/admin-signup` will redirect to sign-in
+from then on, and every further account is created from Settings → Users. If
+you ever see the button on a live deployment, something has emptied the `users`
+table and that is worth stopping to understand.
+
+Behind that one form the app restores the permission matrix from the code
+defaults, creates the company record, and creates one owner account.
+
+> The command-line route still exists and does the same work, for when a
+> deployment is being scripted rather than driven by hand:
+>
+> ```bash
+> npm run db:bootstrap -- --email you@company.ae --name "Your Name" --company "Your Company"
+> ```
+>
+> It emails a set-password link rather than taking a password, so it needs the
+> Supabase **Site URL** and **Redirect URLs** to point at
+> `https://vo.osmanflow.com` — otherwise the link lands on `localhost:3000`.
 
 ### Expect
 
-- `permissions restored: ~200`
-- `company settings created: Osman Contracting`
-- `owner created: Aryia <sumunit2@gmail.com>`
-- An email arrives at that address. Follow it, set a password, sign in.
+- The set-up form accepts the details and signs you straight in
+- You land on Overview
 
 ### Pass when
 
 - [ ] You are signed in at `https://vo.osmanflow.com` as Aryia
 - [ ] The sidebar shows **Overview, My Tasks, Variations, Held Up, Capture Inbox, Projects, Company, Users, Permissions**
 - [ ] Overview is empty — no changes, no value, no tasks
+- [ ] Sign out, then open `/admin-signup` directly. It redirects to sign-in and
+      offers no set-up button. **Set-up has closed behind you.**
+- [ ] `/signin` shows the same form with no set-up button at all
 
-> If the email never arrives, run the command again with a different `--email`.
-> It reuses an existing identity rather than creating a second one.
 
 ---
 
@@ -605,5 +621,5 @@ ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
 WIPE=yes npm run db:wipe
 
 # Restore permissions + company + one owner account
-npm run db:bootstrap -- --email you@company.com --name "Your Name" --company "Your Company"
+npm run db:bootstrap -- --email you@company.ae --name "Your Name" --company "Your Company"
 ```

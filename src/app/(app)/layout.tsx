@@ -6,7 +6,7 @@ import { countMyUnread } from '@/services/notification.service';
 import { SYSTEM_ROLE_LABELS, type Capability } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
 import { Button } from '@/components/ui/button';
-import { signOut } from '@/app/(auth)/login/actions';
+import { signOut } from '@/app/(auth)/actions';
 import { MobileNav, NAV_LINKS, ReportChangeFab, SidebarNav } from './nav';
 import { CommandPalette } from './command-palette';
 import { CommandTrigger } from './command-trigger';

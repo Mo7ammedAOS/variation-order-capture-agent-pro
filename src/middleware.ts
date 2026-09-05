@@ -11,9 +11,23 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
  * enforced only here is enforced only until someone calls the API directly.
  */
 
-// `/set-password` is public for the same reason `/login` is: everybody who
-// needs it is by definition not signed in yet.
-const PUBLIC_PATHS = ['/login', '/auth', '/set-password'];
+// Everybody who needs one of these is, by definition, not signed in yet.
+// `/admin-signup` is public and gates itself instead: it is open only while
+// the company has no users at all. See `(auth)/setup.ts`.
+const PUBLIC_PATHS = [
+  '/signin',
+  '/admin-signin',
+  '/admin-signup',
+  '/login',
+  '/auth',
+  '/set-password',
+];
+
+// The sign-in screens proper. Landing on one while already signed in means
+// going to the dashboard instead; `/admin-signup` is excluded because it
+// redirects itself, and `/set-password` because a signed-in person changing
+// their password is a legitimate thing to be doing.
+const SIGN_IN_PATHS = new Set(['/signin', '/admin-signin', '/login']);
 
 /**
  * Pages and API routes fail differently on purpose.
@@ -81,7 +95,7 @@ export async function middleware(request: NextRequest) {
     }
 
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/login';
+    redirectUrl.pathname = '/signin';
     // Carry the intended destination so a deep link survives signing in.
     redirectUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(redirectUrl);
@@ -94,7 +108,7 @@ export async function middleware(request: NextRequest) {
   // fails, which sends it here again — an unbreakable cycle that a person
   // cannot escape by refreshing or by navigating. Carrying the reason means
   // the login page always wins that argument.
-  if (user && pathname === '/login' && !request.nextUrl.searchParams.has('reason')) {
+  if (user && SIGN_IN_PATHS.has(pathname) && !request.nextUrl.searchParams.has('reason')) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     redirectUrl.search = '';

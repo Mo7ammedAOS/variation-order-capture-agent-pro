@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
    */
   const response = new NextResponse(null, {
     status: 307,
-    headers: { location: `/login?reason=${reason}` },
+    headers: { location: `/signin?reason=${reason}` },
   });
 
   // Every Supabase auth cookie, including the numbered chunks a large ES256

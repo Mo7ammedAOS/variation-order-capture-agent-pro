@@ -106,7 +106,7 @@ export async function requirePageUser(destination?: string): Promise<Authenticat
 
     case 'anonymous': {
       const next = destination && destination.startsWith('/') ? destination : undefined;
-      redirect(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
+      redirect(next ? `/signin?next=${encodeURIComponent(next)}` : '/signin');
       break;
     }
 
