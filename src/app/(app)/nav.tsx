@@ -52,7 +52,14 @@ export function SidebarNav({ links }: { links: NavLink[] }) {
               'transition-all duration-200 ease-[var(--ease-out-quint)]',
               active
                 ? 'brand-fill shadow-[var(--brand-glow)]'
-                : 'text-muted-foreground hover:translate-x-0.5 hover:bg-accent hover:text-foreground',
+                : [
+                    'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    // The nudge follows the reading direction. `translate-x` is
+                    // physical, so in Arabic it pushed the item AWAY from the
+                    // text it belongs to — the one motion in the nav, running
+                    // backwards for half the intended users.
+                    'hover:translate-x-0.5 rtl:hover:-translate-x-0.5',
+                  ].join(' '),
             )}
           >
             <Icon
@@ -165,8 +172,8 @@ export function ReportChangeFab() {
         'size-14 sm:size-auto sm:px-5 sm:py-3.5',
         'transition-all duration-200 ease-[var(--ease-out-quint)]',
         'hover:scale-105 hover:brightness-[1.06] active:scale-100',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'focus-visible:ring-offset-[var(--background)]',
+        // outline, not ring-offset: the gap must stay transparent over glass.
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]',
         'print:hidden',
       )}
     >

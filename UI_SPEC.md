@@ -151,6 +151,11 @@ the day when the detail has gone.
 overdue tasks, then critical bottlenecks — before the totals. Someone scanning
 for ten seconds should land on what is already wrong.
 
+**The page-title scale is a class, `.page-title`, not a pasted value.** It was
+an arbitrary `text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]`
+duplicated across twelve files — a string that agreed with itself twelve times
+and would stop agreeing the first time anyone adjusted one.
+
 **Filters live in the URL.** A filtered register is a link. "Look at these four
 overdue ones" is far more useful to send than a screenshot.
 
@@ -164,16 +169,91 @@ action attached. AI suggests; humans approve.
 **The UI never computes a commercial number.** Every figure comes from a service
 that has been tested. If a number is wrong, it is wrong in one place.
 
+**The register's table header does not stick.** It was written as
+`sticky top-0` and could never have worked: the wrapper sets `overflow-x: auto`,
+which per spec forces `overflow-y` to `auto` as well, so the wrapper is a scroll
+container in both axes — and with no height constraint it never scrolls
+vertically, leaving `sticky` nothing to resolve against. The page scrolls, the
+container does not. Making it genuinely stick means either a fixed-height
+scroll region or abandoning horizontal scroll; both are larger decisions than a
+header and neither is worth making silently.
+
+**Focus rings are `outline` with `outline-offset`, never `ring-offset`.**
+`ring-offset` paints a solid band in the offset colour, and these controls sit
+on translucent glass over a photograph, so that band was an opaque rectangle
+matching nothing behind it. An outline offset leaves the gap transparent.
+
 **Tabular figures** on every number that appears in a column, so digits align.
 
 **44px minimum touch target** under `(pointer: coarse)`. Gloves, sunlight, one
 hand.
+
+## Contrast on glass
+
+**Glass makes contrast a function of the photograph.** This is the trap in the
+whole style and it has to be designed against, not assumed away.
+
+Measured through a light-theme panel over three regions of the plate:
+
+| | secondary text before | after |
+|---|---|---|
+| bright region of the plate | 4.57:1 | 5.15:1 |
+| mid region | 4.25:1 | 4.89:1 |
+| darker region | **3.92:1 — fails AA** | 4.59:1 |
+
+Two changes fixed it: light `--glass` went from `0.62` to `0.72` (which lifts
+the floor *and* flattens the variance, so a label's contrast no longer depends
+on where its panel landed), and `--muted-foreground` was re-solved against the
+**worst case** rather than against an imaginary white background.
+
+**The rule for anything added later:** a colour on glass is checked against the
+darkest region of the plate, never against `#fff`. Hint text in this product is
+12px, so the threshold is 4.5:1, not 3:1.
+
+## Blur budget
+
+`backdrop-filter` makes the compositor re-sample everything behind an element.
+The overview renders eighteen stat tiles plus three readings plus four charts —
+twenty-five sampled regions on one scrolling page, which is exactly what the
+note on `.panel` warns against, committed by the page that warns about it.
+
+**Grid items are flat (`.panel-flat`); surfaces and chrome are glass.** The
+escape is that the ground is a *soft-focus* photograph: there is almost no
+high-frequency detail for a blur to remove, so at tile size a slightly more
+opaque flat surface is visually near-identical and costs nothing. Over a
+detailed photograph this trade would not hold.
+
+Set it with `<Card blur={false}>`.
+
+## Loading and 404
+
+Every page in `(app)` is `force-dynamic` against hosted Postgres, and there was
+no `loading.tsx` anywhere — so Next had no boundary to suspend at and the
+browser sat on the *previous* page, nothing moving, until the query returned.
+`(app)/loading.tsx` is a skeleton in the shape of the overview; adding the file
+is the whole fix.
+
+It uses no looping animation. The product has exactly one, on a breached notice
+deadline, and spending a second on a spinner would devalue the only one that
+costs money when it is missed.
+
+`not-found.tsx` is deliberately vague about *why* a page is missing. The same
+page answers "you typed it wrong", "the record was closed" and "you cannot see
+that project" — and `notFound()` is what a permission check throws when it
+refuses to confirm a record exists. Naming the reason would leak the record's
+existence to somebody not allowed to know it. Note that for a signed-out
+visitor, middleware redirects unknown paths to `/signin` before this page is
+reached; it serves the in-app `notFound()` cases.
 
 ## Arabic / RTL
 
 Structure only in Phase 1, not a translation.
 
 - `dir` on `<html>`, driven by locale.
+- **Transforms too, not just spacing.** The sidebar's hover nudge was
+  `translate-x`, which is physical — in Arabic the one piece of motion in the
+  nav ran backwards, pushing each item away from its own label. It now carries
+  an `rtl:` counterpart.
 - **Logical properties everywhere** — `ms-`/`me-`/`ps-`/`pe-`, `start`/`end`.
   Never `ml-`/`mr-`/`left`/`right`. This is the part that is expensive to
   retrofit, so it is done now.

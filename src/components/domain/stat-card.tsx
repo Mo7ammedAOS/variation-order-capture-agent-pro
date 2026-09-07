@@ -59,6 +59,14 @@ export function StatCard({
     <Card
       tone={panel}
       interactive={Boolean(href)}
+      /*
+        Flat, not blurred. The overview renders eighteen of these; blurring
+        each one means eighteen backdrop samples per frame on a scrolling page,
+        which is where a mid-range Android phone in a site office starts
+        dropping frames. At tile size over a soft-focus plate the difference is
+        not visible.
+      */
+      blur={false}
       className="flex h-full flex-col p-4 sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">

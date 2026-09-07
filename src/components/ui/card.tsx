@@ -40,15 +40,25 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
    * ones that do work.
    */
   interactive?: boolean;
+  /**
+   * Set `false` for a pane in a GRID.
+   *
+   * Drops `backdrop-filter`, which is the expensive part, and compensates with
+   * a more opaque surface. Over a soft-focus plate the two are all but
+   * indistinguishable at tile size — see `.panel-flat` in globals.css for why
+   * that is true here and would not be over a detailed photograph.
+   */
+  blur?: boolean;
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, tone = 'plain', interactive = false, ...props }, ref) => (
+  ({ className, tone = 'plain', interactive = false, blur = true, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
         'panel text-card-foreground',
         TONE_CLASS[tone],
+        !blur && 'panel-flat',
         interactive && 'panel-interactive',
         className,
       )}

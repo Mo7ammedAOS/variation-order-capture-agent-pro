@@ -43,7 +43,7 @@ export default async function UsersPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <header>
-        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Users</h1>
+        <h1 className="page-title">Users</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {users.length} {users.length === 1 ? 'account' : 'accounts'}. There is no public
           sign-up — every account exists because someone here created it. Administration is

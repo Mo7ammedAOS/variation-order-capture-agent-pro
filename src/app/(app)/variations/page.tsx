@@ -45,7 +45,7 @@ export default async function VariationsPage({
           {/* The page carries the same word as the menu item that opens it.
               A control that says one thing and lands on a page that says
               another is how people stop trusting either. */}
-          <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Variations</h1>
+          <h1 className="page-title">Variations</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {changes.length} {changes.length === 1 ? 'change' : 'changes'} in your projects
           </p>

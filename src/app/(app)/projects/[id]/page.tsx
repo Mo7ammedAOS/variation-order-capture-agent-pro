@@ -85,7 +85,7 @@ export default async function ProjectDetailPage({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="tabular text-sm font-semibold text-primary">{project.projectCode}</p>
-          <h1 className="mt-1 text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">{project.projectName}</h1>
+          <h1 className="page-title mt-1">{project.projectName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {project.clientName}
             {project.consultantName ? ` · ${project.consultantName}` : ''}

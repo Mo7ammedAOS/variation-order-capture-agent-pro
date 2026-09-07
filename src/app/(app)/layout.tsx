@@ -128,6 +128,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     */
     <div className="flex min-h-dvh flex-col md:flex-row">
       {/*
+        Skip to content, first in the DOM.
+
+        The shell places a search box and up to nine navigation links ahead of
+        every page's first heading, so anyone driving this from a keyboard or a
+        switch was tabbing through the same eleven controls on every single
+        navigation. This was simply missing.
+      */}
+      <a href="#main" className="skip-link">
+        <span className="brand-fill inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-bold shadow-[var(--brand-glow)]">
+          Skip to content
+        </span>
+      </a>
+
+      {/*
         The rail FLOATS. Insets on all four sides and its own radius, rather
         than a full-height column butted against the edge of the window — the
         gap is what lets the photograph run behind it and makes the glass read
@@ -218,7 +232,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Bottom padding clears the mobile nav bar and the capture button. */}
       {/* Printing drops the padding and the bottom clearance: the nav is hidden on
           paper, so the space it reserved is a blank strip at the foot of a page. */}
-      <main className="min-w-0 flex-1 px-4 py-5 pb-36 md:px-6 md:py-6 md:pb-10 print:p-0">
+      <main
+        id="main"
+        /* -1 so the skip link can move focus here without making the region
+           itself a tab stop for everyone else. */
+        tabIndex={-1}
+        className="min-w-0 flex-1 px-4 py-5 pb-36 outline-none md:px-6 md:py-6 md:pb-10 print:p-0"
+      >
         {/*
           `min-w-0` is load-bearing. A flex item defaults to min-width:auto, so
           without it this grows to the width of its widest child — the fifteen

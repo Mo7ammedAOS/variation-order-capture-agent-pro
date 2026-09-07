@@ -67,9 +67,19 @@
     bars, the command palette); `--glass-soft` is for nested surfaces inside a
     panel, which must not look like a second pane of glass on top of the first.
   */
-  --glass: oklch(1 0 0 / 0.62);
-  --glass-strong: oklch(1 0 0 / 0.80);
-  --glass-soft: oklch(1 0 0 / 0.42);
+  /*
+    0.72, not 0.62.
+
+    Glass makes contrast a function of the PHOTOGRAPH, which is the trap in
+    this whole style: secondary text measured 4.57:1 over a bright part of the
+    plate and 3.92:1 over a darker part — the same token failing WCAG AA
+    depending on where a panel happened to land. Ten more points of opacity
+    both lifts the floor and flattens the variance, so the contrast of a label
+    no longer depends on what is behind it.
+  */
+  --glass: oklch(1 0 0 / 0.72);
+  --glass-strong: oklch(1 0 0 / 0.86);
+  --glass-soft: oklch(1 0 0 / 0.52);
   --glass-edge: oklch(1 0 0 / 0.85);
   --glass-blur: blur(28px) saturate(1.6);
   --glass-shadow: 0 12px 34px -16px oklch(0.20 0.02 265 / 0.30),
@@ -96,7 +106,13 @@
   --secondary-foreground: oklch(0.28 0.03 265);
 
   --muted: oklch(0.20 0.02 265 / 0.05);
-  --muted-foreground: oklch(0.48 0.018 262);
+  /*
+    Solved against the WORST case — a panel over the darkest region of the
+    light plate — rather than against an imaginary white background. 4.53:1
+    there, 5.09:1 over the brightest region. The old value was 3.92:1 at worst,
+    and it is used for hint text at 12px, where AA requires 4.5:1.
+  */
+  --muted-foreground: oklch(0.455 0.02 262);
 
   --accent: oklch(0.20 0.02 265 / 0.07);
   --accent-foreground: oklch(0.22 0.03 265);
@@ -310,7 +326,9 @@
   html {
     color-scheme: light;
   }
-  .dark html,
+  /* `.dark` is set ON <html> by next-themes, so `html.dark` is the selector.
+     A `.dark html` rule can never match — it asks for an <html> nested inside
+     a .dark element. It was dead code and is gone. */
   html.dark {
     color-scheme: dark;
   }
@@ -327,9 +345,22 @@
     `-z-10` keeps it behind everything; nothing else in the app may use a
     negative z-index.
   */
+  /*
+    The ground colour lives on <html>, NOT on <body>.
+
+    `body::before` carries the photograph at z-index -10, which paints behind
+    the body's own background box. It works today only because CSS propagates
+    body's background to the canvas when html has none — remove that accident
+    (by anyone ever giving html a background) and the photograph vanishes
+    behind an opaque body. Putting the colour on html removes the dependency
+    on a rule almost nobody knows about.
+  */
+  html {
+    background-color: var(--background);
+  }
+
   body {
     @apply text-foreground;
-    background-color: var(--background);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     min-height: 100dvh;
   }
@@ -550,6 +581,35 @@
     transition-duration: 90ms;
   }
 
+  /*
+    A pane WITHOUT the blur.
+
+    `backdrop-filter` makes the compositor sample everything behind the
+    element, every frame it changes. The overview renders eighteen stat tiles
+    plus three readings plus four charts — twenty-five sampled regions on one
+    scrolling page, which is precisely the thing the note on `.panel` warns
+    against, committed by the page that warns about it.
+
+    The escape is that our ground is a SOFT-FOCUS photograph. There is almost
+    no high-frequency detail for a blur to remove, so on a tile the size of a
+    stat card a slightly more opaque flat surface is visually near-identical to
+    a blurred one — and costs nothing. Blur is kept where a panel is large
+    enough for the plate to show real structure through it, or where content
+    genuinely scrolls underneath.
+
+    Rule of thumb: grid items are flat, surfaces and chrome are glass.
+  */
+  .panel-flat {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--glass-strong);
+  }
+  .panel-flat.panel-notice { background: linear-gradient(var(--panel-notice), var(--panel-notice)), var(--glass-strong); }
+  .panel-flat.panel-connect { background: linear-gradient(var(--panel-connect), var(--panel-connect)), var(--glass-strong); }
+  .panel-flat.panel-work { background: linear-gradient(var(--panel-work), var(--panel-work)), var(--glass-strong); }
+  .panel-flat.panel-insight { background: linear-gradient(var(--panel-insight), var(--panel-insight)), var(--glass-strong); }
+  .panel-flat.panel-search { background: linear-gradient(var(--panel-search), var(--panel-search)), var(--glass-strong); }
+
   /* Tones layer a tint OVER the glass, so a toned panel is still glass. */
   .panel-notice { background: linear-gradient(var(--panel-notice), var(--panel-notice)), var(--card); }
   .panel-connect { background: linear-gradient(var(--panel-connect), var(--panel-connect)), var(--card); }
@@ -589,6 +649,47 @@
   }
 
   /* Brand fills, so the gradient is defined once. */
+  /*
+    Skip to content. Off-screen until focused, then a real, visible control.
+
+    The shell puts a search box and up to nine navigation links before the
+    first heading, so a keyboard or switch user pays for that furniture on
+    every single page load. This is the cheapest accessibility fix there is
+    and it was missing.
+  */
+  .skip-link {
+    position: fixed;
+    inset-inline-start: 0.75rem;
+    top: 0.75rem;
+    z-index: 200;
+    transform: translateY(-200%);
+    transition: transform 160ms var(--ease-out-quint);
+  }
+  .skip-link:focus-visible {
+    transform: translateY(0);
+  }
+
+  /*
+    The page title.
+
+    This scale was an arbitrary Tailwind value —
+    `text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]` — pasted
+    into twelve files. That is not a design system, it is a string that happens
+    to agree with itself twelve times, and it stops agreeing the first time
+    anybody adjusts one of them. Retuning the scale is now one edit.
+
+    A class rather than a component: the twelve pages wrap their heading in
+    twelve different structures (some with actions beside it, some with a
+    breadcrumb above), and forcing them all through one component would have
+    been a layout refactor wearing the costume of a typography fix.
+  */
+  .page-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.035em;
+  }
+
   .brand-fill {
     background: var(--brand-gradient);
     color: var(--brand-ink);

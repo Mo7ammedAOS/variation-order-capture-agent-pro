@@ -35,7 +35,7 @@ export default async function NotificationsPage({
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Notifications</h1>
+          <h1 className="page-title">Notifications</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {showAll
               ? 'Everything, read and unread.'

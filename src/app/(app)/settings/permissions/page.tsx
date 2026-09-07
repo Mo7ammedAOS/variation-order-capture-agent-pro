@@ -61,7 +61,7 @@ export default async function PermissionsPage() {
     <div className="flex min-w-0 max-w-full flex-col gap-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Permissions</h1>
+          <h1 className="page-title">Permissions</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Who may do what, on your director&apos;s authority rather than ours. Changes take
             effect within seconds and every one is recorded against your name. A cell that is

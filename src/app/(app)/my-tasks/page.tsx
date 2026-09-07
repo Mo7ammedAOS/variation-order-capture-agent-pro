@@ -25,7 +25,7 @@ export default async function MyTasksPage() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <header>
-        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">My Tasks</h1>
+        <h1 className="page-title">My Tasks</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Late first, then due today, then everything else.
         </p>

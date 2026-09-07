@@ -23,13 +23,22 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
 Table.displayName = 'Table';
 
 /*
-  The header sticks. On a register that runs past the fold, a column of money
-  with no heading in sight is a column of numbers nobody can name — and this
-  table has fifteen columns, several of which are money.
+  The header does NOT stick, and that is a correction rather than a decision.
 
-  It carries its own blur because content scrolls underneath it: without one,
-  rows pass through the header as legible text and the whole thing reads as a
-  rendering fault rather than a fixed heading.
+  It was written as `sticky top-0` with its own blur. That could never work:
+  the wrapper above sets `overflow-x: auto`, and per spec a non-`visible`
+  value on one axis forces the other to `auto` — so the wrapper is a scroll
+  container in BOTH axes. `position: sticky` resolves against its nearest
+  scrolling ancestor, and this one has no height constraint, so it never
+  scrolls vertically and the header had nothing to stick to. The page scrolls;
+  the container does not.
+
+  It cost a `backdrop-filter`, a stacking context and a z-index to do nothing
+  at all. Making it genuinely stick means either giving the wrapper a fixed
+  height (so the table scrolls inside the page rather than with it) or
+  abandoning horizontal scroll — both bigger decisions than a header, and
+  neither is worth making silently. Shipping the appearance of a feature that
+  does nothing is worse than not having it.
 */
 const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
@@ -37,12 +46,7 @@ const TableHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn(
-      'sticky top-0 z-10 bg-[var(--glass-strong)] backdrop-blur-lg',
-      '[&_tr]:border-b [&_tr]:border-border',
-      'print:static print:bg-transparent print:backdrop-blur-none',
-      className,
-    )}
+    className={cn('[&_tr]:border-b [&_tr]:border-border', className)}
     {...props}
   />
 ));

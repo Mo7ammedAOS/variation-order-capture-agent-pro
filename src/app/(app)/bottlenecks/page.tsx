@@ -21,7 +21,7 @@ export default async function BottlenecksPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <header>
-        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Held Up</h1>
+        <h1 className="page-title">Held Up</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           What is blocked, who owns it, and how much is waiting on it.
         </p>

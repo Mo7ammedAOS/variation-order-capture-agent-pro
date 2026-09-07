@@ -32,7 +32,7 @@ export default async function CompanySettingsPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <header>
-        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Company settings</h1>
+        <h1 className="page-title">Company settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           One record for the whole deployment. Every change here is recorded against your
           name, because two of these settings move dates people are judged against.

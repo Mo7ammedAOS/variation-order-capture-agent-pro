@@ -36,8 +36,15 @@ const buttonVariants = cva(
     'relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap',
     'rounded-xl text-sm font-semibold tracking-[-0.01em]',
     'transition-all duration-150 ease-[var(--ease-press)] active:scale-[0.97]',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-    'focus-visible:ring-offset-[var(--background)]',
+    /*
+      `outline` with an offset, not a ring with a ring-offset.
+      `ring-offset` paints a solid band in the offset colour, and these buttons
+      sit on translucent glass over a photograph — so that band was an opaque
+      rectangle in a colour matching nothing behind it. `outline-offset` leaves
+      the gap genuinely transparent, so whatever the button is sitting on shows
+      through it.
+    */
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]',
     'disabled:pointer-events-none disabled:opacity-50',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-transform',
   ].join(' '),

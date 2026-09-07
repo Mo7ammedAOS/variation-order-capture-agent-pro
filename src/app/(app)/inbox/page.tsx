@@ -32,7 +32,7 @@ export default async function InboxPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <header>
-        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Capture inbox</h1>
+        <h1 className="page-title">Capture inbox</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Messages that arrived by WhatsApp or email and could not be placed on a project by
           themselves. Each one needs a person to say where it belongs.
