@@ -228,7 +228,7 @@ export function ReportChangeForm({
         </CardContent>
       </Card>
 
-      <details className="panel bg-card">
+      <details className="panel">
         <summary className="cursor-pointer px-5 py-4 text-sm font-medium">
           Add more detail (optional)
         </summary>

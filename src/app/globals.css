@@ -3,135 +3,240 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
-  VO Capture & Control — construction-tech palette.
+/* ═══════════════════════════════════════════════════════════════════════════
+   VO Capture & Control — the glass system.
 
-  Light ground, navy text, blue primary actions, and a RAG scale that is used
-  consistently and only for risk:
-    green  = low risk / complete
-    amber  = warning / pending
-    red    = overdue / critical
-  Never use the RAG colours decoratively. On this product a red chip means a
-  commercial deadline is at risk, and that has to stay true.
-*/
+   ── The one idea ──────────────────────────────────────────────────────────
+   Every surface in this product is a pane of frosted glass floating over a
+   photographic ground. The ground is an IMAGE, not a colour, and switching
+   between light and dark swaps that image. This is deliberate: a dark mode
+   built by inverting colours looks like the light mode with the lights off,
+   whereas a different photograph reads as a different room.
+
+   ── The colour discipline ─────────────────────────────────────────────────
+   There are exactly two colour vocabularies and they must never be confused.
+
+   BRAND (amber, --brand → --brand-2). Where you are, what you can press, what
+   the app wants you to notice. It appears on the active nav item, primary
+   buttons, focus rings, gauges and charts. It carries no commercial meaning.
+
+   RISK (the RAG scale). Green, amber, red — and ONLY for risk. On this
+   product a red chip means a contractual deadline is at stake, and an amber
+   chip means it is about to be. Nothing may borrow that vocabulary to look
+   interesting.
+
+   Because the brand is amber and the risk scale contains an amber, the risk
+   amber has been pushed towards gold (hue ~90 rather than ~60) and
+   desaturated. Side by side they are plainly two different colours: the brand
+   is orange and glows, the warning is flat gold. If you ever tune one, check
+   it against the other on the variations register, which is the only screen
+   where both appear in the same row.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
-  --background: oklch(0.985 0.002 250);
-  --foreground: oklch(0.21 0.035 265);
+  /* ── Brand ──────────────────────────────────────────────────────────── */
+  --brand: oklch(0.71 0.187 47);        /* #FF7A1A  safety orange           */
+  --brand-2: oklch(0.81 0.156 76);      /* #FFB020  hi-vis amber            */
+  --brand-ink: oklch(0.19 0.03 62);     /* text that sits ON brand          */
+  --brand-gradient: linear-gradient(118deg, var(--brand) 0%, var(--brand-2) 100%);
+  --brand-glow: 0 10px 26px -12px oklch(0.71 0.187 47 / 0.75);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.035 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.035 265);
+  /* ── Ground ─────────────────────────────────────────────────────────── */
+  /*
+    The photograph, and the scrim that makes it safe to put text on.
+    The scrim is a gradient rather than a flat wash so the image stays visible
+    where the layout is empty and gets out of the way where the content is.
+  */
+  --backdrop: url('/backgrounds/app-light.jpg');
+  --backdrop-scrim: linear-gradient(
+    112deg,
+    oklch(0.985 0.003 250 / 0.78) 0%,
+    oklch(0.985 0.003 250 / 0.52) 46%,
+    oklch(0.985 0.003 250 / 0.34) 100%
+  );
 
-  --primary: oklch(0.53 0.19 259);
-  --primary-foreground: oklch(0.985 0.002 250);
+  --background: oklch(0.955 0.004 250);
+  --foreground: oklch(0.20 0.02 265);
 
-  --secondary: oklch(0.96 0.006 255);
-  --secondary-foreground: oklch(0.28 0.035 265);
+  /* ── Glass ──────────────────────────────────────────────────────────── */
+  /*
+    Three weights. `--glass` is the ordinary panel; `--glass-strong` is for
+    chrome that must stay readable while content scrolls under it (the nav
+    bars, the command palette); `--glass-soft` is for nested surfaces inside a
+    panel, which must not look like a second pane of glass on top of the first.
+  */
+  --glass: oklch(1 0 0 / 0.62);
+  --glass-strong: oklch(1 0 0 / 0.80);
+  --glass-soft: oklch(1 0 0 / 0.42);
+  --glass-edge: oklch(1 0 0 / 0.85);
+  --glass-blur: blur(28px) saturate(1.6);
+  --glass-shadow: 0 12px 34px -16px oklch(0.20 0.02 265 / 0.30),
+                  0 2px 8px -4px oklch(0.20 0.02 265 / 0.10);
+  --glass-shadow-lifted: 0 22px 50px -20px oklch(0.20 0.02 265 / 0.38),
+                         0 4px 12px -6px oklch(0.20 0.02 265 / 0.14);
+  /*
+    The specular top edge. A single hairline of near-white along the top of a
+    panel is what makes glass read as a physical sheet catching light rather
+    than as a semi-transparent rectangle. It is the cheapest and most
+    load-bearing detail in this whole file.
+  */
+  --glass-specular: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.9) 50%, transparent);
 
-  --muted: oklch(0.96 0.006 255);
-  --muted-foreground: oklch(0.53 0.02 258);
+  --card: var(--glass);
+  --card-foreground: oklch(0.20 0.02 265);
+  --popover: oklch(1 0 0 / 0.86);
+  --popover-foreground: oklch(0.20 0.02 265);
 
-  --accent: oklch(0.95 0.015 255);
-  --accent-foreground: oklch(0.28 0.035 265);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
 
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.985 0.002 250);
+  --secondary: oklch(0.20 0.02 265 / 0.06);
+  --secondary-foreground: oklch(0.28 0.03 265);
 
-  --border: oklch(0.91 0.008 255);
-  --input: oklch(0.91 0.008 255);
-  --ring: oklch(0.53 0.19 259);
+  --muted: oklch(0.20 0.02 265 / 0.05);
+  --muted-foreground: oklch(0.48 0.018 262);
 
-  /* RAG risk scale */
-  --risk-green: oklch(0.62 0.15 150);
-  --risk-green-bg: oklch(0.95 0.04 150);
-  --risk-amber: oklch(0.68 0.15 72);
-  --risk-amber-bg: oklch(0.96 0.05 82);
-  --risk-red: oklch(0.58 0.22 27);
-  --risk-red-bg: oklch(0.95 0.04 25);
-  --risk-neutral: oklch(0.55 0.02 258);
-  --risk-neutral-bg: oklch(0.96 0.006 255);
+  --accent: oklch(0.20 0.02 265 / 0.07);
+  --accent-foreground: oklch(0.22 0.03 265);
+
+  --destructive: oklch(0.58 0.215 27);
+  --destructive-foreground: oklch(0.99 0.002 250);
+
+  --border: oklch(0.20 0.02 265 / 0.10);
+  --input: oklch(0.20 0.02 265 / 0.13);
+  --ring: var(--brand);
+
+  /* ── RISK. Reserved. See the header. ────────────────────────────────── */
+  --risk-green: oklch(0.58 0.135 152);
+  --risk-green-bg: oklch(0.58 0.135 152 / 0.14);
+  --risk-amber: oklch(0.62 0.115 90);        /* gold, NOT the brand orange  */
+  --risk-amber-bg: oklch(0.62 0.115 90 / 0.16);
+  --risk-red: oklch(0.56 0.215 26);
+  --risk-red-bg: oklch(0.56 0.215 26 / 0.13);
+  --risk-neutral: oklch(0.50 0.018 262);
+  --risk-neutral-bg: oklch(0.20 0.02 265 / 0.07);
 
   /*
-    PANEL GRADIENTS — the mosaic language.
+    PANEL TONES.
 
-    Five soft grounds, each owning one kind of information, so a person learns
-    where to look before they read anything. They are DECORATIVE and carry no
-    commercial meaning, which is what keeps them clear of the RAG scale above:
-    on this product a red chip means a deadline is at risk, and nothing else in
-    the interface may borrow that vocabulary.
+    Five barely-there tints that let a screen give one panel a different
+    temperature from its neighbours — "this is the one that needs you". They
+    are DECORATIVE and deliberately weak: at this opacity they change the
+    character of a surface without ever competing with a risk chip sitting on
+    it. That restraint is the whole reason they are allowed to exist.
   */
-  --panel-notice: linear-gradient(135deg, #f9d9e9 0%, #fbdfec 55%, #fce6f1 100%);
-  --panel-connect: linear-gradient(180deg, #fcfdfd 0%, #f4f7f9 30%, #e2ebef 66%, #cedce4 100%);
-  --panel-work: linear-gradient(168deg, #e2ebc9 0%, #e9f0c4 48%, #f0f4b8 78%, #f3f5b0 100%);
-  --panel-insight: linear-gradient(180deg, #f9f1e8 0%, #f7efe6 100%);
-  --panel-search: linear-gradient(103deg, #eae9f5 0%, #e2e0f1 34%, #cfcdea 72%, #c2c0e6 100%);
+  --panel-notice: oklch(0.62 0.20 12 / 0.07);
+  --panel-connect: oklch(0.60 0.13 235 / 0.07);
+  --panel-work: oklch(0.71 0.187 47 / 0.07);
+  --panel-insight: oklch(0.60 0.15 300 / 0.06);
+  --panel-search: oklch(0.62 0.12 190 / 0.07);
 
-  /* The mosaic ground and the chrome that sits on it. */
-  --mosaic-ground: #f0f0f0;
-  --panel-radius: 22px;
-  --panel-edge: rgba(255, 255, 255, 0.92);
-  --panel-shadow: 0 2px 16px rgba(24, 30, 45, 0.045);
-  --panel-shadow-lifted: 0 8px 28px rgba(24, 30, 45, 0.09);
+  --panel-radius: 20px;
 
-  /* charts */
-  --chart-1: oklch(0.53 0.19 259);
-  --chart-2: oklch(0.62 0.15 150);
-  --chart-3: oklch(0.68 0.15 72);
-  --chart-4: oklch(0.58 0.22 27);
-  --chart-5: oklch(0.58 0.12 300);
+  /* ── Charts ─────────────────────────────────────────────────────────── */
+  /*
+    Chart 1 is the brand. The rest are a spread that stays distinguishable in
+    both themes and, critically, stays clear of the RAG scale — a bar chart
+    of statuses must never accidentally colour a category in "overdue red".
+  */
+  --chart-1: var(--brand);
+  --chart-2: oklch(0.60 0.13 235);
+  --chart-3: oklch(0.62 0.12 190);
+  --chart-4: oklch(0.60 0.15 300);
+  --chart-5: oklch(0.55 0.08 262);
 
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.21 0.035 265);
-  --sidebar-primary: oklch(0.53 0.19 259);
-  --sidebar-primary-foreground: oklch(0.985 0.002 250);
-  --sidebar-accent: oklch(0.96 0.006 255);
-  --sidebar-accent-foreground: oklch(0.28 0.035 265);
-  --sidebar-border: oklch(0.91 0.008 255);
-  --sidebar-ring: oklch(0.53 0.19 259);
+  --sidebar: var(--glass-strong);
+  --sidebar-foreground: oklch(0.20 0.02 265);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: oklch(0.20 0.02 265 / 0.07);
+  --sidebar-accent-foreground: oklch(0.20 0.02 265);
+  --sidebar-border: oklch(1 0 0 / 0.7);
+  --sidebar-ring: var(--brand);
 }
 
+/* ═══ DARK ═══════════════════════════════════════════════════════════════
+   Not an inversion. A different photograph, a colder ground, and glass that
+   works by being DARKER than what is behind it rather than lighter — which is
+   how real smoked glass behaves and why simply flipping the opacity of the
+   light theme always looks wrong.
+   ═════════════════════════════════════════════════════════════════════════ */
 .dark {
-  --background: oklch(0.18 0.02 265);
-  --foreground: oklch(0.96 0.005 250);
-  --card: oklch(0.22 0.022 265);
-  --card-foreground: oklch(0.96 0.005 250);
-  --popover: oklch(0.22 0.022 265);
-  --popover-foreground: oklch(0.96 0.005 250);
-  --primary: oklch(0.65 0.17 258);
-  --primary-foreground: oklch(0.18 0.02 265);
-  --secondary: oklch(0.27 0.022 265);
-  --secondary-foreground: oklch(0.96 0.005 250);
-  --muted: oklch(0.27 0.022 265);
-  --muted-foreground: oklch(0.70 0.015 258);
-  --accent: oklch(0.30 0.025 265);
-  --accent-foreground: oklch(0.96 0.005 250);
+  --backdrop: url('/backgrounds/app-dark.jpg');
+  --backdrop-scrim: linear-gradient(
+    112deg,
+    oklch(0.16 0.015 265 / 0.82) 0%,
+    oklch(0.16 0.015 265 / 0.62) 46%,
+    oklch(0.16 0.015 265 / 0.46) 100%
+  );
+
+  --background: oklch(0.16 0.015 265);
+  --foreground: oklch(0.97 0.004 250);
+
+  --glass: oklch(0.22 0.018 265 / 0.55);
+  --glass-strong: oklch(0.20 0.018 265 / 0.76);
+  --glass-soft: oklch(0.30 0.02 265 / 0.30);
+  --glass-edge: oklch(1 0 0 / 0.13);
+  --glass-shadow: 0 18px 44px -18px oklch(0 0 0 / 0.75),
+                  0 2px 10px -4px oklch(0 0 0 / 0.5);
+  --glass-shadow-lifted: 0 30px 64px -22px oklch(0 0 0 / 0.85),
+                         0 4px 14px -6px oklch(0 0 0 / 0.55);
+  --glass-specular: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28) 50%, transparent);
+
+  --card: var(--glass);
+  --card-foreground: oklch(0.97 0.004 250);
+  --popover: oklch(0.20 0.018 265 / 0.90);
+  --popover-foreground: oklch(0.97 0.004 250);
+
+  /*
+    The brand lifts in the dark. An orange tuned for a white ground goes muddy
+    against charcoal, so both stops move up in lightness — and the ink on top
+    stays dark, because amber is a light colour in any theme.
+  */
+  --brand: oklch(0.745 0.175 50);
+  --brand-2: oklch(0.845 0.145 78);
+  --brand-glow: 0 10px 30px -12px oklch(0.745 0.175 50 / 0.6);
+
+  --secondary: oklch(1 0 0 / 0.08);
+  --secondary-foreground: oklch(0.97 0.004 250);
+  --muted: oklch(1 0 0 / 0.06);
+  --muted-foreground: oklch(0.72 0.015 258);
+  --accent: oklch(1 0 0 / 0.10);
+  --accent-foreground: oklch(0.97 0.004 250);
+
   --destructive: oklch(0.65 0.19 25);
-  --destructive-foreground: oklch(0.18 0.02 265);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.65 0.17 258);
+  --destructive-foreground: oklch(0.16 0.015 265);
 
-  --risk-green: oklch(0.72 0.15 150);
-  --risk-green-bg: oklch(0.30 0.06 150);
-  --risk-amber: oklch(0.78 0.14 78);
-  --risk-amber-bg: oklch(0.32 0.06 78);
+  --border: oklch(1 0 0 / 0.11);
+  --input: oklch(1 0 0 / 0.16);
+
+  --risk-green: oklch(0.75 0.15 155);
+  --risk-green-bg: oklch(0.75 0.15 155 / 0.16);
+  --risk-amber: oklch(0.82 0.125 95);
+  --risk-amber-bg: oklch(0.82 0.125 95 / 0.16);
   --risk-red: oklch(0.68 0.19 25);
-  --risk-red-bg: oklch(0.30 0.08 25);
-  --risk-neutral: oklch(0.70 0.015 258);
-  --risk-neutral-bg: oklch(0.27 0.022 265);
+  --risk-red-bg: oklch(0.68 0.19 25 / 0.18);
+  --risk-neutral: oklch(0.72 0.015 258);
+  --risk-neutral-bg: oklch(1 0 0 / 0.08);
 
-  --sidebar: oklch(0.22 0.022 265);
-  --sidebar-foreground: oklch(0.96 0.005 250);
-  --sidebar-primary: oklch(0.65 0.17 258);
-  --sidebar-primary-foreground: oklch(0.18 0.02 265);
-  --sidebar-accent: oklch(0.30 0.025 265);
-  --sidebar-accent-foreground: oklch(0.96 0.005 250);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.65 0.17 258);
+  --panel-notice: oklch(0.68 0.20 14 / 0.11);
+  --panel-connect: oklch(0.68 0.13 235 / 0.11);
+  --panel-work: oklch(0.745 0.175 50 / 0.11);
+  --panel-insight: oklch(0.68 0.15 300 / 0.10);
+  --panel-search: oklch(0.70 0.12 190 / 0.10);
+
+  --chart-2: oklch(0.70 0.13 235);
+  --chart-3: oklch(0.72 0.12 190);
+  --chart-4: oklch(0.70 0.15 300);
+  --chart-5: oklch(0.68 0.05 262);
+
+  --sidebar: var(--glass-strong);
+  --sidebar-foreground: oklch(0.97 0.004 250);
+  --sidebar-accent: oklch(1 0 0 / 0.10);
+  --sidebar-accent-foreground: oklch(0.97 0.004 250);
+  --sidebar-border: oklch(1 0 0 / 0.12);
 }
 
 @theme inline {
@@ -163,6 +268,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-ink: var(--brand-ink);
+
   --color-risk-green: var(--risk-green);
   --color-risk-green-bg: var(--risk-green-bg);
   --color-risk-amber: var(--risk-amber);
@@ -186,16 +295,144 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Decelerating, no overshoot. Overshoot on a register of contractual
+     deadlines reads as playful, and this screen is never playful. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-press: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+
+  html {
+    color-scheme: light;
   }
+  .dark html,
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /*
+    THE GROUND.
+
+    A fixed layer rather than a background on `body`, for two reasons. It must
+    not scroll — a photograph that slides up as you read a 200-row register
+    turns into visual noise — and it must be able to CROSS-FADE when the theme
+    changes, which needs two stacked layers and cannot be done with a single
+    background-image.
+
+    `-z-10` keeps it behind everything; nothing else in the app may use a
+    negative z-index.
+  */
+  body {
+    @apply text-foreground;
+    background-color: var(--background);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    min-height: 100dvh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    background-image: var(--backdrop-scrim), var(--backdrop);
+    background-size: cover, cover;
+    background-position: center, center;
+    /*
+      NO `background-attachment: fixed` here. The element is already fixed, so
+      the property buys nothing — and it actively breaks things: with
+      `attachment: fixed` the background positioning area becomes the initial
+      containing block rather than the element, which on a scaled or emulated
+      viewport paints the plate at the wrong size and leaves a bare grey L
+      down two edges of the screen. That is exactly what it did.
+    */
+    transition: background-image 400ms ease;
+    pointer-events: none;
+  }
+
+  /*
+    THE SIGN-IN GROUND.
+
+    A different photograph from the rest of the application: a macro of dark
+    anodised metal against charcoal concrete, lit so a single amber highlight
+    runs through it.
+
+    ── Why sign-in gets its own plate ────────────────────────────────────────
+    The two screens have opposite jobs. The dashboard is read all day and is
+    dense with figures, so its ground has to disappear. Sign-in is one card for
+    five seconds and is the only chance the product gets to look like
+    something. A plate that would be exhausting behind a fifteen-column
+    register is exactly right behind a password box.
+
+    ── Why `:has()` rather than a layout ─────────────────────────────────────
+    The ground is painted by `body::before`, and a custom property set on a
+    descendant cannot reach it — `<main>` is inside `<body>`, so nothing the
+    auth pages render can change what `body::before` reads. `:has()` lets the
+    body respond to what is inside it, which is the one selector that solves
+    this without inventing a second backdrop layer and downloading two images
+    on every sign-in.
+
+    If a browser lacks `:has()`, sign-in simply shows the application plate.
+    That degrades to the previous design rather than to a broken one.
+
+    The `.dark` rule needs no `:has()` boost to win: `.dark body:has(...)` is
+    two classes to `body:has(...)`'s one, so the ordering is safe if these are
+    ever reordered.
+  */
+  body:has([data-auth-screen]) {
+    --backdrop: url('/backgrounds/auth-light.jpg');
+    /*
+      This scrim DARKENS; the application's lightens.
+
+      The application plate is a soft-focus abstract and the panels sitting on
+      it are white, so whitening the ground pushes the two apart. The sign-in
+      plate is brushed aluminium in daylight — already near-white — so the same
+      treatment washed it out until the card had nothing to stand against and
+      the whole screen read as one pale rectangle.
+
+      Dropping the ground a few percent instead gives the white card its edge
+      back and lets the brushed grain stay visible. Same card, same glass, only
+      the thing behind it changed.
+    */
+    --backdrop-scrim: linear-gradient(
+      112deg,
+      oklch(0.90 0.006 250 / 0.58) 0%,
+      oklch(0.87 0.008 250 / 0.36) 46%,
+      oklch(0.85 0.010 250 / 0.24) 100%
+    );
+  }
+  .dark body:has([data-auth-screen]) {
+    --backdrop: url('/backgrounds/auth-dark.jpg');
+    /* The dark plate is already deep, and its single amber highlight is the
+       reason this image was chosen — so the scrim is lighter than the
+       application's, to avoid smothering it. */
+    --backdrop-scrim: linear-gradient(
+      112deg,
+      oklch(0.14 0.012 265 / 0.74) 0%,
+      oklch(0.14 0.012 265 / 0.54) 46%,
+      oklch(0.14 0.012 265 / 0.40) 100%
+    );
+  }
+
+  /*
+    Grain. Two lines that do a surprising amount of work: a completely smooth
+    gradient betrays itself as a computer image, and film grain is what makes
+    the eye accept the ground as a photograph the glass is sitting on.
+  */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -9;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
   /*
     Site engineers use this one-handed, outdoors, in gloves. 44px is the floor
     for anything tappable on a touch device.
@@ -210,6 +447,34 @@
       min-height: 44px;
     }
   }
+
+  ::selection {
+    background: oklch(from var(--brand) l c h / 0.28);
+  }
+
+  /* A scrollbar that belongs to the glass rather than to the operating
+     system. Firefox gets the two-value form; everything else gets the parts. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--input);
+    background-clip: content-box;
+  }
 }
 
 /* Tabular figures wherever a number is compared down a column. */
@@ -217,32 +482,327 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ═══ COMPONENTS ═════════════════════════════════════════════════════════ */
+@layer components {
+  /*
+    THE PANE.
+
+    Everything visible in this product is one of these. Background, a hairline
+    edge, a blur, a shadow, and the specular highlight along the top.
+
+    The blur is the expensive part. `backdrop-filter` forces the compositor to
+    sample everything behind the element, and a page with sixty of them will
+    drop frames on a mid-range Android phone in a site office. That is why the
+    register rows are NOT panes — the table is one pane and the rows are ruled
+    lines inside it.
+  */
+  /*
+    Write the UNPREFIXED property only, and let Lightning CSS add prefixes.
+
+    Hand-writing `backdrop-filter` followed by `-webkit-backdrop-filter` looks
+    like belt and braces and is actively harmful here: Tailwind v4's minifier
+    treats the two as one property, collapsed the pair down to the `-webkit-`
+    spelling alone, and Firefox does not support that prefix. Every pane of
+    glass in the product silently lost its blur in one whole browser, while
+    building and rendering perfectly in the one we were testing in.
+  */
+  .panel {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--panel-radius);
+    border: 1px solid var(--glass-edge);
+    background: var(--card);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: var(--glass-specular);
+    pointer-events: none;
+  }
+
+  /*
+    A pane you can open.
+
+    Applied only where the whole card is a link. A card that lifts under the
+    cursor and does nothing when clicked is worse than a card that sits still:
+    the movement is a promise, and an interface that makes promises it does not
+    keep is one people stop trusting the rest of.
+  */
+  .panel-interactive {
+    transition:
+      transform 220ms var(--ease-out-quint),
+      box-shadow 220ms var(--ease-out-quint),
+      border-color 220ms var(--ease-out-quint);
+  }
+  .panel-interactive:hover {
+    transform: translate3d(0, -3px, 0);
+    border-color: oklch(from var(--brand) l c h / 0.4);
+    box-shadow: var(--glass-shadow-lifted);
+  }
+  .panel-interactive:active {
+    transform: translate3d(0, 0, 0);
+    transition-duration: 90ms;
+  }
+
+  /* Tones layer a tint OVER the glass, so a toned panel is still glass. */
+  .panel-notice { background: linear-gradient(var(--panel-notice), var(--panel-notice)), var(--card); }
+  .panel-connect { background: linear-gradient(var(--panel-connect), var(--panel-connect)), var(--card); }
+  .panel-work { background: linear-gradient(var(--panel-work), var(--panel-work)), var(--card); }
+  .panel-insight { background: linear-gradient(var(--panel-insight), var(--panel-insight)), var(--card); }
+  .panel-search { background: linear-gradient(var(--panel-search), var(--panel-search)), var(--card); }
+
+  /*
+    Chrome that content scrolls underneath — the sidebar, the phone nav bar,
+    the command palette. Heavier glass, because text passing behind a light
+    blur is a smear that reads as a rendering fault.
+  */
+  .glass-chrome {
+    background: var(--glass-strong);
+    backdrop-filter: blur(32px) saturate(1.7);
+    border-color: var(--glass-edge);
+  }
+
+  /* A nested surface inside a panel. Not a second pane — a recess in the
+     first one, which is why it has no shadow and no specular edge. */
+  .glass-inset {
+    background: var(--glass-soft);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--panel-radius) - 8px);
+  }
+
+  .panel-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0 1rem;
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-edge);
+    backdrop-filter: blur(14px);
+    white-space: nowrap;
+  }
+
+  /* Brand fills, so the gradient is defined once. */
+  .brand-fill {
+    background: var(--brand-gradient);
+    color: var(--brand-ink);
+  }
+  .brand-text {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
 /*
-  Print.
-
-  The report page is a document people put in front of a client, so paper gets
-  its own small set of rules rather than whatever the screen happened to do:
-
-  - White ground and black text. The screen palette is a light grey ground with
-    navy text, which on a laser printer becomes a grey wash over every page and
-    drains a toner cartridge for no benefit.
-  - Risk colours survive. They are the one thing that must not degrade to grey,
-    because "red" on this report means a contractual deadline has passed.
-  - Rows do not split across a page break, and a heading does not print as the
-    last line of a page with its content overleaf.
+  No backdrop-filter — older Firefox, and any browser where the user has
+  disabled it. Without this the entire interface becomes a set of 60%-opaque
+  rectangles over a photograph, which is illegible rather than merely plain.
+  The fallback is honest: solid surfaces, no blur, same layout.
 */
-@media print {
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
+    --glass: oklch(0.99 0.002 250 / 0.97);
+    --glass-strong: oklch(0.99 0.002 250 / 0.99);
+    --glass-soft: oklch(0.97 0.004 250 / 0.95);
+  }
+  .dark {
+    --glass: oklch(0.21 0.018 265 / 0.97);
+    --glass-strong: oklch(0.19 0.018 265 / 0.99);
+    --glass-soft: oklch(0.26 0.02 265 / 0.95);
+  }
+}
+
+/* ═══ MOTION ═════════════════════════════════════════════════════════════
+ *
+ * The product is a clock running down, and the motion is written to read like
+ * one: quick, mechanical, confident. Short durations, small displacements, no
+ * bounce. Nothing here is decorative — every movement either confirms that
+ * something was pressed, or shows where new content came from, or draws a
+ * figure so the eye follows it being counted.
+ *
+ * ── One looping animation in the whole app ────────────────────────────────
+ * `breathe`, on a BREACHED notice deadline, and nowhere else. A thing that
+ * moves forever earns attention forever, so there may only be one, and it has
+ * to be reserved for the single state this product exists to prevent. Put it
+ * on a hero, a logo or a loading dot and the one that matters stops working.
+ *
+ * Everything else here fires ONCE and stops.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+@keyframes rise {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.56 0.215 26 / 0.32); }
+  50% { box-shadow: 0 0 0 6px oklch(0.56 0.215 26 / 0); }
+}
+
+/* A gauge counting up to its value. The dash offset is set inline by the
+   component; this only animates from empty to whatever that is. */
+@keyframes gauge-sweep {
+  from { stroke-dashoffset: var(--gauge-circumference); }
+}
+
+/* A line being drawn left to right, once. */
+@keyframes draw-line {
+  from { stroke-dashoffset: var(--line-length); }
+}
+
+/* A bar growing from its baseline. */
+@keyframes grow-bar {
+  from { transform: scaleY(0.02); opacity: 0; }
+}
+
+@layer utilities {
+  /* Content arriving: 8px up, 240ms, done. */
+  .motion-rise {
+    animation: rise 240ms var(--ease-out-quint) both;
+  }
+
+  /*
+    A list arriving in order.
+
+    The stagger is capped at eight rows and 24ms apart: enough that the eye
+    reads it as one movement with a direction, short enough that the last row
+    of a full table is not still arriving after the user has started reading.
+    Rows past the eighth simply appear — nobody is watching row twelve.
+  */
+  .motion-stagger > * {
+    animation: rise 240ms var(--ease-out-quint) both;
+  }
+  .motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .motion-stagger > *:nth-child(2) { animation-delay: 24ms; }
+  .motion-stagger > *:nth-child(3) { animation-delay: 48ms; }
+  .motion-stagger > *:nth-child(4) { animation-delay: 72ms; }
+  .motion-stagger > *:nth-child(5) { animation-delay: 96ms; }
+  .motion-stagger > *:nth-child(6) { animation-delay: 120ms; }
+  .motion-stagger > *:nth-child(7) { animation-delay: 144ms; }
+  .motion-stagger > *:nth-child(n + 8) { animation-delay: 168ms; }
+
+  .motion-gauge {
+    animation: gauge-sweep 1100ms var(--ease-out-quint) 120ms both;
+  }
+  .motion-draw {
+    animation: draw-line 1200ms var(--ease-out-quint) 180ms both;
+  }
+  .motion-bar {
+    transform-origin: bottom;
+    animation: grow-bar 620ms var(--ease-out-quint) both;
+  }
+
+  /*
+    The signature.
+
+    A breached notice deadline, and nothing else in the product, breathes. It
+    is slow — 2.4s — because an urgent flash is read once and then filtered
+    out, while something moving quietly at the edge of vision keeps being
+    noticed. This is the one state that costs real money if it goes unseen.
+  */
+  .motion-breach {
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+}
+
+/*
+  Anyone who has asked not to see motion gets none of it. This covers the
+  entrance choreography, the gauges, and the hovers.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+    `both` fill would otherwise hold the first keyframe, and the stagger delays
+    would still hold rows at 8px and zero opacity. Reduced motion has to mean
+    the content is simply THERE, not that it arrives instantly after a pause.
+    The gauges and lines are exempted by name because their "off" state is a
+    zero dash offset, not a reset transform.
+  */
+  .motion-rise,
+  .motion-stagger > *,
+  .motion-breach,
+  .motion-bar {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .motion-gauge,
+  .motion-draw {
+    animation: none !important;
+  }
+}
+
+/* ═══ PRINT ══════════════════════════════════════════════════════════════
+   The report page is a document people put in front of a client, so paper
+   gets its own rules rather than whatever the screen happened to do.
+
+   - The photograph and every pane of glass are removed. A backdrop image
+     behind a variation register is a page of grey mush and an empty toner
+     cartridge, and translucent surfaces print as neither one colour nor the
+     other.
+   - Risk colours survive. They are the one thing that must not degrade to
+     grey, because "red" on this report means a contractual deadline passed.
+   - Rows do not split across a page break, and a heading does not print as
+     the last line of a page with its content overleaf.
+   ═════════════════════════════════════════════════════════════════════════ */
+@media print {
+  :root,
+  .dark {
     --background: white;
     --foreground: black;
     --card: white;
     --card-foreground: black;
+    --glass: white;
+    --glass-strong: white;
+    --glass-soft: white;
+    --glass-edge: oklch(0.75 0 0);
+    --glass-shadow: none;
+    --glass-shadow-lifted: none;
+    --glass-specular: none;
     --muted-foreground: oklch(0.42 0 0);
     --border: oklch(0.75 0 0);
+    --panel-notice: transparent;
+    --panel-connect: transparent;
+    --panel-work: transparent;
+    --panel-insight: transparent;
+    --panel-search: transparent;
   }
 
   body {
     background: white;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+
+  .panel,
+  .glass-chrome,
+  .glass-inset,
+  .panel-chip {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+  .panel::before {
+    display: none;
   }
 
   @page {
@@ -263,190 +823,5 @@
 
   a[href]::after {
     content: none;
-  }
-}
-
-/*
-  THE MOSAIC PANEL.
-
-  One soft-gradient surface with a white edge and a shadow so faint it reads as
-  depth rather than as a border. `.panel` is the shape; the `.panel-*` variants
-  only change the ground, so a panel can be re-themed without touching layout.
-
-  The white 1.6px edge is doing real work: on a light ground these surfaces
-  would otherwise bleed into the page, and the edge is what separates them
-  without drawing a line anyone consciously sees.
-*/
-@layer components {
-  .panel {
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--panel-radius);
-    border: 1.6px solid var(--panel-edge);
-    box-shadow: var(--panel-shadow);
-    background: var(--card);
-  }
-
-  /*
-    A panel you can open.
-
-    Applied only where the whole card is a link. A card that lifts under the
-    cursor and does nothing when clicked is worse than a card that sits still:
-    the movement is a promise, and an interface that makes promises it does not
-    keep is one people stop trusting the rest of.
-  */
-  .panel-interactive {
-    transition:
-      transform 180ms var(--ease-out-quint),
-      box-shadow 180ms var(--ease-out-quint),
-      border-color 180ms var(--ease-out-quint);
-  }
-  .panel-interactive:hover {
-    transform: translate3d(0, -2px, 0);
-    border-color: color-mix(in oklab, var(--primary) 32%, var(--panel-edge));
-    box-shadow:
-      var(--panel-shadow),
-      0 10px 26px -14px color-mix(in oklab, var(--primary) 45%, transparent);
-  }
-  .panel-interactive:active {
-    transform: translate3d(0, 0, 0);
-    transition-duration: 90ms;
-  }
-
-  .panel-notice { background: var(--panel-notice); }
-  .panel-connect { background: var(--panel-connect); }
-  .panel-work { background: var(--panel-work); }
-  .panel-insight { background: var(--panel-insight); }
-  .panel-search { background: var(--panel-search); }
-
-  /*
-    A pill on a panel. The ring is a box-shadow rather than a border because a
-    border would add to the element's box and shift everything beside it by a
-    pixel when the state changes.
-  */
-  .panel-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-radius: 999px;
-    padding: 0 1rem;
-    background: linear-gradient(
-      180deg,
-      rgba(247, 253, 255, 0.97) 0%,
-      rgba(240, 250, 254, 0.93) 100%
-    );
-    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.047);
-    backdrop-filter: blur(7px);
-    white-space: nowrap;
-  }
-}
-
-/* ───────────────────────────────── motion ─────────────────────────────────
- *
- * The product is a clock running down, and the motion is written to read like
- * one: quick, mechanical, confident. Short durations, small displacements, no
- * bounce. Nothing here is decorative — every movement either confirms that
- * something was pressed, or shows where new content came from.
- *
- * ── One looping animation in the whole app ────────────────────────────────
- * `breathe`, on a BREACHED notice deadline, and nowhere else. A thing that
- * moves forever earns attention forever, so there may only be one, and it has
- * to be reserved for the single state this product exists to prevent. Put it
- * on a hero, a logo or a loading dot and the one that matters stops working.
- */
-@theme inline {
-  /* Decelerating, no overshoot. Overshoot on a register of contractual
-     deadlines reads as playful, and this screen is never playful. */
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-press: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 8px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(220, 38, 38, 0);
-  }
-}
-
-@layer utilities {
-  /* Content arriving: 8px up, 220ms, done. */
-  .motion-rise {
-    animation: rise 220ms var(--ease-out-quint) both;
-  }
-
-  /*
-    A list arriving in order.
-
-    The stagger is capped at eight rows and 24ms apart: enough that the eye
-    reads it as one movement with a direction, short enough that the last row
-    of a full table is not still arriving after the user has started reading.
-    Rows past the eighth simply appear — nobody is watching row twelve.
-  */
-  .motion-stagger > * {
-    animation: rise 220ms var(--ease-out-quint) both;
-  }
-  .motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
-  .motion-stagger > *:nth-child(2) { animation-delay: 24ms; }
-  .motion-stagger > *:nth-child(3) { animation-delay: 48ms; }
-  .motion-stagger > *:nth-child(4) { animation-delay: 72ms; }
-  .motion-stagger > *:nth-child(5) { animation-delay: 96ms; }
-  .motion-stagger > *:nth-child(6) { animation-delay: 120ms; }
-  .motion-stagger > *:nth-child(7) { animation-delay: 144ms; }
-  .motion-stagger > *:nth-child(n + 8) { animation-delay: 168ms; }
-
-  /*
-    The signature.
-
-    A breached notice deadline, and nothing else in the product, breathes. It
-    is slow — 2.4s — because an urgent flash is read once and then filtered
-    out, while something moving quietly at the edge of vision keeps being
-    noticed. This is the one state that costs money if it goes unseen.
-  */
-  .motion-breach {
-    animation: breathe 2.4s ease-in-out infinite;
-  }
-}
-
-/*
-  Anyone who has asked not to see motion gets none of it. This covers the
-  entrance choreography as well as hovers.
-*/
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  /*
-    `both` fill would otherwise hold the last keyframe, and the stagger delays
-    would still hold rows at 8px and zero opacity for their delay. Reduced
-    motion has to mean the content is simply THERE, not that it arrives
-    instantly after a pause.
-  */
-  .motion-rise,
-  .motion-stagger > *,
-  .motion-breach {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
   }
 }

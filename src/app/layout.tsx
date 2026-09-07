@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { startScheduler } from '@/lib/scheduler';
+import { ThemeProvider } from '@/components/theme-provider';
 
 /**
  * Started here, at module scope, rather than from `instrumentation.ts`.
@@ -41,11 +42,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/*
+  Two theme colours, one per scheme, so the phone's own chrome matches the
+  plate behind the glass instead of announcing a colour the app stopped using.
+  A single value here is what makes a dark-mode PWA show a bright status bar
+  over a dark interface.
+*/
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#1e40af',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f5f8' },
+    { media: '(prefers-color-scheme: dark)', color: '#14161d' },
+  ],
 };
 
 /*
@@ -59,7 +69,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang={locale} dir={dir} className={jakarta.variable} suppressHydrationWarning>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

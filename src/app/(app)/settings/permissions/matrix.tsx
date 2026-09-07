@@ -111,7 +111,7 @@ function Cell({
           'inline-flex size-7 items-center justify-center rounded-md border transition-colors',
           granted
             ? 'border-emerald-600/30 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25'
-            : 'border-border bg-background text-transparent hover:bg-muted',
+            : 'border-border bg-[var(--glass-soft)] backdrop-blur-md text-transparent hover:bg-muted',
           pending && 'opacity-50',
         )}
       >
@@ -158,7 +158,7 @@ export function PermissionMatrixTable({
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-10 bg-card px-3 py-2 text-left font-medium"
+                className="sticky left-0 z-10 bg-[var(--glass-strong)] px-3 py-2 text-left font-medium backdrop-blur-lg"
               >
                 Role
               </th>
@@ -180,7 +180,7 @@ export function PermissionMatrixTable({
               <tr key={row.role} className="border-t">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 whitespace-nowrap border-t bg-card px-3 py-1.5 text-left font-normal"
+                  className="sticky left-0 z-10 whitespace-nowrap border-t bg-[var(--glass-strong)] px-3 py-1.5 text-left font-normal backdrop-blur-lg"
                 >
                   {row.label}
                   {row.locked ? (

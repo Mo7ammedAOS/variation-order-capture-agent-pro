@@ -28,11 +28,8 @@ export function ErrorState({
   reset?: () => void;
 }) {
   return (
-    <div
-      className="flex min-h-dvh items-center justify-center px-4 py-10"
-      style={{ background: 'var(--mosaic-ground, #f0f0f0)' }}
-    >
-      <div className="panel w-full max-w-lg bg-card p-7 sm:p-9">
+    <div className="flex min-h-dvh items-center justify-center px-4 py-10">
+      <div className="panel w-full max-w-lg p-7 sm:p-9">
         <span className="flex size-11 items-center justify-center rounded-xl bg-risk-amber-bg text-risk-amber">
           <AlertTriangle aria-hidden className="size-5" />
         </span>

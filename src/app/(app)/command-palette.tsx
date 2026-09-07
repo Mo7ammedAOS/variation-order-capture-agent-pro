@@ -260,7 +260,7 @@ export function CommandPalette({ links }: { links: { href: string; label: string
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-4 pt-[12vh] print:hidden"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-4 pt-[12vh] backdrop-blur-sm print:hidden"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
@@ -270,7 +270,7 @@ export function CommandPalette({ links }: { links: { href: string; label: string
         aria-modal="true"
         aria-label="Command palette"
         className={cn(
-          'w-full max-w-xl overflow-hidden rounded-xl border border-border bg-card shadow-2xl',
+          'panel glass-chrome w-full max-w-xl shadow-[var(--glass-shadow-lifted)]',
           // Motion is feedback, not decoration: a 120ms rise tells you the
           // panel arrived over the page rather than replacing it. Behind
           // motion-safe, so it does not fire for anyone who asked the OS for
@@ -327,8 +327,10 @@ export function CommandPalette({ links }: { links: { href: string; label: string
                       router.push(item.href);
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start text-sm transition-colors',
-                      index === active ? 'bg-accent' : 'hover:bg-accent/60',
+                      'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start text-sm transition-colors duration-150',
+                      index === active
+                        ? 'bg-[oklch(from_var(--brand)_l_c_h/0.14)] font-semibold text-foreground'
+                        : 'hover:bg-accent',
                     )}
                   >
                     <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />

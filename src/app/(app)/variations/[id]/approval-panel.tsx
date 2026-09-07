@@ -96,7 +96,7 @@ function SeatRow({ seat, potentialChangeId }: { seat: SeatView; potentialChangeI
       </p>
 
       {seat.comment ? (
-        <p className="rounded-lg bg-card px-3 py-2 text-sm leading-relaxed">{seat.comment}</p>
+        <p className="glass-inset px-3 py-2 text-sm leading-relaxed">{seat.comment}</p>
       ) : null}
 
       {seat.decision === 'pending' && seat.mine ? (

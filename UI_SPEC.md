@@ -13,27 +13,116 @@ Commercial Manager and Managing Director would each recognise as theirs.
 The same screens serve all three, which is why the register is a table on
 desktop and cards on a phone rather than a table that scrolls sideways.
 
+## The material
+
+Every surface is a pane of **frosted glass floating over a photographic
+ground**. The ground is an image, not a colour, and it is fixed — it does not
+scroll under a two-hundred-row register.
+
+```text
+Ground        /public/backgrounds/app-light.jpg    soft-focus abstract, warm
+              /public/backgrounds/app-dark.jpg     the same plate, night
+Sign-in       /public/backgrounds/auth-light.jpg   brushed aluminium macro
+              /public/backgrounds/auth-dark.jpg    anodised metal, amber edge
+Glass         --glass          ordinary panel
+              --glass-strong   chrome with content scrolling under it
+              --glass-soft     a recess inside a panel, not a second pane
+```
+
+**Sign-in has its own plate**, because the two screens have opposite jobs. The
+dashboard is read all day and is dense with figures, so its ground has to
+disappear; sign-in is one card for five seconds and is the only chance the
+product gets to look like something. A macro that would be exhausting behind a
+fifteen-column register is exactly right behind a password box.
+
+It is swapped by `body:has([data-auth-screen])` in `globals.css`. The ground is
+painted by `body::before`, and a custom property set on a descendant cannot
+reach it — so `:has()` is what lets the body respond to what is inside it,
+without a second backdrop layer downloading two images on every sign-in. A
+browser without `:has()` falls back to the application plate, which degrades to
+the previous design rather than to a broken one.
+
+The **sign-in scrim darkens where the application's lightens**. Brushed
+aluminium in daylight is already near-white, and whitening it further left the
+white card with nothing to stand against — the whole screen read as one pale
+rectangle. Dropping the ground a few percent gives the card its edge back.
+
+Three details carry the whole material and none of them are optional: a 1px
+**specular highlight** along the top of every panel (without it glass reads as
+a translucent rectangle rather than a sheet catching light), a **grain layer**
+over the ground (a perfectly smooth gradient betrays itself as a computer
+image), and a **gradient scrim** between the two so the photograph stays
+visible where the layout is empty and gets out of the way where the text is.
+
+`backdrop-filter` is the expensive part — it forces the compositor to sample
+everything behind the element. Panes are for **surfaces, not rows**: a register
+is one pane containing a table, never forty panes. A `@supports not` block
+falls back to solid surfaces so a browser without blur gets a plain interface
+rather than an illegible one.
+
 ## Palette
 
 ```text
-Background   near-white          Green   low risk / complete
-Text         dark navy           Amber   warning / pending
-Primary      blue                Red     overdue / critical
+Brand      #FF7A1A → #FFB020   safety orange → hi-vis amber
+Ground      photographic        light plate / dark plate
+Text        near-black slate    inverted on the dark plate
 ```
 
-Defined as tokens in `src/app/globals.css`, in `oklch`, with a dark variant.
+Two colour vocabularies, and confusing them is the one unforgivable mistake.
 
-**RAG colours are reserved for risk.** A red chip means a commercial deadline is
-at risk. Using red decoratively teaches people to ignore the one that matters.
-Chips carry an **icon as well as a colour**, so they still read for the ~8% of
-men with a colour vision deficiency — on a site product that is a lot of users.
+**BRAND (amber).** Where you are and what you can press. It appears in exactly
+three places — the active nav item, the primary button, and the capture FAB —
+plus focus rings, gauges and chart bars. It carries no commercial meaning. It
+is a gradient, and it is the only gradient fill in the product, which is what
+makes the primary action findable on a screen of frosted panels. A fourth
+decorative use dilutes all three.
+
+**RISK (the RAG scale).** Green, amber, red, and **only** for risk. A red chip
+means a contractual deadline is at stake. Using it decoratively teaches people
+to ignore the one that matters. Chips carry an **icon as well as a colour**, so
+they still read for the ~8% of men with a colour vision deficiency — on a site
+product that is a lot of the actual users.
+
+Because the brand is amber and the risk scale contains an amber, **the risk
+amber was moved** to gold (hue ~90 rather than ~60) and desaturated. Side by
+side they are plainly different: the brand is orange and glows, the warning is
+flat gold. Tune either one and check it on `/variations`, the only screen where
+both appear in the same row.
+
+The same collision retired the **amber-outlined Cancel button**. Back, Cancel
+and Submit are now ranked by *weight* — ghost, bordered, filled — which
+survives a colour-blind reader and a monochrome print, which the amber version
+never did.
+
+## Light and dark
+
+`next-themes`, `attribute="class"`, defaulting to **`system`**. Nobody on a site
+opens Settings to pick a theme; a phone already in dark mode at seven in the
+evening should get the dark plate unasked.
+
+The toggle is **three-way** — light / system / dark. A two-way switch cannot
+express "follow the device", so the moment someone touches it they are opted
+out of their own phone's evening switch forever without being told.
+
+Dark is **not an inversion**. It is a different photograph, a colder ground, and
+glass that works by being *darker* than what is behind it — which is how real
+smoked glass behaves, and why flipping the opacity of the light theme always
+looks wrong. The brand lifts in lightness on the dark plate, because an orange
+tuned for white goes muddy against charcoal.
 
 ## Layout
 
 | Breakpoint | Navigation |
 |---|---|
-| `< md` | Top bar + fixed bottom bar (5 items) |
-| `≥ md` | 256px sidebar |
+| `< md` | Sticky glass top bar + **floating** bottom bar (4 items) |
+| `≥ md` | 256px **floating** glass rail, sticky, with its own scroll |
+
+Both nav surfaces float — inset on all sides, with their own radius — rather
+than being welded to the edge of the window. The gap is what lets the
+photograph run behind them and makes the glass read as a sheet rather than as a
+differently-coloured region of the page. On a notched phone the safe-area inset
+is added to the bottom *offset*, not to the padding, so the bar keeps an even
+gap beneath it instead of growing a chin.
 
 **The `+ Report Change` button is the most reachable control in the app** — a
 floating action button above the bottom bar on every screen. The whole product
@@ -44,8 +133,8 @@ the day when the detail has gone.
 
 | Route | Purpose |
 |---|---|
-| `/login` | Email + password, company branding. One error message for both failure modes |
-| `/dashboard` | 9 stat cards **ordered by urgency**, 4 charts |
+| `/signin`, `/admin-signin` | Email + password, company branding, on the same photographic ground as the rest of the app — signing in should feel like opening a door, not crossing between two pieces of software. One error message for both failure modes. `/login` redirects to `/signin`. The theme toggle **is** here, above the card: this is the screen people see in the worst lighting they ever use the product in — a phone in direct sun on site, a laptop in a dark portacabin at six in the morning — and making somebody sign in first, at whatever brightness their OS chose, before they may turn the lights down is a small daily cruelty. It stores against the device rather than the account, which is right: the device is the thing with a screen |
+| `/dashboard` | A hero stating the position in words, then three **readings**, then 17 stat cards **ordered by urgency**, then 4 charts |
 | `/my-tasks` | Overdue → due today → upcoming |
 | `/projects` | Table on desktop, cards on phone |
 | `/projects/[id]` | 8 tabs as links, so a tab is shareable and Back works |
@@ -105,8 +194,14 @@ scrolls horizontally.
 
 The app chrome carries `print:hidden` — sidebar, mobile header, bottom nav and
 the capture button — and `globals.css` has a `@media print` block that swaps the
-palette to black on white. The screen ground is light grey with navy text, which
-on a laser printer is a grey wash across every page for no benefit.
+palette to black on white.
+
+**The photographic ground and every pane of glass are removed on paper.** A
+backdrop image behind a variation register is a page of grey mush and an empty
+toner cartridge, and a translucent surface prints as neither one colour nor the
+other. `backdrop-filter`, the shadows and the specular edges are all switched
+off, and the sticky table header goes back to `static` so it prints once at the
+top of the table rather than floating over the first row.
 
 The risk colours are the exception and deliberately survive: on this report red
 means a contractual deadline has passed, and degrading that to grey removes the
@@ -151,9 +246,49 @@ read-only, with one link to the real page — editing there would duplicate the
 capability checks, the audit trail and the transition rules, and give them a
 second place to drift.
 
-**Motion** is feedback, not decoration: a 150ms rise on the palette, a 200ms
-slide on the drawer, both behind `motion-safe:` so neither fires for anyone who
-asked their OS for reduced motion. Nothing animates on a data change.
+**Motion** is feedback, not decoration: a 240ms rise on route change, a 150ms
+rise on the palette, a 200ms slide on the drawer, a staggered 24ms cascade down
+a list, and a one-shot draw on each dashboard reading. Nothing animates on a
+data change.
+
+**There is exactly one looping animation in the entire product** — `breathe`,
+on a *breached* notice deadline, and nowhere else. A thing that moves forever
+earns attention forever, so there may only be one, and it is spent on the
+single state this product exists to prevent. It is slow (2.4s) because an
+urgent flash is read once and then filtered out, while something moving quietly
+at the edge of vision keeps being noticed. Add a second looping animation
+anywhere and this one stops working.
+
+`prefers-reduced-motion: reduce` turns all of it off centrally in
+`globals.css`, and the entrance animations are named explicitly in that block —
+otherwise `animation-fill-mode: both` would hold content at 8px and zero
+opacity forever, which is worse than the animation.
+
+## The readings
+
+`src/components/domain/readings.tsx`. Instruments on the dashboard, above the
+grid of counts, answering the three questions the company is run on.
+
+| Reading | Shows | Source |
+|---|---|---|
+| `FunnelRail` | Agreed by the client → invoiced → received, with the unbilled and overdue gaps called out | `getCommercialPosition` |
+| `GaugeRing` | Open changes whose notice clock is still safe | `getOverview().charts.byRisk` |
+| `GaugeRing` | Days agreed of days claimed | `getCommercialPosition().time` |
+
+Each stage of the funnel is measured against the **first** stage, not against
+the one above it: the question is "what happened to what the client agreed",
+and measuring each against its predecessor would make a company that has
+invoiced nothing look 100% efficient at invoicing.
+
+They are server components — CSS keyframes driven by inline custom properties,
+so no JavaScript ships for a ring that draws itself once.
+
+**There are deliberately no sparklines.** The obvious thing to put on a
+dashboard like this is a trend line, and the services return a *position at a
+moment*, not a series. A plausible-looking line drawn from a single data point
+is a lie about the business, and on the screen where a director decides whether
+to chase a client for 1.4M it is an expensive one. When a snapshot table
+exists, the line belongs here. Until then it does not exist.
 
 ## Deliberately not built
 

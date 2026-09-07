@@ -140,7 +140,7 @@ export function EditPanel({
               id="documentType"
               name="documentType"
               defaultValue="drawing"
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-9 rounded-md border border-input bg-[var(--glass-soft)] backdrop-blur-md px-3 text-sm"
             >
               <option value="drawing">Drawing</option>
               <option value="rfi">RFI</option>

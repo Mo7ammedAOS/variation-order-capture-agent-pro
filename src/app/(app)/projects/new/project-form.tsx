@@ -126,7 +126,7 @@ export function ProjectForm() {
         </CardContent>
       </Card>
 
-      <details className="panel bg-card">
+      <details className="panel">
         <summary className="cursor-pointer select-none p-5 text-sm font-semibold sm:p-6">
           Contract details
           <span className="ms-2 font-normal text-muted-foreground">

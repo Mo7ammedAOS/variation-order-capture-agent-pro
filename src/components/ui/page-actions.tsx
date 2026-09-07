@@ -8,16 +8,25 @@ import { cn } from '@/lib/utils';
  *
  * These used to be small grey links, which on a phone in daylight are hard to
  * see and harder to hit. They now carry the same 44px target as everything
- * else, and they are colour-coded by consequence so the difference is readable
+ * else, and they are ranked by consequence so the difference is readable
  * before the label is:
  *
- *   Back      neutral outline   — leaves without touching anything
- *   Cancel    amber outline     — abandons work in progress
- *   the primary action          — solid, and always on the right
+ *   Back      ghost              — leaves without touching anything
+ *   Cancel    outline, bordered  — abandons work in progress
+ *   the primary action           — the brand fill, and always on the end
  *
- * Cancel is deliberately NOT red. Red is for destructive acts against saved
- * data; discarding an unsaved form is recoverable and should not wear the same
- * colour as deleting something real.
+ * ── Why Cancel is no longer amber ─────────────────────────────────────────
+ * It used to be an amber outline, which worked when the product's primary
+ * colour was blue. The brand is now amber, so an amber-outlined Cancel sitting
+ * next to an amber-filled Submit read as two shades of the same instruction —
+ * the exact opposite of what a cancel button is for. Reaching for the RAG
+ * amber instead would have been worse: that colour means a contractual
+ * deadline is running out, and spending it on "you will lose this draft"
+ * devalues every warning chip in the product.
+ *
+ * So the ranking is now weight, not hue. Ghost, then bordered, then filled.
+ * It survives a colour-blind reader and a monochrome print, which the amber
+ * version never did.
  */
 
 export function BackButton({
@@ -30,7 +39,7 @@ export function BackButton({
   className?: string;
 }) {
   return (
-    <Button asChild variant="outline" className={cn('w-fit', className)}>
+    <Button asChild variant="ghost" className={cn('w-fit text-muted-foreground', className)}>
       <Link href={href}>
         <ArrowLeft aria-hidden className="size-4" />
         {label}
@@ -49,15 +58,7 @@ export function CancelButton({
   className?: string;
 }) {
   return (
-    <Button
-      asChild
-      variant="outline"
-      className={cn(
-        'border-amber-500/40 text-amber-700 hover:bg-amber-50 hover:text-amber-800',
-        'dark:text-amber-400 dark:hover:bg-amber-950/40 dark:hover:text-amber-300',
-        className,
-      )}
-    >
+    <Button asChild variant="outline" className={cn('w-fit', className)}>
       <Link href={href}>{label}</Link>
     </Button>
   );

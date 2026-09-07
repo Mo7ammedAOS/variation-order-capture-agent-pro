@@ -101,7 +101,7 @@ export default async function ProjectReportPage({
 
       <header className="border-b border-border pb-4">
         <p className="text-sm font-medium">{settings?.displayCompanyName ?? 'Variation control'}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Variation register</h1>
+        <h1 className="mt-1 text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Variation register</h1>
         <p className="mt-2 text-sm">
           <span className="tabular font-semibold">{project.projectCode}</span>
           {' — '}

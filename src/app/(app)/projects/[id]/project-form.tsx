@@ -172,7 +172,7 @@ export function ProjectForm({
               id="projectStatus"
               name="projectStatus"
               defaultValue={values.projectStatus}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-[var(--glass-soft)] backdrop-blur-md px-3 text-sm"
             >
               {STATUSES.map((status) => (
                 <option key={status.value} value={status.value}>

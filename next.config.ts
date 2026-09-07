@@ -18,6 +18,19 @@ const nextConfig: NextConfig = {
   },
   eslint: { ignoreDuringBuilds: false },
   typescript: { ignoreBuildErrors: false },
+  /*
+    The floating Next.js dev-tools badge, off.
+
+    It only ever appeared under `next dev` — it is not in the production image
+    and never reached a user — but it sits in the bottom-start corner exactly
+    where the phone nav bar and the capture button now live, so every design
+    review of those two controls was being done around it. Off is simply
+    honest: what we look at while building should be what ships.
+
+    `devIndicators: false` is the Next 15.2+ form. On an older minor this key
+    took an object; if a downgrade ever makes this throw, that is why.
+  */
+  devIndicators: false,
 };
 
 export default nextConfig;

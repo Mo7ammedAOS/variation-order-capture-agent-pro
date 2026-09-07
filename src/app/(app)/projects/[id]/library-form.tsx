@@ -49,7 +49,7 @@ export function LibraryForm({ projectId }: { projectId: string }) {
             id="documentType"
             name="documentType"
             defaultValue="boq"
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 rounded-md border border-input bg-[var(--glass-soft)] backdrop-blur-md px-3 text-sm"
           >
             {TYPES.map((type) => (
               <option key={type.value} value={type.value}>

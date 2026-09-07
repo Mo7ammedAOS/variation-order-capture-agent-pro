@@ -2,16 +2,21 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Card IS the mosaic panel.
+ * Card IS the pane of glass. See `.panel` in globals.css for the material.
  *
  * Changed here rather than page by page, so every screen in the app — and every
  * form not yet written — inherits the design instead of being retrofitted into
  * it one at a time.
  *
- * `tone` swaps only the gradient ground. The five tones are DECORATIVE and mean
- * nothing commercially, which is what keeps them clear of the RAG scale: on
- * this product a red chip means a deadline is at risk, and no surface may
- * borrow that vocabulary for looks.
+ * `tone` layers a barely-there tint over the glass; it does not replace it, so
+ * a toned card is still a pane and still blurs what is behind it. The five
+ * tones are DECORATIVE and mean nothing commercially, which is what keeps them
+ * clear of the RAG scale: on this product a red chip means a deadline is at
+ * risk, and no surface may borrow that vocabulary for looks.
+ *
+ * One performance rule worth keeping. Each of these forces the compositor to
+ * sample everything behind it, so they are for SURFACES, not for rows: a
+ * register renders as one Card containing a table, never as forty Cards.
  */
 export type PanelTone = 'plain' | 'notice' | 'connect' | 'work' | 'insight' | 'search';
 

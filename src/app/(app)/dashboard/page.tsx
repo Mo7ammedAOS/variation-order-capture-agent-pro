@@ -4,15 +4,33 @@ import {
   FileWarning, FolderKanban, Gavel, HandCoins, Landmark, PiggyBank, ReceiptText,
   RotateCcw, Timer, Wallet,
 } from 'lucide-react';
+import { formatInTimeZone } from 'date-fns-tz';
 import { requirePageUser } from '@/lib/auth/session';
 import { getOverview } from '@/services/dashboard.service';
 import { getCommercialPosition } from '@/services/invoice.service';
+import { DEFAULT_TIMEZONE } from '@/lib/dates';
 import { StatCard } from '@/components/domain/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FunnelRail, GaugeRing } from '@/components/domain/readings';
 import { formatMoney } from '@/components/domain/money';
 import { CountBarChart } from './charts';
 
 export const metadata: Metadata = { title: 'Overview' };
 export const dynamic = 'force-dynamic';
+
+/**
+ * Greeting by the clock in Dubai, not by the clock on the server.
+ *
+ * The container runs in UTC. Without the timezone this wishes a good morning
+ * to a commercial manager in Deira at four in the afternoon, which is a small
+ * thing that makes an expensive product feel like it was built somewhere else.
+ */
+function greeting(now: Date): string {
+  const hour = Number(formatInTimeZone(now, DEFAULT_TIMEZONE, 'H'));
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default async function DashboardPage() {
   const user = await requirePageUser();
@@ -21,14 +39,144 @@ export default async function DashboardPage() {
     getCommercialPosition(user),
   ]);
 
+  const firstName = user.fullName.trim().split(/\s+/)[0];
+
+  /*
+    The notice ring.
+
+    `charts.byRisk` is already tallied by the service, so this only picks the
+    green slice out of it — no counting happens on this page. A company with
+    no open changes shows an empty ring rather than a divide-by-zero or a
+    flattering 100%.
+  */
+  const riskCounts = Object.fromEntries(charts.byRisk.map((row) => [row.label, row.count]));
+  const changesTracked = charts.byRisk.reduce((sum, row) => sum + row.count, 0);
+  const noticesSafe = riskCounts.green ?? 0;
+
+  const approved = Number(money.approvedValue);
+  const invoiced = Number(money.invoicedTotal);
+  const paid = Number(money.paidTotal);
+  const unbilled = Number(money.unbilledValue);
+  const outstanding = Number(money.outstandingTotal);
+  const overdue = Number(money.overdueTotal);
+
+  const abbreviated = (amount: number) =>
+    formatMoney(amount, 'AED', { abbreviate: true });
+
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Where the commercial risk is right now, across the projects you can see.
+    <div className="mx-auto flex max-w-7xl flex-col gap-5">
+      {/*
+        The hero states the position before any figure is read.
+
+        A dashboard that opens with the word "Overview" has told the reader
+        nothing they did not know when they clicked "Overview". This opens with
+        the two sentences a director would actually ask for — what is breaching
+        and what is owed — and only then lays out the grid.
+      */}
+      <header className="pt-1">
+        <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-[-0.035em] sm:text-[2rem]">
+          {greeting(new Date())}, <span className="brand-text">{firstName}</span>
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          {stats.noticesOverdue > 0
+            ? `${stats.noticesOverdue} notice${stats.noticesOverdue === 1 ? ' is' : 's are'} past the contractual deadline. `
+            : 'No notice is past its deadline. '}
+          {unbilled > 0
+            ? `${abbreviated(unbilled)} has been agreed by a client and never invoiced.`
+            : 'Everything agreed has been applied for.'}
         </p>
       </header>
+
+      {/*
+        The instruments, above the grid of counts.
+
+        Three readings that answer the three questions the company is actually
+        run on: is the money moving, are we protecting entitlement, and are we
+        holding onto the programme. Everything below this is detail.
+      */}
+      <section aria-label="Position" className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Where the money is</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Agreed by the client, then what has actually been asked for and received.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <FunnelRail
+              stages={[
+                {
+                  label: 'Agreed by the client',
+                  display: abbreviated(approved),
+                  amount: approved,
+                },
+                {
+                  label: 'Invoiced',
+                  display: abbreviated(invoiced),
+                  amount: invoiced,
+                  gapNote:
+                    unbilled > 0
+                      ? `${abbreviated(unbilled)} agreed and not yet applied for`
+                      : undefined,
+                  gapTone: 'amber',
+                },
+                {
+                  label: 'Received',
+                  display: abbreviated(paid),
+                  amount: paid,
+                  gapNote:
+                    overdue > 0
+                      ? `${abbreviated(overdue)} is past its payment terms`
+                      : outstanding > 0
+                        ? `${abbreviated(outstanding)} outstanding, none of it overdue`
+                        : undefined,
+                  gapTone: overdue > 0 ? 'red' : 'amber',
+                },
+              ]}
+            />
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <Card>
+            <CardContent className="p-5 sm:p-5">
+              <GaugeRing
+                value={noticesSafe}
+                total={changesTracked}
+                label="Notice clock still safe"
+                caption="Open changes where the notice period has not started to run out."
+                tone={
+                  changesTracked === 0
+                    ? 'brand'
+                    : noticesSafe === changesTracked
+                      ? 'green'
+                      : (riskCounts.red ?? 0) > 0
+                        ? 'red'
+                        : 'amber'
+                }
+                size={96}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5 sm:p-5">
+              <GaugeRing
+                value={money.time.daysApproved}
+                total={money.time.daysClaimed}
+                label="Days agreed of days claimed"
+                caption={
+                  money.time.daysConceded > 0
+                    ? `${money.time.daysConceded} days conceded so far.`
+                    : 'Nothing conceded on the programme.'
+                }
+                tone={money.time.daysConceded > 0 ? 'amber' : 'brand'}
+                size={96}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
       {/*
         Ordered by urgency, not by category: what is already late, then what is

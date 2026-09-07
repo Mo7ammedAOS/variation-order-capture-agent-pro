@@ -18,19 +18,50 @@ import { cn } from '@/lib/utils';
  * moving under it — without this, a slow server looks like a dead button and
  * people tap twice. `transition-all`, not `transition-colors`, so the scale
  * and the shadow are carried too.
+ *
+ * ── Why the primary button is a gradient ──────────────────────────────────
+ * It is the only gradient fill in the product, which is what makes it findable
+ * on a screen of frosted panels: the eye goes to the one surface that is lit
+ * from within. That only holds while it stays unique — the moment a second
+ * element wears the brand gradient, the primary action stops being obvious.
+ * Nav's active item is the one sanctioned exception, and it is never on screen
+ * competing for the same decision.
+ *
+ * The `shadow-[var(--brand-glow)]` is a coloured shadow, not a grey one. Over
+ * glass a neutral drop shadow reads as dirt; a shadow tinted with the fill
+ * reads as the button glowing onto the surface beneath it.
  */
 const buttonVariants = cva(
-  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold tracking-[-0.01em] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-transform",
+  [
+    'relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap',
+    'rounded-xl text-sm font-semibold tracking-[-0.01em]',
+    'transition-all duration-150 ease-[var(--ease-press)] active:scale-[0.97]',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    'focus-visible:ring-offset-[var(--background)]',
+    'disabled:pointer-events-none disabled:opacity-50',
+    '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-transform',
+  ].join(' '),
   {
     variants: {
       variant: {
-        default:
-          'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md active:shadow-sm',
+        default: [
+          'brand-fill shadow-[var(--brand-glow)]',
+          'hover:brightness-[1.06] hover:shadow-[0_14px_32px_-12px_oklch(from_var(--brand)_l_c_h/0.85)]',
+          'active:brightness-100',
+        ].join(' '),
         destructive:
           'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 hover:shadow-md',
-        outline:
-          'border border-border bg-card/80 backdrop-blur-sm hover:border-primary/35 hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        /*
+          The glass button. Border plus blur plus a translucent fill — it has
+          to be legible over a photograph, which a plain transparent button
+          with a border is not.
+        */
+        outline: [
+          'border border-border bg-[var(--glass-soft)] text-foreground',
+          'backdrop-blur-md',
+          'hover:border-[oklch(from_var(--brand)_l_c_h/0.45)] hover:bg-accent hover:text-accent-foreground',
+        ].join(' '),
+        secondary: 'bg-secondary text-secondary-foreground backdrop-blur-sm hover:bg-accent',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline active:scale-100',
       },

@@ -883,7 +883,7 @@ function CreditNotes({
 
       {offerable ? (
         open ? (
-          <form action={draft} className="flex flex-col gap-3 rounded-lg bg-card p-3">
+          <form action={draft} className="glass-inset flex flex-col gap-3 p-3">
             <input type="hidden" name="invoiceId" value={invoice.id} />
             <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
             <p className="text-xs text-muted-foreground">

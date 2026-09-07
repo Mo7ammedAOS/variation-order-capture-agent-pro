@@ -124,7 +124,7 @@ export function PeekDrawer() {
         aria-label={change ? `${change.pcNumber} preview` : 'Change preview'}
         tabIndex={-1}
         className={cn(
-          'flex h-full w-full max-w-md flex-col overflow-y-auto border-s border-border bg-card outline-none',
+          'glass-chrome flex h-full w-full max-w-md flex-col overflow-y-auto border-s border-border outline-none',
           'motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200',
         )}
       >

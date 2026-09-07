@@ -22,11 +22,19 @@ export function CommandTrigger() {
           new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
         )
       }
-      className="mb-2 flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60"
+      className={[
+        'mb-3 flex w-full items-center gap-2 rounded-xl border border-border px-3 py-2.5',
+        'bg-[var(--glass-soft)] text-sm text-muted-foreground backdrop-blur-md',
+        'transition-all duration-200 ease-[var(--ease-out-quint)]',
+        'hover:border-[oklch(from_var(--brand)_l_c_h/0.4)] hover:text-foreground',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      ].join(' ')}
     >
       <Search aria-hidden className="size-4 shrink-0" />
-      <span className="flex-1 text-start">Search</span>
-      <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px]">⌘K</kbd>
+      <span className="flex-1 text-start font-medium">Search</span>
+      <kbd className="rounded-md border border-border bg-[var(--glass-soft)] px-1.5 py-0.5 text-[10px] font-semibold">
+        ⌘K
+      </kbd>
     </button>
   );
 }

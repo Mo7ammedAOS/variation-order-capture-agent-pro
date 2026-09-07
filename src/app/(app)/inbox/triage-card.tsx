@@ -89,7 +89,7 @@ export function TriageCard({
           id={`project-${item.eventId}`}
           name="projectId"
           defaultValue=""
-          className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-9 flex-1 rounded-md border border-input bg-[var(--glass-soft)] backdrop-blur-md px-3 text-sm"
         >
           <option value="">Which project is this?</option>
           {likely.length > 0 ? (

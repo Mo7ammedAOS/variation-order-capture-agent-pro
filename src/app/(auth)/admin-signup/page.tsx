@@ -22,13 +22,10 @@ export default async function AdminSignupPage() {
   if (!(await isSetupAvailable())) redirect('/admin-signin');
 
   return (
-    <main
-      className="flex min-h-dvh items-center justify-center px-4 py-10"
-      style={{ background: 'var(--mosaic-ground)' }}
-    >
-      <section className="panel flex w-full max-w-md flex-col justify-center bg-card p-7 sm:p-9">
+    <main data-auth-screen className="flex min-h-dvh items-center justify-center px-4 py-10">
+      <section className="panel flex w-full max-w-md flex-col justify-center p-7 sm:p-9">
         <div className="mb-7 flex flex-col gap-3">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <span className="brand-fill flex size-11 items-center justify-center rounded-xl shadow-[var(--brand-glow)]">
             <HardHat aria-hidden className="size-5" />
           </span>
           <div>

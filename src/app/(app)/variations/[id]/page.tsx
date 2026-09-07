@@ -416,7 +416,7 @@ export default async function PotentialChangeDetailPage({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="tabular text-sm font-semibold text-primary">{change.pcNumber}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{change.title}</h1>
+          <h1 className="mt-1 text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">{change.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             <Link href={`/projects/${change.projectId}`} className="hover:underline">
               {change.project.projectCode} — {change.project.projectName}

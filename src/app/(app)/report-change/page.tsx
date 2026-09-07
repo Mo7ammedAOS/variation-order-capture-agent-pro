@@ -24,7 +24,7 @@ export default async function ReportChangePage({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Report a change</h1>
+        <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]">Report a change</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Capture it now. The notice clock starts from the date it happened, not the date
           it was written up.
