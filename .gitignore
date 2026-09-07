@@ -90,3 +90,7 @@ docs/VO-CATALOG-AR.*
 
 # Generated test-plan PDF. The markdown is the source and is tracked.
 docs/VO-TEST-PLAN.*
+
+# Standalone design mock-ups, opened straight in a browser. They are working
+# sketches, not app code — nothing imports them and nothing builds them.
+.design-preview/
