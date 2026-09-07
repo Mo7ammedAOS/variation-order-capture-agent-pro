@@ -15,84 +15,93 @@ desktop and cards on a phone rather than a table that scrolls sideways.
 
 ## The material
 
-Every surface is a pane of **frosted glass floating over a photographic
-ground**. The ground is an image, not a colour, and it is fixed — it does not
-scroll under a two-hundred-row register.
+Every surface is a pane of glass floating over a **photograph of a real
+finished fit-out** — the same room, shot in daylight and at night.
 
 ```text
-Ground        /public/backgrounds/app-light.jpg    soft-focus abstract, warm
-              /public/backgrounds/app-dark.jpg     the same plate, night
-Sign-in       /public/backgrounds/auth-light.jpg   brushed aluminium macro
-              /public/backgrounds/auth-dark.jpg    anodised metal, amber edge
-Glass         --glass          ordinary panel
-              --glass-strong   chrome with content scrolling under it
-              --glass-soft     a recess inside a panel, not a second pane
+Ground   /public/backgrounds/app-light.jpg   the office, day
+         /public/backgrounds/app-dark.jpg    the same office, night
+Glass    --glass          ordinary panel
+         --glass-strong   chrome with content scrolling under it
+         --glass-soft     a recess inside a panel, not a second pane
 ```
 
-**Sign-in has its own plate**, because the two screens have opposite jobs. The
-dashboard is read all day and is dense with figures, so its ground has to
-disappear; sign-in is one card for five seconds and is the only chance the
-product gets to look like something. A macro that would be exhausting behind a
-fifteen-column register is exactly right behind a password box.
+The room is a completed corporate office fit-out: glass partitions, oak desks,
+acoustic rafts, polished concrete. The night plate was generated *from* the day
+plate as a reference, so it is genuinely the same room — same desks, same
+partitions, same planting, same rafts — lit only by its own linear lighting
+with a night sky beyond the facade. Switching theme walks that office from
+afternoon to evening. A dark
+mode built by inverting colours looks like the light mode with the lights off;
+this looks like a different time of day.
 
-It is swapped by `body:has([data-auth-screen])` in `globals.css`. The ground is
-painted by `body::before`, and a custom property set on a descendant cannot
-reach it — so `:has()` is what lets the body respond to what is inside it,
-without a second backdrop layer downloading two images on every sign-in. A
-browser without `:has()` falls back to the application plate, which degrades to
-the previous design rather than to a broken one.
+### Opaque panels, thin scrim
 
-The **sign-in scrim darkens where the application's lightens**. Brushed
-aluminium in daylight is already near-white, and whitening it further left the
-white card with nothing to stand against — the whole screen read as one pale
-rectangle. Dropping the ground a few percent gives the card its edge back.
+The pairing is the whole trick, and it is the opposite of the obvious move.
 
-Three details carry the whole material and none of them are optional: a 1px
-**specular highlight** along the top of every panel (without it glass reads as
-a translucent rectangle rather than a sheet catching light), a **grain layer**
-over the ground (a perfectly smooth gradient betrays itself as a computer
-image), and a **gradient scrim** between the two so the photograph stays
-visible where the layout is empty and gets out of the way where the text is.
+The instinct is to turn the scrim up until text is safe — which fogs the room
+everywhere, including the empty space between panels where there is no text to
+protect. Instead the **scrim is thin** (0.42 → 0.14) so the room reads in the
+gaps, and the **panels stay opaque enough to read on** (0.78 light / 0.64 dark)
+so the room stops at their edge. You see the room *around* the glass, not through it.
 
-`backdrop-filter` is the expensive part — it forces the compositor to sample
-everything behind the element. Panes are for **surfaces, not rows**: a register
-is one pane containing a table, never forty panes. A `@supports not` block
-falls back to solid surfaces so a browser without blur gets a plain interface
-rather than an illegible one.
+Those numbers are measured, not chosen. Sampling the light plate gives a 5th
+percentile luminance of 0.044 — the shadowed floor under the desks. A panel
+landing there at 0.78 holds secondary text at 5.82:1, and the night plate's
+95th percentile — a lit ceiling raft — gives 5.67:1 at 0.64. Panel opacity was
+lowered from 0.86/0.72 on request; the headroom above absorbed it, which is
+why no other token had to move. **These values belong to this
+photograph; re-measure if the plate is ever replaced.**
+
+Three details carry the material: a 1px **specular highlight** along the top of
+every panel, a **grain layer** over the ground, and the scrim between them.
+
+`backdrop-filter` is the expensive part — see *Blur budget* below.
 
 ## Palette
 
 ```text
-Brand      #FF7A1A → #FFB020   safety orange → hi-vis amber
-Ground      photographic        light plate / dark plate
-Text        near-black slate    inverted on the dark plate
+Brand      #C0FF00             lime — a FILL colour, never text on light
+Ground      photographic        the same office, day / night
+Text        near-black slate    inverted on the night plate
 ```
 
 Two colour vocabularies, and confusing them is the one unforgivable mistake.
 
-**BRAND (amber).** Where you are and what you can press. It appears in exactly
-three places — the active nav item, the primary button, and the capture FAB —
-plus focus rings, gauges and chart bars. It carries no commercial meaning. It
-is a gradient, and it is the only gradient fill in the product, which is what
-makes the primary action findable on a screen of frosted panels. A fourth
-decorative use dilutes all three.
+**BRAND (lime).** Where you are and what you can press: the active nav item,
+the primary button, the capture FAB, focus rings, gauges and chart bars. It
+carries no commercial meaning. It is the only gradient fill in the product,
+which is what makes the primary action findable on a screen of glass.
 
 **RISK (the RAG scale).** Green, amber, red, and **only** for risk. A red chip
-means a contractual deadline is at stake. Using it decoratively teaches people
-to ignore the one that matters. Chips carry an **icon as well as a colour**, so
-they still read for the ~8% of men with a colour vision deficiency — on a site
-product that is a lot of the actual users.
+means a contractual deadline is at stake. Chips carry an **icon as well as a
+colour** for the ~8% of men with a colour vision deficiency — on a site product
+that is a lot of the actual users.
 
-Because the brand is amber and the risk scale contains an amber, **the risk
-amber was moved** to gold (hue ~90 rather than ~60) and desaturated. Side by
-side they are plainly different: the brand is orange and glows, the warning is
-flat gold. Tune either one and check it on `/variations`, the only screen where
-both appear in the same row.
+### Lime has two consequences, and both are handled
 
-The same collision retired the **amber-outlined Cancel button**. Back, Cancel
-and Submit are now ranked by *weight* — ghost, bordered, filled — which
-survives a colour-blind reader and a monochrome print, which the amber version
-never did.
+**1. Lime is a fill, never a text colour on light.** `#C0FF00` is oklch
+lightness **0.923** — as text on a light panel it measures **1.04:1**. Not
+"poor": invisible. So the token is split:
+
+| token | use | light | dark |
+|---|---|---|---|
+| `--brand`, `--brand-gradient` | fills, always with dark ink on top | `#C0FF00` family | same |
+| `--primary` | every PC number, project code and link | deep olive-lime, **4.78:1** | `#C0FF00`, **11.75:1** |
+| `--ring` | focus | mid lime | bright lime |
+
+`text-primary` appears in about twenty places. If you ever set a text colour to
+`var(--brand)` it will disappear in light mode.
+
+**2. The risk scale moved out of lime's way.** Lime sits at hue **126** —
+between the old warning gold (90) and low-risk green (152), so the brand pill
+and the "Served" chip read as cousins. Warning has gone back to a **true amber**
+(hue 70) and low risk to a **deep teal-green** (hue 175), leaving gaps of 56°
+and 49°. This is the one gift of dropping orange: orange had occupied the amber
+slot, which is why warning was pushed to gold in the first place.
+
+Every risk colour is solved to clear **4.5:1 on the worst panel** — light red
+4.54, amber 4.52, green 4.54.
 
 ## Light and dark
 
@@ -112,17 +121,48 @@ tuned for white goes muddy against charcoal.
 
 ## Layout
 
+```text
+┌─ top bar ─────────────────────────────────────────────┐   floating pill
+┌ rail ┐  ┌─ stage ───────────────────────────────────┐     the page lives
+│ icons│  │  the page                                 │     inside one pane
+└──────┘  └───────────────────────────────────────────┘
+           ┌─ projects ─┐                                  floating pill
+```
+
+Four floating surfaces over a photograph of a finished fit-out, with real gaps
+between them so the room shows through. **Nothing is welded to an edge of the
+window** — that gap is the whole difference between "glass panels in a room"
+and "a website with a background image".
+
 | Breakpoint | Navigation |
 |---|---|
-| `< md` | Sticky glass top bar + **floating** bottom bar (4 items) |
-| `≥ md` | 256px **floating** glass rail, sticky, with its own scroll |
+| `< md` | Sticky glass top bar + floating bottom bar (4 items) |
+| `≥ md` | 68px floating **icon rail** + floating project switcher |
 
-Both nav surfaces float — inset on all sides, with their own radius — rather
-than being welded to the edge of the window. The gap is what lets the
-photograph run behind them and makes the glass read as a sheet rather than as a
-differently-coloured region of the page. On a notched phone the safe-area inset
-is added to the bottom *offset*, not to the padding, so the bar keeps an even
-gap beneath it instead of growing a chin.
+**The rail is icons only.** A 256px labelled column was a quarter of a laptop
+screen spent on nine words that never change, in a product whose real content
+is a register with more columns than fit. The cost — an icon nav is slower to
+learn — is paid three ways: every item keeps its `aria-label`, every item shows
+a CSS tooltip on hover, and the page it opens states its own name in a heading.
+
+**The bottom bar is navigation, not a filter.** Each pill opens that project's
+page. It deliberately does *not* scope the rest of the app: a switcher that
+silently filtered every screen would be new application state with its own
+persistence, its own effect on every query, and its own way of lying to
+somebody who forgot which job was selected when they read a total. The
+registers here are deliberately cross-project — a director's overdue figure
+means nothing if it quietly excludes eleven of their jobs. Pills show the
+project **code**, because that is what people say out loud and type into
+search. Scoped through `scopeProjectsToUser`, capped at twelve.
+
+### What was removed
+
+The labelled sidebar, the company-name block, the sidebar search box, the
+user-name-and-role block, the labelled sign-out button, the sign-in marketing
+panel, and the dashboard's greeting (the top bar already says it — twice on one
+screen makes the second look like a bug). Their jobs moved: navigation to the
+rail, search into the top bar where it is now the widest control on screen,
+identity to the avatar, sign-out to the foot of the rail.
 
 **The `+ Report Change` button is the most reachable control in the app** — a
 floating action button above the bottom bar on every screen. The whole product
@@ -209,6 +249,102 @@ on where its panel landed), and `--muted-foreground` was re-solved against the
 **The rule for anything added later:** a colour on glass is checked against the
 darkest region of the plate, never against `#fff`. Hint text in this product is
 12px, so the threshold is 4.5:1, not 3:1.
+
+## The glass material
+
+A panel is not "a translucent rectangle". Three features carry it, and they are
+all at the EDGE rather than across the face:
+
+```text
+--glass-sheen   diagonal light wash          light only  (see below)
+--glass-rim     bright inset top-left,       both themes
+                soft dark inset bottom-right
+--glass-specular  1px highlight along the top  both themes
+```
+
+**Dark mode has no face sheen, and that is measured rather than taste.** A
+white wash across a dark panel lifts the corner it peaks in — which is exactly
+where a card's title sits. At 13% the corner reaches `rgb(68,71,77)` and
+secondary text falls to 3.8:1; at 18% it is 3.2:1 and the risk red drops to
+2.7:1. There is no opacity at which a face sheen on this ground is both visible
+and safe. Dark therefore gets its glassiness from the rim, the specular line
+and a heavier blur — 1px features that never sit under text, so they cost
+nothing in contrast. That is also closer to how dark glass behaves in life: you
+see the polished edge catch light, not the face.
+
+## Why the chips are opaque
+
+Chip backgrounds are **solid**, not a tint of the panel — and that single change
+is what bought the transparency everywhere else.
+
+While they were translucent, a chip's contrast was a function of whatever panel
+it happened to sit on, so the risk red was the one value pinning every surface
+in the product at its opacity. Giving chips their own opaque ground decouples
+them: red measures 5.21:1 on its own background no matter how see-through the
+card beneath becomes.
+
+| surface | light | dark |
+|---|---|---|
+| `--glass-stage` | 0.58 | **0.26** |
+| `--glass` (card) | **0.68** | **0.44** |
+| `--glass-strong` (tile) | **0.78** | **0.58** |
+
+Dark gained far more than light, and that asymmetry is inherent: light mode
+puts *dark* text on a *light* translucent panel over the *darkest* pixel of the
+day plate, which is the hardest combination in the product. Dark mode puts
+light text on a dark panel and has room to spare.
+
+**Verified through the whole stack** — plate → scrim → stage → card → tile —
+not against a flat colour. Worst cases: light card 5.65:1 muted, dark card
+5.67:1; light tile 6.08:1, dark tile 6.06:1.
+
+## The select picker
+
+The open list of a native `<select>` is drawn by the operating system. `option`
+cannot be styled and `accent-color` does not reach it — which is why a product
+with a lime accent was showing a macOS-blue highlight, and why "just style the
+dropdown" always fails.
+
+`appearance: base-select` hands the picker back to CSS, and it is used here as
+a **progressive enhancement**:
+
+| | |
+|---|---|
+| Chrome/Edge 135+ | glass panel, lime selection, animated chevron |
+| Safari, Firefox | exactly the native picker that shipped before |
+
+The element stays a real `<select>`. That was the deciding factor over
+replacing all 24 of them with a scripted listbox: it keeps form semantics, its
+`name` in `FormData`, keyboard behaviour, `onChange` on the five controlled
+ones — and the native full-height wheel on a phone, which works in gloves and
+which nothing hand-written would beat.
+
+Zero call sites changed.
+
+## Stage vs cards
+
+```text
+.panel-stage   0.58 light / 0.38 dark    the container — look THROUGH it
+.panel         0.78 light / 0.64 dark    a card ON it
+.panel-flat    0.88 light / 0.80 dark    a grid tile, no blur
+```
+
+**The container is far more transparent than the cards, and the hierarchy is
+the point.** The stage is a sheet you look through at the room; the cards are
+the solid things sitting on it. A stage as opaque as its cards is just a slab
+covering the photograph.
+
+It is affordable because of what the stage actually carries — a page title, a
+few section headings and one line of muted text — which measures 4.75:1 dark
+and 4.68:1 light over the worst pixel of each plate. Cards stacked on top come
+out *safer* than before, not riskier: a card at 0.64 over a 0.38 stage measures
+6.17:1.
+
+**Panel opacity is at its floor.** Both themes were pushed until the RISK
+colours became the binding constraint — light red 4.54:1, dark red 4.55:1. Any
+further transparency breaks a red chip, and a red chip is the load-bearing
+element of this product. If more transparency is ever wanted, it has to come
+from the stage or the scrim, not from the cards.
 
 ## Blur budget
 
@@ -326,7 +462,23 @@ read-only, with one link to the real page — editing there would duplicate the
 capability checks, the audit trail and the transition rules, and give them a
 second place to drift.
 
-**Motion** is feedback, not decoration: a 240ms rise on route change, a 150ms
+**Navigation highlights optimistically.** Every nav item used to decide it was
+active by comparing its href to `usePathname()` — a value that changes when the
+new page has *rendered*, not when you tapped. With every page `force-dynamic`
+against hosted Postgres, that left several hundred milliseconds where the thing
+you pressed looked untouched and the thing you were leaving was still lit.
+People tap twice.
+
+`nav-progress.tsx` holds the intended destination the moment it is pressed, and
+the rail, the phone bar, the More sheet and the project switcher all highlight
+against `pending ?? pathname`. Measured: the tapped item is lit and the top bar
+is running at **ms 0**, while `location.pathname` is still the previous page.
+
+The progress bar deliberately reports **no progress** — it eases to 90% and
+waits. Nothing here can measure a server render, and a bar claiming 40% of a
+request it cannot see is a lie everyone has learned to read as decoration.
+
+**Motion** is feedback, not decoration: a 200ms rise-and-scale on route change, a 150ms
 rise on the palette, a 200ms slide on the drawer, a staggered 24ms cascade down
 a list, and a one-shot draw on each dashboard reading. Nothing animates on a
 data change.

@@ -48,7 +48,7 @@ export function ErrorState({
             <button
               type="button"
               onClick={reset}
-              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              className="brand-fill inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90"
             >
               <RefreshCw aria-hidden className="size-4" />
               Try again

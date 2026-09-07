@@ -4,11 +4,9 @@ import {
   FileWarning, FolderKanban, Gavel, HandCoins, Landmark, PiggyBank, ReceiptText,
   RotateCcw, Timer, Wallet,
 } from 'lucide-react';
-import { formatInTimeZone } from 'date-fns-tz';
 import { requirePageUser } from '@/lib/auth/session';
 import { getOverview } from '@/services/dashboard.service';
 import { getCommercialPosition } from '@/services/invoice.service';
-import { DEFAULT_TIMEZONE } from '@/lib/dates';
 import { StatCard } from '@/components/domain/stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FunnelRail, GaugeRing } from '@/components/domain/readings';
@@ -18,28 +16,12 @@ import { CountBarChart } from './charts';
 export const metadata: Metadata = { title: 'Overview' };
 export const dynamic = 'force-dynamic';
 
-/**
- * Greeting by the clock in Dubai, not by the clock on the server.
- *
- * The container runs in UTC. Without the timezone this wishes a good morning
- * to a commercial manager in Deira at four in the afternoon, which is a small
- * thing that makes an expensive product feel like it was built somewhere else.
- */
-function greeting(now: Date): string {
-  const hour = Number(formatInTimeZone(now, DEFAULT_TIMEZONE, 'H'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
 export default async function DashboardPage() {
   const user = await requirePageUser();
   const [{ stats, charts }, money] = await Promise.all([
     getOverview(user),
     getCommercialPosition(user),
   ]);
-
-  const firstName = user.fullName.trim().split(/\s+/)[0];
 
   /*
     The notice ring.
@@ -73,10 +55,14 @@ export default async function DashboardPage() {
         the two sentences a director would actually ask for — what is breaching
         and what is owed — and only then lays out the grid.
       */}
-      <header className="pt-1">
-        <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-[-0.035em] sm:text-[2rem]">
-          {greeting(new Date())}, <span className="brand-text">{firstName}</span>
-        </h1>
+      <header>
+        {/*
+          No greeting here any more — the top bar already says "Welcome,
+          Osman", and saying it twice on the same screen makes the second one
+          look like a bug. What survives is the only part that was ever
+          information: the two sentences a director would actually ask for.
+        */}
+        <h1 className="page-title">Overview</h1>
         <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
           {stats.noticesOverdue > 0
             ? `${stats.noticesOverdue} notice${stats.noticesOverdue === 1 ? ' is' : 's are'} past the contractual deadline. `
@@ -183,7 +169,11 @@ export default async function DashboardPage() {
         about to be, then the totals. Someone scanning this for ten seconds
         should land on the overdue figures first.
       */}
-      <section aria-label="Key figures" className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+      <section aria-labelledby="h-attention" className="flex flex-col gap-3">
+        <h2 id="h-attention" className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">
+          Needs attention now
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Notices overdue"
           value={stats.noticesOverdue}
@@ -239,6 +229,7 @@ export default async function DashboardPage() {
           icon={Wallet}
           hint="Open potential changes"
         />
+        </div>
       </section>
 
       {/*
@@ -250,7 +241,11 @@ export default async function DashboardPage() {
         invoiced. It is the number nobody could produce before these tables
         existed.
       */}
-      <section aria-label="The money" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-labelledby="h-money" className="flex flex-col gap-3">
+        <h2 id="h-money" className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">
+          The money
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Approved, not invoiced"
           value={formatMoney(Number(money.unbilledValue), 'AED', { abbreviate: true })}
@@ -286,6 +281,7 @@ export default async function DashboardPage() {
           icon={Wallet}
           hint="Submitted less what the client agreed"
         />
+        </div>
       </section>
 
       {/*
@@ -298,7 +294,11 @@ export default async function DashboardPage() {
         giving away the programme, and until the figure is added up nobody in
         the company can see it happening.
       */}
-      <section aria-label="Retention and time" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-labelledby="h-retention" className="flex flex-col gap-3">
+        <h2 id="h-retention" className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">
+          Retention and time
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Retention held"
           value={formatMoney(Number(money.retentionHeld), 'AED', { abbreviate: true })}
@@ -333,13 +333,19 @@ export default async function DashboardPage() {
           tone={money.time.daysConceded > 0 ? 'red' : 'green'}
           hint="Claimed less what the client agreed"
         />
+        </div>
       </section>
 
-      <section aria-label="Breakdowns" className="grid gap-4 lg:grid-cols-2">
+      <section aria-labelledby="h-breakdowns" className="flex flex-col gap-3">
+        <h2 id="h-breakdowns" className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">
+          Breakdowns
+        </h2>
+        <div className="grid gap-3 lg:grid-cols-2">
         <CountBarChart title="Potential changes by project" data={charts.byProject} />
         <CountBarChart title="Potential changes by status" data={charts.byStatus} />
         <CountBarChart title="Potential changes by risk" data={charts.byRisk} colourByRisk />
         <CountBarChart title="Overdue tasks by type" data={charts.overdueTasksByRole} />
+        </div>
       </section>
     </div>
   );

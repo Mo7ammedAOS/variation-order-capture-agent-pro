@@ -33,22 +33,31 @@
 export interface NavLink {
   href: string;
   label: string;
+  /**
+   * The phone bar's label.
+   *
+   * It used to be derived as `label.split(' ')[0]`, which turned "My Tasks"
+   * into "My" and "Held Up" into "Held" — the first of those means nothing at
+   * all. Deriving a label from another label is a guess that is wrong as soon
+   * as a name starts with a small word, so each one is now stated.
+   */
+  short: string;
   /** Null means everybody. Otherwise the capability that reveals it. */
   capability: string | null;
 }
 
 export const NAV_LINKS: NavLink[] = [
-  { href: '/dashboard', label: 'Overview', capability: null },
-  { href: '/my-tasks', label: 'My Tasks', capability: null },
-  { href: '/variations', label: 'Variations', capability: null },
-  { href: '/bottlenecks', label: 'Held Up', capability: null },
+  { href: '/dashboard', label: 'Overview', short: 'Overview', capability: null },
+  { href: '/my-tasks', label: 'My Tasks', short: 'Tasks', capability: null },
+  { href: '/variations', label: 'Variations', short: 'Changes', capability: null },
+  { href: '/bottlenecks', label: 'Held Up', short: 'Held Up', capability: null },
   // The triage queue for messages the system could not place. It is the
   // administrator's desk, not a shared inbox: it holds other people's
   // half-understood reports, and the answer to most of them is a question
   // somebody has to ask by hand.
-  { href: '/inbox', label: 'Capture Inbox', capability: 'capture.triage' },
-  { href: '/projects', label: 'Projects', capability: 'project.update' },
-  { href: '/settings/company', label: 'Company', capability: 'companySettings.manage' },
-  { href: '/settings/users', label: 'Users', capability: 'user.manage' },
-  { href: '/settings/permissions', label: 'Permissions', capability: 'user.manage' },
+  { href: '/inbox', label: 'Capture Inbox', short: 'Inbox', capability: 'capture.triage' },
+  { href: '/projects', label: 'Projects', short: 'Projects', capability: 'project.update' },
+  { href: '/settings/company', label: 'Company', short: 'Company', capability: 'companySettings.manage' },
+  { href: '/settings/users', label: 'Users', short: 'Users', capability: 'user.manage' },
+  { href: '/settings/permissions', label: 'Permissions', short: 'Access', capability: 'user.manage' },
 ];

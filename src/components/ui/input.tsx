@@ -15,12 +15,23 @@ import { cn } from '@/lib/utils';
  * A ring is painted outside the box and moves nothing.
  */
 const fieldClass = [
-  'w-full rounded-xl border border-input text-base text-foreground',
-  'bg-[var(--glass-soft)] backdrop-blur-md',
-  'transition-[box-shadow,border-color] duration-200 ease-[var(--ease-out-quint)]',
+  'w-full rounded-2xl border-0 text-base text-foreground',
+  'bg-[var(--glass-soft)] backdrop-blur-xl',
+  /*
+    A field is a RECESS, drawn with the rim reversed.
+
+    Panels are lit along the top edge and return light along the bottom. A
+    field does the opposite — a dark hairline at the top where the surface
+    drops away, a bright one at the bottom where it comes back up — which is
+    what makes it read as pressed into the glass rather than laid on it. It is
+    the same trick as the panel rim, run upside down, and it replaces the flat
+    1px border that was doing the job before.
+  */
+  'shadow-[var(--glass-recess)]',
+  'transition-[box-shadow] duration-200 ease-[var(--ease-out-quint)]',
   'placeholder:text-muted-foreground',
-  'focus-visible:outline-none focus-visible:border-[oklch(from_var(--brand)_l_c_h/0.55)]',
-  'focus-visible:ring-4 focus-visible:ring-[oklch(from_var(--brand)_l_c_h/0.18)]',
+  'focus-visible:outline-none',
+  'focus-visible:shadow-[var(--glass-recess),0_0_0_4px_oklch(from_var(--brand)_l_c_h/0.22)]',
   'disabled:cursor-not-allowed disabled:opacity-50',
 ].join(' ');
 

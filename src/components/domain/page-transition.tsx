@@ -18,10 +18,12 @@ import { usePathname } from 'next/navigation';
  * late feels broken.
  *
  * ── Why it is this small ──────────────────────────────────────────────────
- * 8px and 220ms. Enough for the eye to register that the page is new and
- * settle where the content starts; short enough that somebody moving fast
- * between a task list and a change never waits on it. Anything longer is the
- * interface admiring itself in front of a person with a job to do.
+ * 10px, a hair of scale, and 200ms. Enough for the eye to register that the
+ * page is new and settle where the content starts; short enough that somebody
+ * moving fast between a task list and a change never waits on it. Anything
+ * longer is the interface admiring itself in front of a person with a job to
+ * do — and it is now SHORTER than it was, because the nav already confirmed
+ * the tap and this no longer has to carry that job on its own.
  *
  * Reduced motion turns it off in `globals.css`, which is also where the
  * animation lives — this component only decides WHEN it restarts.
@@ -30,7 +32,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div key={pathname} className="motion-rise">
+    <div key={pathname} className="motion-page">
       {children}
     </div>
   );

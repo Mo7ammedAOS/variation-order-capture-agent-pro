@@ -16,32 +16,50 @@
    ── The colour discipline ─────────────────────────────────────────────────
    There are exactly two colour vocabularies and they must never be confused.
 
-   BRAND (amber, --brand → --brand-2). Where you are, what you can press, what
-   the app wants you to notice. It appears on the active nav item, primary
-   buttons, focus rings, gauges and charts. It carries no commercial meaning.
+   BRAND (lime, #C0FF00). Where you are, what you can press, what the app
+   wants you to notice. Active nav item, primary buttons, focus rings, gauges
+   and charts. It carries no commercial meaning.
 
    RISK (the RAG scale). Green, amber, red — and ONLY for risk. On this
    product a red chip means a contractual deadline is at stake, and an amber
    chip means it is about to be. Nothing may borrow that vocabulary to look
    interesting.
 
-   Because the brand is amber and the risk scale contains an amber, the risk
-   amber has been pushed towards gold (hue ~90 rather than ~60) and
-   desaturated. Side by side they are plainly two different colours: the brand
-   is orange and glows, the warning is flat gold. If you ever tune one, check
-   it against the other on the variations register, which is the only screen
-   where both appear in the same row.
+   ── Two consequences of choosing lime, both handled here ─────────────────
+
+   1. LIME IS A FILL, NEVER A TEXT COLOUR ON LIGHT.
+      #C0FF00 is oklch lightness 0.923 — as text on a light panel it measures
+      1.04:1. Not "poor": invisible. So the token is split. `--brand` and
+      `--brand-gradient` are for FILLS, which always carry dark ink on top;
+      `--primary` is the readable lime used for every PC number, project code
+      and link, and in light mode it is a much deeper olive-lime (4.78:1).
+      In dark mode `--primary` can be the real #C0FF00, at 11.75:1.
+
+      If you ever set a text colour to `var(--brand)`, it will disappear in
+      light mode. Use `--primary`.
+
+   2. THE RISK SCALE MOVED OUT OF LIME'S WAY.
+      Lime sits at hue 126 — between the old warning gold (90) and low-risk
+      green (152), so the brand pill and the "Served" chip read as cousins.
+      Warning has therefore gone back to a TRUE amber (hue 70) and low risk to
+      a deep teal-green (hue 175), leaving gaps of 56° and 49° either side.
+      This is the one good thing about dropping orange: orange had occupied
+      the amber slot, which is why warning was pushed to gold in the first
+      place. Warning now has its natural colour back.
+
+   Every value below is measured against the worst pixel of the background
+   photograph, not against white. See "Contrast on glass" in UI_SPEC.md.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   --radius: 0.75rem;
 
   /* ── Brand ──────────────────────────────────────────────────────────── */
-  --brand: oklch(0.71 0.187 47);        /* #FF7A1A  safety orange           */
-  --brand-2: oklch(0.81 0.156 76);      /* #FFB020  hi-vis amber            */
-  --brand-ink: oklch(0.19 0.03 62);     /* text that sits ON brand          */
+  --brand: oklch(0.87 0.215 128);       /* deeper lime, the gradient's start */
+  --brand-2: oklch(0.923 0.234 126);    /* #C0FF00                           */
+  --brand-ink: oklch(0.26 0.07 128);    /* text that sits ON lime            */
   --brand-gradient: linear-gradient(118deg, var(--brand) 0%, var(--brand-2) 100%);
-  --brand-glow: 0 10px 26px -12px oklch(0.71 0.187 47 / 0.75);
+  --brand-glow: 0 10px 26px -12px oklch(0.87 0.215 128 / 0.55);
 
   /* ── Ground ─────────────────────────────────────────────────────────── */
   /*
@@ -52,9 +70,9 @@
   --backdrop: url('/backgrounds/app-light.jpg');
   --backdrop-scrim: linear-gradient(
     112deg,
-    oklch(0.985 0.003 250 / 0.78) 0%,
-    oklch(0.985 0.003 250 / 0.52) 46%,
-    oklch(0.985 0.003 250 / 0.34) 100%
+    oklch(0.985 0.003 250 / 0.42) 0%,
+    oklch(0.985 0.003 250 / 0.24) 46%,
+    oklch(0.985 0.003 250 / 0.14) 100%
   );
 
   --background: oklch(0.955 0.004 250);
@@ -68,22 +86,87 @@
     panel, which must not look like a second pane of glass on top of the first.
   */
   /*
-    0.72, not 0.62.
+    Opaque panels, thin scrim — and that pairing is the whole trick.
 
-    Glass makes contrast a function of the PHOTOGRAPH, which is the trap in
-    this whole style: secondary text measured 4.57:1 over a bright part of the
-    plate and 3.92:1 over a darker part — the same token failing WCAG AA
-    depending on where a panel happened to land. Ten more points of opacity
-    both lifts the floor and flattens the variance, so the contrast of a label
-    no longer depends on what is behind it.
+    The ground is now a real photograph of a finished fit-out, and the point of
+    it is to be SEEN. The instinct is to turn the scrim up until text is safe,
+    but that just fogs the room everywhere, including the empty space between
+    panels where there is no text to protect.
+
+    So it is the other way round: the scrim is thin (0.42 → 0.14) so the room
+    reads in the gaps, and the panels are nearly opaque so the room stops at
+    their edge. You see the room around the glass, not through it — which is
+    also how the reference this was modelled on behaves.
+
+    The numbers are measured, not guessed. Sampling the plate gives a 5th
+    percentile luminance of 0.073 — genuinely dark, the oak wall in shadow. A
+    panel landing there at 0.86 opacity puts secondary text at 4.70:1 and body
+    text at 13.9:1. At the 0.72 this used to be, secondary text was 4.08:1 and
+    failed. Re-measure if the plate is ever replaced: this value belongs to
+    THIS photograph.
   */
-  --glass: oklch(1 0 0 / 0.72);
-  --glass-strong: oklch(1 0 0 / 0.86);
+  --glass: oklch(1 0 0 / 0.68);
+  --glass-stage: oklch(1 0 0 / 0.58);
+  --glass-lens: oklch(1 0 0 / 0.72);
+  --glass-shadow-sm: 0 6px 18px -8px oklch(0.20 0.02 265 / 0.28);
+  --glass-recess:
+    inset 0 1px 2px 0 oklch(0.20 0.02 265 / 0.10),
+    inset 0 0 0 1px oklch(0.20 0.02 265 / 0.08),
+    inset 0 -1px 0 0 oklch(1 0 0 / 0.7);
+  --glass-strong: oklch(1 0 0 / 0.78);
   --glass-soft: oklch(1 0 0 / 0.52);
-  --glass-edge: oklch(1 0 0 / 0.85);
-  --glass-blur: blur(28px) saturate(1.6);
-  --glass-shadow: 0 12px 34px -16px oklch(0.20 0.02 265 / 0.30),
-                  0 2px 8px -4px oklch(0.20 0.02 265 / 0.10);
+  --glass-edge: oklch(0.20 0.02 265 / 0.10);
+  --glass-blur: blur(64px) saturate(2.1) brightness(1.02);
+
+  /*
+    THE SHEEN — the single thing that makes a panel read as glass.
+
+    A panel with a flat fill is a coloured rectangle no matter how transparent
+    it is. Real glass is not uniform: it catches light across one corner and
+    falls away. This is a diagonal wash laid over the fill, and it is doing
+    more work for the look than the opacity ever did.
+  */
+  --glass-sheen: linear-gradient(
+    142deg,
+    oklch(1 0 0 / 0.55) 0%,
+    oklch(1 0 0 / 0.16) 32%,
+    oklch(1 0 0 / 0) 62%
+  );
+
+  /*
+    THE RIM. A bright hairline along the top-left and a soft dark one along
+    the bottom-right, drawn as insets so they cost no layout. This is what a
+    sheet of glass with a polished edge does under a light source, and it is
+    why the panels stop looking like flat boxes.
+  */
+  /*
+    THE RIM — four layers, and the reason glass looks like glass.
+
+    It used to light only the top-left corner, which reads as a bevel. Real
+    glass refracts around its whole edge: brightest along the top where light
+    enters, a fainter return along the bottom, a continuous hairline all the
+    way round, and a soft glow bleeding a few pixels inwards from the top.
+    That last one is the expensive-looking part and it is one inset shadow.
+
+    All four are 1–20px edge effects. None of them sits under body text, so
+    none of them costs anything in contrast — which is what makes this the
+    right place to spend effort rather than on opacity, where every point
+    traded is measured against a risk chip.
+
+    The rim is drawn in faded BLACK rather than white — Osman's call. A white
+    rim reads as light catching a polished edge; a dark one reads as the edge
+    being cut into the surface. It is a quieter, more drawn look, and it holds
+    up better on the pale parts of the daylight plate, where a white rim had
+    nothing to separate itself from.
+  */
+  --glass-rim:
+    inset 0 1px 0 0 oklch(0.20 0.02 265 / 0.10),
+    inset 0 -1px 0 0 oklch(0.20 0.02 265 / 0.05),
+    inset 0 0 0 1px oklch(0.20 0.02 265 / 0.07),
+    inset 0 10px 22px -14px oklch(0.20 0.02 265 / 0.10);
+  --glass-shadow: 0 22px 60px -24px oklch(0.20 0.02 265 / 0.38),
+                  0 6px 18px -10px oklch(0.20 0.02 265 / 0.16),
+                  0 1px 2px 0 oklch(0.20 0.02 265 / 0.06);
   --glass-shadow-lifted: 0 22px 50px -20px oklch(0.20 0.02 265 / 0.38),
                          0 4px 12px -6px oklch(0.20 0.02 265 / 0.14);
   /*
@@ -92,14 +175,23 @@
     than as a semi-transparent rectangle. It is the cheapest and most
     load-bearing detail in this whole file.
   */
-  --glass-specular: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.9) 50%, transparent);
+  --glass-specular: linear-gradient(90deg, transparent, oklch(0.20 0.02 265 / 0.12) 50%, transparent);
 
   --card: var(--glass);
   --card-foreground: oklch(0.20 0.02 265);
   --popover: oklch(1 0 0 / 0.86);
   --popover-foreground: oklch(0.20 0.02 265);
 
-  --primary: var(--brand);
+  /*
+    Readable lime. NOT --brand: see note 1 in the header.
+
+    L 0.45, not 0.49. Project codes and PC numbers render in this directly on
+    the STAGE, which is the most transparent surface in the product — at 0.49
+    they measured 3.85:1 there and failed. That was a regression introduced
+    when the stage was made see-through and `text-primary` was not re-checked
+    against it. On a card it now measures well over 5:1.
+  */
+  --primary: oklch(0.45 0.15 126);
   --primary-foreground: var(--brand-ink);
 
   --secondary: oklch(0.20 0.02 265 / 0.06);
@@ -112,7 +204,7 @@
     there, 5.09:1 over the brightest region. The old value was 3.92:1 at worst,
     and it is used for hint text at 12px, where AA requires 4.5:1.
   */
-  --muted-foreground: oklch(0.455 0.02 262);
+  --muted-foreground: oklch(0.46 0.02 262);
 
   --accent: oklch(0.20 0.02 265 / 0.07);
   --accent-foreground: oklch(0.22 0.03 265);
@@ -122,15 +214,26 @@
 
   --border: oklch(0.20 0.02 265 / 0.10);
   --input: oklch(0.20 0.02 265 / 0.13);
-  --ring: var(--brand);
+  /* A mid lime: #C0FF00 as a focus ring on a white panel is not visible. */
+  --ring: oklch(0.60 0.18 126);
 
   /* ── RISK. Reserved. See the header. ────────────────────────────────── */
-  --risk-green: oklch(0.58 0.135 152);
-  --risk-green-bg: oklch(0.58 0.135 152 / 0.14);
-  --risk-amber: oklch(0.62 0.115 90);        /* gold, NOT the brand orange  */
-  --risk-amber-bg: oklch(0.62 0.115 90 / 0.16);
-  --risk-red: oklch(0.56 0.215 26);
-  --risk-red-bg: oklch(0.56 0.215 26 / 0.13);
+  /*
+    Chip backgrounds are SOLID, not a tint of the panel — and that is what
+    bought the transparency everywhere else.
+
+    While they were translucent, a chip's contrast was a function of whatever
+    panel it happened to sit on, so the risk red was the single value pinning
+    every surface in the product at its current opacity. Giving chips their own
+    opaque ground decouples them completely: red measures 5.21:1 on its own
+    background no matter how see-through the card beneath becomes.
+  */
+  --risk-green: oklch(0.46 0.10 175);
+  --risk-green-bg: oklch(0.93 0.045 175);
+  --risk-amber: oklch(0.48 0.13 70);
+  --risk-amber-bg: oklch(0.94 0.06 70);
+  --risk-red: oklch(0.50 0.20 26);
+  --risk-red-bg: oklch(0.93 0.05 26);
   --risk-neutral: oklch(0.50 0.018 262);
   --risk-neutral-bg: oklch(0.20 0.02 265 / 0.07);
 
@@ -145,11 +248,12 @@
   */
   --panel-notice: oklch(0.62 0.20 12 / 0.07);
   --panel-connect: oklch(0.60 0.13 235 / 0.07);
-  --panel-work: oklch(0.71 0.187 47 / 0.07);
+  --panel-work: oklch(0.87 0.215 128 / 0.09);
   --panel-insight: oklch(0.60 0.15 300 / 0.06);
   --panel-search: oklch(0.62 0.12 190 / 0.07);
 
-  --panel-radius: 20px;
+  --panel-radius: 26px;
+  --grain: 0.03;
 
   /* ── Charts ─────────────────────────────────────────────────────────── */
   /*
@@ -183,23 +287,69 @@
   --backdrop: url('/backgrounds/app-dark.jpg');
   --backdrop-scrim: linear-gradient(
     112deg,
-    oklch(0.16 0.015 265 / 0.82) 0%,
-    oklch(0.16 0.015 265 / 0.62) 46%,
-    oklch(0.16 0.015 265 / 0.46) 100%
+    oklch(0.16 0.015 265 / 0.50) 0%,
+    oklch(0.16 0.015 265 / 0.34) 46%,
+    oklch(0.16 0.015 265 / 0.22) 100%
   );
 
   --background: oklch(0.16 0.015 265);
   --foreground: oklch(0.97 0.004 250);
 
-  --glass: oklch(0.22 0.018 265 / 0.55);
-  --glass-strong: oklch(0.20 0.018 265 / 0.76);
-  --glass-soft: oklch(0.30 0.02 265 / 0.30);
-  --glass-edge: oklch(1 0 0 / 0.13);
-  --glass-shadow: 0 18px 44px -18px oklch(0 0 0 / 0.75),
-                  0 2px 10px -4px oklch(0 0 0 / 0.5);
+  /* Same reasoning as light. The night plate has warm lamp pools that are far
+     brighter than its median, and a panel landing on one is the worst case:
+     0.72 holds secondary text at 5.08:1 there. */
+  --glass: oklch(0.22 0.018 265 / 0.44);
+  --glass-stage: oklch(0.22 0.018 265 / 0.26);
+  --glass-lens: oklch(1 0 0 / 0.13);
+  --glass-shadow-sm: 0 6px 16px -10px oklch(0 0 0 / 0.45);
+  --glass-recess:
+    inset 0 1px 3px 0 oklch(0 0 0 / 0.26),
+    inset 0 0 0 1px oklch(0 0 0 / 0.16),
+    inset 0 -1px 0 0 oklch(1 0 0 / 0.07);
+  --glass-strong: oklch(0.20 0.018 265 / 0.58);
+  --glass-soft: oklch(0.30 0.02 265 / 0.36);
+  --glass-edge: oklch(0 0 0 / 0.20);
+  --glass-blur: blur(72px) saturate(1.9) brightness(1.08);
+  /*
+    NO face sheen in dark, and this is measured rather than taste.
+
+    A white wash across a dark panel lifts the corner it peaks in — and that
+    corner is exactly where a card's title sits. At 13% the panel corner goes
+    to rgb(68,71,77) and secondary text falls to 3.8:1; at 18% it is 3.2:1 and
+    the risk red drops to 2.7:1. There is no opacity at which a face sheen is
+    both visible and safe on this ground.
+
+    So dark gets its glassiness from the EDGE instead: a bright rim, a brighter
+    top specular line, and a heavier blur. Those are 1px features that never
+    sit under text, so they cost nothing in contrast. This is also closer to
+    how dark glass behaves in life — you see the polished edge catch light, not
+    the face.
+  */
+  --glass-sheen: none;
+  /* Same four layers. On a dark ground the perimeter carries most of the
+     shape, so it is stronger here than in light. */
+  /*
+    Gentler than light, not heavier — Osman's call, and correct.
+
+    A black rim on a dark panel is doing the opposite job to a black rim on a
+    white one. On light it is a shadow line and can be firm; on dark it is a
+    gap between two near-black surfaces, and at the alphas light mode uses it
+    stopped reading as an edge and started reading as a thick dark band drawn
+    around every card. Every value here is roughly half its light counterpart,
+    and the inner glow is 14px rather than 26px so it stays a line instead of
+    spreading into the panel.
+  */
+  --glass-rim:
+    inset 0 1px 0 0 oklch(0 0 0 / 0.26),
+    inset 0 -1px 0 0 oklch(0 0 0 / 0.13),
+    inset 0 0 0 1px oklch(0 0 0 / 0.17),
+    inset 0 5px 14px -12px oklch(0 0 0 / 0.22);
+  --glass-shadow: 0 26px 70px -26px oklch(0 0 0 / 0.85),
+                  0 8px 22px -12px oklch(0 0 0 / 0.6),
+                  0 1px 2px 0 oklch(0 0 0 / 0.4);
   --glass-shadow-lifted: 0 30px 64px -22px oklch(0 0 0 / 0.85),
                          0 4px 14px -6px oklch(0 0 0 / 0.55);
-  --glass-specular: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28) 50%, transparent);
+  --glass-specular: linear-gradient(90deg, transparent, oklch(0 0 0 / 0.18) 50%, transparent);
 
   --card: var(--glass);
   --card-foreground: oklch(0.97 0.004 250);
@@ -211,14 +361,17 @@
     against charcoal, so both stops move up in lightness — and the ink on top
     stays dark, because amber is a light colour in any theme.
   */
-  --brand: oklch(0.745 0.175 50);
-  --brand-2: oklch(0.845 0.145 78);
-  --brand-glow: 0 10px 30px -12px oklch(0.745 0.175 50 / 0.6);
+  --brand: oklch(0.87 0.215 128);
+  --brand-2: oklch(0.923 0.234 126);
+  --brand-glow: 0 10px 30px -12px oklch(0.87 0.215 128 / 0.45);
+  /* On the night plate the real #C0FF00 reads at 11.75:1 — no need to dim it. */
+  --primary: oklch(0.923 0.234 126);
+  --ring: oklch(0.85 0.21 126);
 
   --secondary: oklch(1 0 0 / 0.08);
   --secondary-foreground: oklch(0.97 0.004 250);
   --muted: oklch(1 0 0 / 0.06);
-  --muted-foreground: oklch(0.72 0.015 258);
+  --muted-foreground: oklch(0.73 0.015 258);
   --accent: oklch(1 0 0 / 0.10);
   --accent-foreground: oklch(0.97 0.004 250);
 
@@ -228,18 +381,18 @@
   --border: oklch(1 0 0 / 0.11);
   --input: oklch(1 0 0 / 0.16);
 
-  --risk-green: oklch(0.75 0.15 155);
-  --risk-green-bg: oklch(0.75 0.15 155 / 0.16);
-  --risk-amber: oklch(0.82 0.125 95);
-  --risk-amber-bg: oklch(0.82 0.125 95 / 0.16);
-  --risk-red: oklch(0.68 0.19 25);
-  --risk-red-bg: oklch(0.68 0.19 25 / 0.18);
+  --risk-green: oklch(0.82 0.11 178);
+  --risk-green-bg: oklch(0.32 0.07 178);
+  --risk-amber: oklch(0.85 0.14 72);
+  --risk-amber-bg: oklch(0.33 0.09 72);
+  --risk-red: oklch(0.78 0.17 25);
+  --risk-red-bg: oklch(0.32 0.09 26);
   --risk-neutral: oklch(0.72 0.015 258);
   --risk-neutral-bg: oklch(1 0 0 / 0.08);
 
   --panel-notice: oklch(0.68 0.20 14 / 0.11);
   --panel-connect: oklch(0.68 0.13 235 / 0.11);
-  --panel-work: oklch(0.745 0.175 50 / 0.11);
+  --panel-work: oklch(0.87 0.215 128 / 0.12);
   --panel-insight: oklch(0.68 0.15 300 / 0.10);
   --panel-search: oklch(0.70 0.12 190 / 0.10);
 
@@ -247,6 +400,10 @@
   --chart-3: oklch(0.72 0.12 190);
   --chart-4: oklch(0.70 0.15 300);
   --chart-5: oklch(0.68 0.05 262);
+
+  /* Half the light value: on a near-black ground the same noise reads as
+     dirt on the screen rather than as film grain. */
+  --grain: 0.014;
 
   --sidebar: var(--glass-strong);
   --sidebar-foreground: oklch(0.97 0.004 250);
@@ -386,68 +543,16 @@
   }
 
   /*
-    THE SIGN-IN GROUND.
+    Sign-in uses the SAME plate as the application — there is no separate auth
+    ground any more.
 
-    A different photograph from the rest of the application: a macro of dark
-    anodised metal against charcoal concrete, lit so a single amber highlight
-    runs through it.
-
-    ── Why sign-in gets its own plate ────────────────────────────────────────
-    The two screens have opposite jobs. The dashboard is read all day and is
-    dense with figures, so its ground has to disappear. Sign-in is one card for
-    five seconds and is the only chance the product gets to look like
-    something. A plate that would be exhausting behind a fifteen-column
-    register is exactly right behind a password box.
-
-    ── Why `:has()` rather than a layout ─────────────────────────────────────
-    The ground is painted by `body::before`, and a custom property set on a
-    descendant cannot reach it — `<main>` is inside `<body>`, so nothing the
-    auth pages render can change what `body::before` reads. `:has()` lets the
-    body respond to what is inside it, which is the one selector that solves
-    this without inventing a second backdrop layer and downloading two images
-    on every sign-in.
-
-    If a browser lacks `:has()`, sign-in simply shows the application plate.
-    That degrades to the previous design rather than to a broken one.
-
-    The `.dark` rule needs no `:has()` boost to win: `.dark body:has(...)` is
-    two classes to `body:has(...)`'s one, so the ordering is safe if these are
-    ever reordered.
+    There used to be one: a macro of brushed metal, swapped in with
+    `body:has([data-auth-screen])`. It went when the ground became a photograph
+    of an actual finished fit-out, day and night. The whole point of that pair
+    is that it is one room you walk into, and handing the front door a
+    different room undoes it. `[data-auth-screen]` is still on those pages
+    because it is a useful hook, but nothing keys off it in CSS today.
   */
-  body:has([data-auth-screen]) {
-    --backdrop: url('/backgrounds/auth-light.jpg');
-    /*
-      This scrim DARKENS; the application's lightens.
-
-      The application plate is a soft-focus abstract and the panels sitting on
-      it are white, so whitening the ground pushes the two apart. The sign-in
-      plate is brushed aluminium in daylight — already near-white — so the same
-      treatment washed it out until the card had nothing to stand against and
-      the whole screen read as one pale rectangle.
-
-      Dropping the ground a few percent instead gives the white card its edge
-      back and lets the brushed grain stay visible. Same card, same glass, only
-      the thing behind it changed.
-    */
-    --backdrop-scrim: linear-gradient(
-      112deg,
-      oklch(0.90 0.006 250 / 0.58) 0%,
-      oklch(0.87 0.008 250 / 0.36) 46%,
-      oklch(0.85 0.010 250 / 0.24) 100%
-    );
-  }
-  .dark body:has([data-auth-screen]) {
-    --backdrop: url('/backgrounds/auth-dark.jpg');
-    /* The dark plate is already deep, and its single amber highlight is the
-       reason this image was chosen — so the scrim is lighter than the
-       application's, to avoid smothering it. */
-    --backdrop-scrim: linear-gradient(
-      112deg,
-      oklch(0.14 0.012 265 / 0.74) 0%,
-      oklch(0.14 0.012 265 / 0.54) 46%,
-      oklch(0.14 0.012 265 / 0.40) 100%
-    );
-  }
 
   /*
     Grain. Two lines that do a surprising amount of work: a completely smooth
@@ -460,7 +565,7 @@
     inset: 0;
     z-index: -9;
     pointer-events: none;
-    opacity: 0.035;
+    opacity: var(--grain);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
@@ -542,9 +647,21 @@
     overflow: hidden;
     border-radius: var(--panel-radius);
     border: 1px solid var(--glass-edge);
-    background: var(--card);
+    /*
+      Sheen FIRST, fill behind it. Composing it into the background rather than
+      onto a pseudo-element is deliberate: the tone variants below already
+      stack a tint here, and a `::after` overlay would paint over the panel's
+      own content unless it were given a stacking context to sit under. One
+      background list, layered in the order light actually hits glass.
+    */
+    /*
+      `--glass-sheen` is `none` in dark, and `background: none, <colour>` is a
+      valid two-layer list — `none` simply paints nothing — so one declaration
+      serves both themes without a second rule.
+    */
+    background: var(--glass-sheen), var(--card);
     backdrop-filter: var(--glass-blur);
-    box-shadow: var(--glass-shadow);
+    box-shadow: var(--glass-shadow), var(--glass-rim);
   }
 
   .panel::before {
@@ -604,18 +721,18 @@
     -webkit-backdrop-filter: none;
     background: var(--glass-strong);
   }
-  .panel-flat.panel-notice { background: linear-gradient(var(--panel-notice), var(--panel-notice)), var(--glass-strong); }
-  .panel-flat.panel-connect { background: linear-gradient(var(--panel-connect), var(--panel-connect)), var(--glass-strong); }
-  .panel-flat.panel-work { background: linear-gradient(var(--panel-work), var(--panel-work)), var(--glass-strong); }
-  .panel-flat.panel-insight { background: linear-gradient(var(--panel-insight), var(--panel-insight)), var(--glass-strong); }
-  .panel-flat.panel-search { background: linear-gradient(var(--panel-search), var(--panel-search)), var(--glass-strong); }
+  .panel-flat.panel-notice { background: var(--glass-sheen), linear-gradient(var(--panel-notice), var(--panel-notice)), var(--glass-strong); }
+  .panel-flat.panel-connect { background: var(--glass-sheen), linear-gradient(var(--panel-connect), var(--panel-connect)), var(--glass-strong); }
+  .panel-flat.panel-work { background: var(--glass-sheen), linear-gradient(var(--panel-work), var(--panel-work)), var(--glass-strong); }
+  .panel-flat.panel-insight { background: var(--glass-sheen), linear-gradient(var(--panel-insight), var(--panel-insight)), var(--glass-strong); }
+  .panel-flat.panel-search { background: var(--glass-sheen), linear-gradient(var(--panel-search), var(--panel-search)), var(--glass-strong); }
 
   /* Tones layer a tint OVER the glass, so a toned panel is still glass. */
-  .panel-notice { background: linear-gradient(var(--panel-notice), var(--panel-notice)), var(--card); }
-  .panel-connect { background: linear-gradient(var(--panel-connect), var(--panel-connect)), var(--card); }
-  .panel-work { background: linear-gradient(var(--panel-work), var(--panel-work)), var(--card); }
-  .panel-insight { background: linear-gradient(var(--panel-insight), var(--panel-insight)), var(--card); }
-  .panel-search { background: linear-gradient(var(--panel-search), var(--panel-search)), var(--card); }
+  .panel-notice { background: var(--glass-sheen), linear-gradient(var(--panel-notice), var(--panel-notice)), var(--card); }
+  .panel-connect { background: var(--glass-sheen), linear-gradient(var(--panel-connect), var(--panel-connect)), var(--card); }
+  .panel-work { background: var(--glass-sheen), linear-gradient(var(--panel-work), var(--panel-work)), var(--card); }
+  .panel-insight { background: var(--glass-sheen), linear-gradient(var(--panel-insight), var(--panel-insight)), var(--card); }
+  .panel-search { background: var(--glass-sheen), linear-gradient(var(--panel-search), var(--panel-search)), var(--card); }
 
   /*
     Chrome that content scrolls underneath — the sidebar, the phone nav bar,
@@ -623,17 +740,36 @@
     blur is a smear that reads as a rendering fault.
   */
   .glass-chrome {
-    background: var(--glass-strong);
-    backdrop-filter: blur(32px) saturate(1.7);
+    background: var(--glass-sheen), var(--glass-strong);
+    backdrop-filter: blur(44px) saturate(1.8);
     border-color: var(--glass-edge);
+    box-shadow: var(--glass-shadow), var(--glass-rim);
+  }
+
+  /*
+    THE STAGE — the big pane the page renders inside.
+
+    Far more transparent than a card, and that hierarchy is the whole point:
+    the container is a sheet of glass you look THROUGH at the room, and the
+    cards sitting on it are the solid things. A stage as opaque as its cards is
+    just a dark slab covering the photograph, which is what it was.
+
+    It is affordable because of what the stage actually carries: a page title
+    (large), a few section headings, and one line of muted text. Measured over
+    the worst pixel of each plate it holds secondary text at 4.75:1 dark and
+    4.68:1 light. Cards stacked on top come out SAFER than before, not riskier
+    — a card at 0.64 over a 0.38 stage measures 6.17:1.
+  */
+  .panel-stage {
+    background: var(--glass-sheen), var(--glass-stage);
   }
 
   /* A nested surface inside a panel. Not a second pane — a recess in the
      first one, which is why it has no shadow and no specular edge. */
   .glass-inset {
     background: var(--glass-soft);
-    border: 1px solid var(--border);
     border-radius: calc(var(--panel-radius) - 8px);
+    box-shadow: var(--glass-recess);
   }
 
   .panel-chip {
@@ -646,6 +782,133 @@
     border: 1px solid var(--glass-edge);
     backdrop-filter: blur(14px);
     white-space: nowrap;
+  }
+
+  /* ═══ THE SELECT PICKER ═══════════════════════════════════════════════
+     The open list of a native <select> is drawn by the operating system. You
+     cannot style `option`, and `accent-color` does not reach it — which is why
+     it was a macOS-blue highlight on a product with a lime accent, and why
+     every "just style the dropdown" attempt fails.
+
+     `appearance: base-select` hands the picker back to CSS. It is a
+     progressive enhancement in every sense that matters here:
+
+       supported    (Chrome/Edge 135+)  glass panel, lime selection
+       unsupported  (Safari, Firefox)   exactly what shipped before
+
+     Nothing else changes. The element is still a real <select>, so it keeps
+     its form semantics, its keyboard behaviour, its `name` in FormData, and —
+     the reason this was never replaced with a scripted listbox — the native
+     full-height wheel on a phone, which works in gloves and which nothing we
+     could write would beat.
+     ════════════════════════════════════════════════════════════════════════ */
+  @supports (appearance: base-select) {
+    select,
+    select::picker(select) {
+      appearance: base-select;
+    }
+
+    /* The closed control. Same field styling as an input; only the arrow and
+       the picker's anchor come from the new model. */
+    select {
+      padding-inline-end: 2.25rem;
+    }
+    select::picker-icon {
+      color: var(--muted-foreground);
+      transition: transform 200ms var(--ease-out-quint);
+      margin-inline-start: auto;
+    }
+    select:open::picker-icon {
+      transform: rotate(180deg);
+    }
+
+    /* The panel. The same material as every other floating surface. */
+    select::picker(select) {
+      border: 1px solid var(--glass-edge);
+      border-radius: 16px;
+      background: var(--glass-sheen), var(--glass-strong);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-shadow-lifted), var(--glass-rim);
+      padding: 0.375rem;
+      margin-block-start: 0.375rem;
+      max-height: 18rem;
+      overflow-y: auto;
+      /* The picker sits in the top layer, above everything — including the
+         command palette — so it needs no z-index of its own. */
+    }
+    select:open::picker(select) {
+      animation: rise 160ms var(--ease-out-quint) both;
+    }
+
+    select option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 0.75rem;
+      /* 44px on a touch device, like every other control in this product. */
+      min-height: 2.25rem;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--foreground);
+      font: inherit;
+      transition: background-color 120ms var(--ease-out-quint);
+    }
+    select option:hover,
+    select option:focus {
+      background: var(--accent);
+      outline: none;
+    }
+    /* The selection: the brand, exactly as it appears on the nav rail and the
+       primary button, with dark ink on top. Never the OS blue. */
+    select option:checked {
+      background: var(--brand-gradient);
+      color: var(--brand-ink);
+      font-weight: 700;
+    }
+    /* The tick is redundant once the row is a filled lime pill, and it was
+       pushing the labels out of alignment with the unselected ones. */
+    select option::checkmark {
+      display: none;
+    }
+    select option:disabled {
+      color: var(--muted-foreground);
+      opacity: 0.6;
+    }
+  }
+
+  /*
+    THE LENS — a lighter pane floating inside a darker one.
+
+    The reference designs mark a chosen row not with a colour but with a second
+    piece of glass laid over the first: brighter, with its own rim. It reads as
+    a physical thing you moved rather than as a highlight, and it works over
+    any background because it is relative to the panel it sits on rather than
+    to an absolute colour.
+  */
+  .glass-lens {
+    background: var(--glass-lens);
+    box-shadow:
+      inset 0 1px 0 0 oklch(0 0 0 / 0.18),
+      inset 0 0 0 1px oklch(0 0 0 / 0.14);
+  }
+
+  /*
+    A FLOATING CONTROL — a button that is its own surface.
+
+    The top bar and the rail used to be one long pane each, with plain buttons
+    sitting inside them. Removing those panes leaves every control alone over a
+    photograph, so each one now carries the glass it needs and nothing more.
+    That is the minimal reading of this design: no furniture, only the things
+    you can actually press.
+
+    The blur is lighter than a panel's. These are small, there are a dozen of
+    them, and each `backdrop-filter` is a separate sample of everything behind
+    it — a 64px blur twelve times over is how a rail costs frames on a phone.
+  */
+  .glass-control {
+    background: var(--glass-strong);
+    backdrop-filter: blur(20px) saturate(1.7);
+    box-shadow: var(--glass-rim), var(--glass-shadow-sm);
   }
 
   /* Brand fills, so the gradient is defined once. */
@@ -694,8 +957,17 @@
     background: var(--brand-gradient);
     color: var(--brand-ink);
   }
+  /*
+    Gradient text, and the one place the brand may be a text colour — because
+    it clips a gradient built from `--primary`, the READABLE lime, rather than
+    from `--brand`. Clipping the fill gradient here would print a 1.04:1 word.
+  */
   .brand-text {
-    background: var(--brand-gradient);
+    background: linear-gradient(
+      100deg,
+      var(--primary) 0%,
+      color-mix(in oklab, var(--primary) 70%, var(--brand)) 100%
+    );
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -743,9 +1015,22 @@
   to { opacity: 1; transform: none; }
 }
 
+/* The page arriving: a little further, a little faster, with a touch of scale
+   so it reads as coming forward rather than merely fading in. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.56 0.215 26 / 0.32); }
-  50% { box-shadow: 0 0 0 6px oklch(0.56 0.215 26 / 0); }
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.538 0.20 26 / 0.34); }
+  50% { box-shadow: 0 0 0 6px oklch(0.538 0.20 26 / 0); }
 }
 
 /* A gauge counting up to its value. The dash offset is set inline by the
@@ -768,6 +1053,9 @@
   /* Content arriving: 8px up, 240ms, done. */
   .motion-rise {
     animation: rise 240ms var(--ease-out-quint) both;
+  }
+  .motion-page {
+    animation: page-in 200ms var(--ease-out-quint) both;
   }
 
   /*
@@ -837,6 +1125,7 @@
     zero dash offset, not a reset transform.
   */
   .motion-rise,
+  .motion-page,
   .motion-stagger > *,
   .motion-breach,
   .motion-bar {
@@ -876,6 +1165,9 @@
     --glass-edge: oklch(0.75 0 0);
     --glass-shadow: none;
     --glass-shadow-lifted: none;
+    --glass-rim: none;
+    --glass-sheen: none;
+    --grain: 0;
     --glass-specular: none;
     --muted-foreground: oklch(0.42 0 0);
     --border: oklch(0.75 0 0);

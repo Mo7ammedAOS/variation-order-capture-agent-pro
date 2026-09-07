@@ -59,7 +59,14 @@ export function GaugeRing({
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  const ratio = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
+  /*
+    `total === 0` is "nothing to measure", not "zero per cent". A ring reading
+    a hard 0% on a fresh deployment is a false statement about a company that
+    has simply not raised a change yet — and on the notice gauge it is the
+    alarming direction to be wrong in.
+  */
+  const measurable = total > 0;
+  const ratio = measurable ? Math.min(1, Math.max(0, value / total)) : 0;
   const offset = circumference * (1 - ratio);
   const percent = Math.round(ratio * 100);
 
@@ -86,7 +93,11 @@ export function GaugeRing({
           viewBox={`0 0 ${size} ${size}`}
           className="-rotate-90"
           role="img"
-          aria-label={`${label}: ${value} of ${total}, ${percent} per cent`}
+          aria-label={
+            measurable
+              ? `${label}: ${value} of ${total}, ${percent} per cent`
+              : `${label}: nothing to measure yet`
+          }
         >
           <defs>
             {/*
@@ -125,15 +136,21 @@ export function GaugeRing({
         </svg>
 
         <span className="absolute inset-0 flex flex-col items-center justify-center">
-          <span
-            className={cn(
-              'tabular text-[1.4rem] font-extrabold leading-none tracking-[-0.04em]',
-              numberColour,
-            )}
-          >
-            {percent}
-            <span className="text-[0.8rem] font-bold">%</span>
-          </span>
+          {measurable ? (
+            <span
+              className={cn(
+                'tabular text-[1.4rem] font-extrabold leading-none tracking-[-0.04em]',
+                numberColour,
+              )}
+            >
+              {percent}
+              <span className="text-[0.8rem] font-bold">%</span>
+            </span>
+          ) : (
+            <span className="text-[1.4rem] font-extrabold leading-none text-muted-foreground">
+              —
+            </span>
+          )}
         </span>
       </div>
 
@@ -143,7 +160,7 @@ export function GaugeRing({
           <p className="mt-1 text-xs leading-snug text-muted-foreground">{caption}</p>
         ) : null}
         <p className="tabular mt-1.5 text-xs font-semibold text-muted-foreground">
-          {value.toLocaleString()} of {total.toLocaleString()}
+          {measurable ? `${value.toLocaleString()} of ${total.toLocaleString()}` : 'Nothing yet'}
         </p>
       </div>
     </div>
@@ -178,6 +195,24 @@ export interface FunnelStage {
  * width tells you nothing; the point is the shrinking.
  */
 export function FunnelRail({ stages }: { stages: FunnelStage[] }) {
+  /*
+    Nothing agreed yet.
+
+    On a fresh deployment every stage is zero, and the bars were rendering as
+    three 2%-wide slivers under three "AED 0" labels — which looks like a
+    chart that failed rather than a company that has not raised a variation
+    yet. Seen on the real thing the moment there was an empty database behind
+    it, which is exactly the case a mock never shows you.
+  */
+  if (stages.every((stage) => stage.amount === 0)) {
+    return (
+      <p className="py-6 text-sm leading-relaxed text-muted-foreground">
+        No variation has been agreed by a client yet. This fills in as changes are
+        priced, submitted and approved.
+      </p>
+    );
+  }
+
   const top = Math.max(...stages.map((stage) => stage.amount), 1);
 
   return (

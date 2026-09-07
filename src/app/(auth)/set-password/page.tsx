@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { HardHat, KeyRound } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
+import { AuthShell } from '../sign-in-screen';
 import { SetPasswordForm } from './set-password-form';
 
 export const metadata: Metadata = { title: 'Set your password' };
@@ -25,23 +25,8 @@ export default async function SetPasswordPage() {
   const companyName = settings?.displayCompanyName ?? 'VO Capture & Control';
 
   return (
-    <main data-auth-screen className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <section className="panel flex w-full max-w-md flex-col justify-center p-7 sm:p-9">
-        <div className="mb-7 flex flex-col gap-3">
-          <span className="brand-fill flex size-11 items-center justify-center rounded-xl shadow-[var(--brand-glow)]">
-            <HardHat aria-hidden className="size-5" />
-          </span>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-[-0.02em]">{companyName}</h1>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <KeyRound aria-hidden className="size-3.5" />
-              Choose the password for your account
-            </p>
-          </div>
-        </div>
-
-        <SetPasswordForm />
-      </section>
-    </main>
+    <AuthShell companyName={companyName} subtitle="Choose the password for your account">
+      <SetPasswordForm />
+    </AuthShell>
   );
 }

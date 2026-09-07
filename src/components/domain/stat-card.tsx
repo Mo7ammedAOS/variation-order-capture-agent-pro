@@ -49,7 +49,7 @@ export function StatCard({
   }[tone];
 
   const tileClass = {
-    neutral: 'bg-[var(--glass-soft)] text-muted-foreground border-border',
+    neutral: 'glass-lens text-muted-foreground border-transparent',
     green: 'bg-risk-green-bg text-risk-green border-transparent',
     amber: 'bg-risk-amber-bg text-risk-amber border-transparent',
     red: 'bg-risk-red-bg text-risk-red border-transparent',

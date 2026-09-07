@@ -1,87 +1,51 @@
-import Link from 'next/link';
-import { Bell, LogOut } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
 import { countMyUnread } from '@/services/notification.service';
-import { SYSTEM_ROLE_LABELS, type Capability } from '@/lib/rbac';
+import { type Capability } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
-import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { signOut } from '@/app/(auth)/actions';
-import { MobileNav, ReportChangeFab, SidebarNav } from './nav';
-// Plain data, from a module with no 'use client'. Importing it from './nav'
-// hands a server component a client-reference proxy instead of the array,
-// which builds and typechecks and then 500s every page in production.
+import { scopeProjectsToUser } from '@/services/project-access.service';
+import { MobileNav } from './nav';
+import { IconRail } from './icon-rail';
+import { TopBar } from './top-bar';
+import { ProjectSwitcher, type SwitcherProject } from './project-switcher';
+import { ReportChangeButton } from './report-change-button';
+// Plain data, from a module with no 'use client'. Importing it from a client
+// module hands a server component a client-reference proxy instead of the
+// array, which builds and typechecks and then 500s every page in production.
 import { NAV_LINKS, type NavLink } from './nav-links';
 import { CommandPalette } from './command-palette';
-import { CommandTrigger } from './command-trigger';
+import { NavProgressBar, NavProgressProvider } from './nav-progress';
 import { PageTransition } from '@/components/domain/page-transition';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The count is written out, not just implied by a dot.
+ * THE SHELL.
  *
- * "You have something" is not actionable; "you have four things, two of them
- * overdue" is the difference between opening it now and opening it later. The
- * label carries the number too, so it is announced rather than merely seen.
+ *   ┌─ top bar ────────────────────────────────────────────┐   floating pill
+ *   ┌ rail ┐  ┌─ stage ──────────────────────────────────┐     the page lives
+ *   │ icons│  │  the page                                │     inside one pane
+ *   └──────┘  └──────────────────────────────────────────┘
+ *              ┌─ projects ─┐                                 floating pill
  *
- * The badge is one of only two places outside the RAG scale where red appears,
- * and it is legitimate: an unread count IS a backlog. It does not breathe —
- * that is reserved for a breached notice period.
+ * Four floating surfaces over a photograph of a finished fit-out, with real
+ * gaps between them so the room shows through. Nothing is welded to an edge of
+ * the window — that gap is the entire difference between "glass panels in a
+ * room" and "a website with a background image".
+ *
+ * ── What was removed, and why ─────────────────────────────────────────────
+ * The 256px labelled sidebar, the company name block, the separate sidebar
+ * search box, the user-name-and-role block and the labelled sign-out button
+ * are all gone. Together they were a quarter of a laptop screen spent on
+ * things that never change, in a product whose actual content is a register
+ * with more columns than fit. Their jobs moved: navigation to the rail,
+ * search into the top bar where it is now the widest control on screen,
+ * identity to the avatar, sign-out to the foot of the rail.
  */
-function NotificationBell({ unread, className }: { unread: number; className?: string }) {
-  return (
-    <Link
-      href="/notifications"
-      aria-label={unread === 0 ? 'Notifications' : `Notifications, ${unread} unread`}
-      className={`relative inline-flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground ${className ?? ''}`}
-    >
-      <Bell aria-hidden className="size-[1.05rem]" />
-      {unread > 0 ? (
-        <span className="absolute -end-0.5 -top-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-risk-red px-1 text-[10px] font-bold leading-[1.1rem] text-white shadow-sm">
-          {unread > 9 ? '9+' : unread}
-        </span>
-      ) : null}
-    </Link>
-  );
-}
-
-/**
- * The mark. An SVG rather than the Lucide hard hat, because at 20px inside a
- * gradient tile the icon needs a heavier stroke than the icon set's 2px to
- * survive — and because this is the one glyph in the product that is ours.
- */
-function BrandMark({ className }: { className?: string }) {
-  return (
-    <span
-      className={`brand-fill flex shrink-0 items-center justify-center rounded-xl shadow-[var(--brand-glow)] ${className ?? ''}`}
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-        className="size-[55%]"
-      >
-        <path d="M2 18h20" />
-        <path d="M4.5 18V9.5a7.5 7.5 0 0 1 15 0V18" />
-        <path d="M9.5 3.4A7.5 7.5 0 0 0 8.6 7" />
-        <path d="M14.5 3.4a7.5 7.5 0 0 1 .9 3.6" />
-      </svg>
-    </span>
-  );
-}
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePageUser();
-  const [settings, unread, projectRoles] = await Promise.all([
-    prisma.companySettings
-      .findFirst({ select: { displayCompanyName: true } })
-      .catch(() => null),
+
+  const [unread, projectRoles] = await Promise.all([
     // A failure to count must never cost someone the whole application shell.
     countMyUnread(user).catch(() => 0),
     // EVERY project role this person holds, anywhere. The nav is not on a
@@ -117,141 +81,127 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     )
   ).filter((link): link is NavLink => link !== null);
 
-  const companyName = settings?.displayCompanyName ?? 'VO Capture';
+  /*
+    The jobs in the bottom bar.
+
+    Scoped through `scopeProjectsToUser`, which is the same gate every other
+    project read goes through — the switcher must never become the one
+    place a project leaks from. Only the three columns the pills need are
+    selected: `listProjects` also joins every member and their user record,
+    which is a lot of rows to fetch for a strip of short codes.
+
+    Capped at twelve. Beyond that the bar is a scrolling ribbon nobody reads,
+    and the Projects page is the right tool.
+  */
+  const projects: SwitcherProject[] = await scopeProjectsToUser(user)
+    .then((scope) =>
+      prisma.project.findMany({
+        where: { ...scope, projectStatus: 'active' },
+        select: { id: true, projectCode: true, projectName: true },
+        orderBy: { projectCode: 'asc' },
+        take: 12,
+      }),
+    )
+    .then((rows) =>
+      rows.map((row) => ({ id: row.id, code: row.projectCode, name: row.projectName })),
+    )
+    .catch(() => []);
+
+  const firstName = user.fullName.trim().split(/\s+/)[0] ?? user.fullName;
 
   return (
     /*
-      No background here any more. The ground is a fixed photographic layer
-      painted by `body::before` in globals.css, and every surface below floats
-      over it. A background on this element would sit between the two and hide
-      the whole design.
-    */
-    <div className="flex min-h-dvh flex-col md:flex-row">
-      {/*
-        Skip to content, first in the DOM.
+      THE SHELL DOES NOT SCROLL. The stage does.
 
-        The shell places a search box and up to nine navigation links ahead of
-        every page's first heading, so anyone driving this from a keyboard or a
-        switch was tabbing through the same eleven controls on every single
-        navigation. This was simply missing.
-      */}
+      `h-dvh` + `overflow-hidden` pins the whole frame to exactly one screen,
+      so the top bar, the rail and the project switcher are always where you
+      left them and content can never travel up behind the bar. The page inside
+      the stage scrolls within its own rounded pane — which is what the glass
+      composition implies: panels are objects on a desk, and paper moves inside
+      them rather than the desk sliding away.
+
+      `dvh` rather than `vh` because a phone's address bar changes the viewport
+      height as you scroll, and `vh` would leave the bottom bar cut off.
+
+      Print undoes all of it: a clipped scroll container prints one screenful
+      and silently drops the rest of the register, which is the sort of bug you
+      only discover in a meeting.
+    */
+    <NavProgressProvider>
+    <div
+      className={[
+        'flex h-dvh flex-col gap-3 overflow-hidden p-3 md:gap-4 md:p-4',
+        'print:block print:h-auto print:overflow-visible print:p-0',
+      ].join(' ')}
+    >
+      <NavProgressBar />
+
       <a href="#main" className="skip-link">
         <span className="brand-fill inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-bold shadow-[var(--brand-glow)]">
           Skip to content
         </span>
       </a>
 
-      {/*
-        The rail FLOATS. Insets on all four sides and its own radius, rather
-        than a full-height column butted against the edge of the window — the
-        gap is what lets the photograph run behind it and makes the glass read
-        as a sheet rather than as a differently-coloured region of the page.
+      <TopBar fullName={user.fullName} firstName={firstName} unread={unread} />
 
-        `sticky` with its own scroll: on a laptop the menu must stay put while
-        a two-hundred-row register scrolls beside it, and on a short window the
-        menu itself has to be reachable.
-      */}
-      <aside className="hidden p-3 pe-0 md:block print:hidden">
-        <div className="panel glass-chrome sticky top-3 flex h-[calc(100dvh-1.5rem)] w-64 flex-col overflow-y-auto">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2.5 rounded-xl px-4 py-4 transition-colors hover:bg-accent/50"
-          >
-            <BrandMark className="size-9" />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-bold leading-tight tracking-[-0.02em]">
-                {companyName}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                Variation control
-              </span>
-            </span>
-          </Link>
+      <div className="flex min-h-0 flex-1 gap-3 md:gap-4">
+        <IconRail links={links} />
 
-          <div className="flex-1 px-3">
-            <CommandTrigger />
-            <SidebarNav links={links} />
-          </div>
-
-          <div className="p-3">
-            <div className="mb-2 flex items-center gap-2 px-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{user.fullName}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {SYSTEM_ROLE_LABELS[user.systemRole]}
-                </p>
-              </div>
-              <NotificationBell unread={unread} className="shrink-0" />
-            </div>
-
-            <div className="mb-2 flex justify-center">
-              <ThemeToggle />
-            </div>
-
-            <form action={signOut}>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-muted-foreground hover:text-foreground"
-              >
-                <LogOut aria-hidden className="size-4" />
-                Sign out
-              </Button>
-            </form>
-          </div>
-        </div>
-      </aside>
-
-      {/*
-        Phone header. Sticky and glass so the company name and the way out stay
-        reachable while a register scrolls under them.
-      */}
-      <header className="glass-chrome sticky top-0 z-40 flex items-center justify-between border-b px-4 py-2.5 md:hidden print:hidden">
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
-          <BrandMark className="size-8" />
-          <span className="truncate text-sm font-bold tracking-[-0.02em]">{companyName}</span>
-        </Link>
-        <div className="flex shrink-0 items-center gap-1">
-          <ThemeToggle />
-          <NotificationBell unread={unread} />
-          <form action={signOut}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="iconSm"
-              aria-label="Sign out"
-              className="text-muted-foreground"
-            >
-              <LogOut aria-hidden className="size-4" />
-            </Button>
-          </form>
-        </div>
-      </header>
-
-      {/* Bottom padding clears the mobile nav bar and the capture button. */}
-      {/* Printing drops the padding and the bottom clearance: the nav is hidden on
-          paper, so the space it reserved is a blank strip at the foot of a page. */}
-      <main
-        id="main"
-        /* -1 so the skip link can move focus here without making the region
-           itself a tab stop for everyone else. */
-        tabIndex={-1}
-        className="min-w-0 flex-1 px-4 py-5 pb-36 outline-none md:px-6 md:py-6 md:pb-10 print:p-0"
-      >
         {/*
+          THE STAGE. One pane, and the page renders inside it.
+
           `min-w-0` is load-bearing. A flex item defaults to min-width:auto, so
           without it this grows to the width of its widest child — the fifteen
           column register — and the whole PAGE scrolls sideways instead of the
-          table scrolling inside its own container. The sidebar then slides off
+          table scrolling inside its own container. The rail then slides off
           screen, which is the visible symptom of a rule about a table.
         */}
-        <PageTransition>{children}</PageTransition>
-      </main>
+        <main
+          id="main"
+          /* -1 so the skip link can move focus here without making the region
+             itself a tab stop for everyone else. */
+          tabIndex={-1}
+          className={[
+            'panel panel-stage min-w-0 flex-1 rounded-[1.75rem] p-4 outline-none sm:p-5 md:p-6',
+            /*
+              The scroll container. `min-h-0` is what makes it one: a flex item
+              defaults to `min-height: auto`, which refuses to shrink below its
+              content, so the item would grow past the frame and the PAGE would
+              scroll again — exactly the behaviour being removed.
 
-      <MobileNav />
-      <ReportChangeFab />
+              `overflow-y-auto` also overrides `.panel`'s `overflow: hidden`,
+              which would otherwise clip the content with no way to reach it.
+            */
+            'min-h-0 overflow-y-auto',
+            // Clears the floating phone nav and the capture button.
+            'pb-32 md:pb-6',
+            'print:h-auto print:overflow-visible print:rounded-none print:border-0 print:bg-transparent print:p-0 print:shadow-none',
+          ].join(' ')}
+        >
+          <PageTransition>{children}</PageTransition>
+        </main>
+      </div>
+
+      {/*
+        The bottom row: the jobs you work on, and the one action this product
+        exists for, in a single centred group so they can never collide.
+      */}
+      <div className="flex items-center justify-center gap-3 print:hidden">
+        <ProjectSwitcher projects={projects} />
+        <ReportChangeButton className="hidden md:inline-flex" />
+      </div>
+
+      {/*
+        The same button on a phone, where the row above is hidden and the
+        bottom edge belongs to the nav bar. Only ever ONE of the two is
+        rendered at a given width — this is one control, positioned twice, not
+        two controls.
+      */}
+      <ReportChangeButton className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] start-1/2 z-30 -translate-x-1/2 md:hidden" />
+
+      <MobileNav links={links} />
       <CommandPalette links={links} />
     </div>
+    </NavProgressProvider>
   );
 }

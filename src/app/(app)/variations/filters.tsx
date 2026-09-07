@@ -79,7 +79,7 @@ export function RegisterFilters({ projects }: { projects: { id: string; label: s
             <SlidersHorizontal aria-hidden className="size-4" />
             Filters
             {activeCount > 0 ? (
-              <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+              <span className="brand-fill rounded-full px-2 py-0.5 text-xs font-bold">
                 {activeCount}
               </span>
             ) : null}

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { HardHat, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { isSetupAvailable } from '../setup';
+import { AuthShell } from '../sign-in-screen';
 import { SignupForm } from './signup-form';
 
 export const metadata: Metadata = { title: 'Set up the company' };
@@ -22,31 +23,19 @@ export default async function AdminSignupPage() {
   if (!(await isSetupAvailable())) redirect('/admin-signin');
 
   return (
-    <main data-auth-screen className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <section className="panel flex w-full max-w-md flex-col justify-center p-7 sm:p-9">
-        <div className="mb-7 flex flex-col gap-3">
-          <span className="brand-fill flex size-11 items-center justify-center rounded-xl shadow-[var(--brand-glow)]">
-            <HardHat aria-hidden className="size-5" />
-          </span>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-[-0.02em]">Set up your company</h1>
-            <p className="mt-1 text-sm leading-snug text-muted-foreground">
-              This creates the owner account and switches set-up off. Everybody else is added
-              from Settings → Users afterwards.
-            </p>
-          </div>
-        </div>
+    <AuthShell
+      companyName="Set up your company"
+      subtitle="This creates the owner account and switches set-up off. Everybody else is added from Settings → Users afterwards."
+    >
+      <SignupForm />
 
-        <SignupForm />
-
-        <p className="mt-6 flex items-start gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          Already set up?{' '}
-          <Link href="/admin-signin" className="underline underline-offset-4">
-            Sign in instead
-          </Link>
-        </p>
-      </section>
-    </main>
+      <p className="mt-6 flex flex-wrap items-start gap-1.5 text-xs text-muted-foreground">
+        <ShieldCheck aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        Already set up?{' '}
+        <Link href="/admin-signin" className="font-semibold underline underline-offset-4">
+          Sign in instead
+        </Link>
+      </p>
+    </AuthShell>
   );
 }
