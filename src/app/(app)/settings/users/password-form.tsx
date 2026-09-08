@@ -67,9 +67,15 @@ export function PasswordControls({
   if (!open) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="iconSm"
+          onClick={() => setOpen(true)}
+          title="Set a password or send a link"
+          aria-label={`Set a password for ${fullName}`}
+        >
           <KeyRound aria-hidden className="size-4" />
-          Password
         </Button>
         {state.ok ? (
           <p className="flex items-center gap-1 text-xs text-risk-green">

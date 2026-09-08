@@ -50,11 +50,24 @@ export function DeleteControls({
   const [state, formAction] = useActionState<DeleteState, FormData>(deleteUserAction, {});
 
   if (blockedBy.length > 0) {
+    /*
+      A disabled icon rather than a sentence. The explanation used to be two
+      lines of prose in the actions column, which set the width of the whole
+      register for every row — including the ones it did not apply to. The
+      reason still has to be reachable, so it is the `title`: the control is
+      visibly present and visibly unavailable, and hovering says why.
+    */
     return (
-      <p className="max-w-56 text-end text-xs text-muted-foreground">
-        Cannot be deleted — {blockedBy.slice(0, 2).join(' and ')} still name them.
-        Deactivate instead.
-      </p>
+      <span
+        title={`Cannot be deleted — ${blockedBy.slice(0, 2).join(' and ')} still name them. Deactivate instead.`}
+        className="inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground/50"
+      >
+        <Trash2 aria-hidden className="size-4" />
+        <span className="sr-only">
+          {fullName} cannot be deleted because {blockedBy.slice(0, 2).join(' and ')} still name
+          them. Deactivate instead.
+        </span>
+      </span>
     );
   }
 
@@ -64,12 +77,13 @@ export function DeleteControls({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="text-risk-red"
+          size="iconSm"
+          className="text-risk-red hover:bg-risk-red-bg"
           onClick={() => setAsking(true)}
+          title="Delete permanently"
+          aria-label={`Delete ${fullName} permanently`}
         >
           <Trash2 aria-hidden className="size-4" />
-          Delete
         </Button>
         {state.error ? (
           <p role="alert" className="flex max-w-64 items-start gap-1 text-start text-xs text-risk-red">

@@ -209,14 +209,39 @@ action attached. AI suggests; humans approve.
 **The UI never computes a commercial number.** Every figure comes from a service
 that has been tested. If a number is wrong, it is wrong in one place.
 
-**The register's table header does not stick.** It was written as
-`sticky top-0` and could never have worked: the wrapper sets `overflow-x: auto`,
-which per spec forces `overflow-y` to `auto` as well, so the wrapper is a scroll
-container in both axes — and with no height constraint it never scrolls
-vertically, leaving `sticky` nothing to resolve against. The page scrolls, the
-container does not. Making it genuinely stick means either a fixed-height
-scroll region or abandoning horizontal scroll; both are larger decisions than a
-header and neither is worth making silently.
+**The register is a bounded scroll box**, capped at `min(70vh, 42rem)`. That
+one decision fixes two things that look separate and are the same:
+
+- The **horizontal scrollbar used to sit at the bottom of the table**, so on a
+  two-hundred-row register you had to scroll to the end of the data before you
+  could slide sideways, then scroll back up to read what you found. It is now
+  pinned to the bottom of what you can *see*.
+- The **sticky header could never engage**. Sticky resolves against the nearest
+  scrolling ancestor, and a container with no height constraint never scrolls
+  vertically. It was removed once as inert; capping the height is what makes it
+  possible.
+
+The header is the one **effectively opaque** surface in the product
+(`--table-head`, 0.97). Rows scroll underneath it, and at the 0.78 the rest of
+the glass uses you could read the data straight through the column names. It is
+declared in **both** palettes: a near-opaque token that exists only in `:root`
+comes out as a white bar over dark rows.
+
+**Print releases the box** — `max-height: none` and `overflow: visible` on
+`.table-scroller`, or a printed register stops at one screen of rows and drops
+the rest without saying so.
+
+The table uses `border-separate`, not `border-collapse`: a collapsed table
+shares borders between cells, and a shared border belongs to neither, so it
+does not travel with a sticky header and the heading loses its underline the
+moment it lifts.
+
+**Row actions are icons in a line** (`TableActions`). They were four labelled
+buttons stacked vertically — "Add WhatsApp number", "Password", "Deactivate",
+"Delete" — which made every row four lines tall and set the width of the whole
+register. All four stay visible; nothing hides behind a "⋯" menu that costs a
+click to discover what is even available. Each carries a `title` and an
+`aria-label`.
 
 **Focus rings are `outline` with `outline-offset`, never `ring-offset`.**
 `ring-offset` paints a solid band in the offset colour, and these controls sit

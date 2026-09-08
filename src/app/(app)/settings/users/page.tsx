@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { UserCheck, UserX } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { describeUserHistory, listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
@@ -10,7 +11,15 @@ import { PhoneControls } from './phone-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableActions,
+} from '@/components/ui/table';
 import { InviteForm } from './invite-form';
 import { toggleCompanyAdminAction, toggleUserActiveAction } from './actions';
 
@@ -134,7 +143,7 @@ export default async function UsersPage() {
                 </TableCell>
                 <TableCell className="text-end">
                   {user.canAdministerCompany && row.id !== user.id ? (
-                    <div className="flex flex-col items-end gap-1.5">
+                    <TableActions>
                       {/* The handset, above the password, because on a fit-out
                           job it changes hands far more often than a login. */}
                       <PhoneControls
@@ -146,8 +155,18 @@ export default async function UsersPage() {
                       <form action={toggleUserActiveAction}>
                         <input type="hidden" name="userId" value={row.id} />
                         <input type="hidden" name="active" value={String(!row.active)} />
-                        <Button type="submit" variant="ghost" size="sm">
-                          {row.active ? 'Deactivate' : 'Reactivate'}
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="iconSm"
+                          title={row.active ? 'Deactivate this account' : 'Reactivate this account'}
+                          aria-label={`${row.active ? 'Deactivate' : 'Reactivate'} ${row.fullName}`}
+                        >
+                          {row.active ? (
+                            <UserX aria-hidden className="size-4" />
+                          ) : (
+                            <UserCheck aria-hidden className="size-4" />
+                          )}
                         </Button>
                       </form>
                       {/* Last, and the only one that cannot be pressed again to
@@ -158,7 +177,7 @@ export default async function UsersPage() {
                         fullName={row.fullName}
                         blockedBy={describeUserHistory(row._count)}
                       />
-                    </div>
+                    </TableActions>
                   ) : null}
                 </TableCell>
               </TableRow>

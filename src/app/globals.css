@@ -109,6 +109,15 @@
   --glass-stage: oklch(1 0 0 / 0.58);
   --glass-lens: oklch(1 0 0 / 0.72);
   --glass-shadow-sm: 0 6px 18px -8px oklch(0.20 0.02 265 / 0.28);
+  /*
+    The sticky table header is the ONE surface in this product that is
+    effectively opaque, and it has to be. Rows scroll underneath it, and at the
+    0.78 the rest of the glass uses you could read the data straight through
+    the column names — which looks like a rendering fault, not like a fixed
+    header. 0.97 keeps a trace of the card's tint without letting anything
+    through.
+  */
+  --table-head: oklch(0.995 0.002 250 / 0.97);
   --glass-recess:
     inset 0 1px 2px 0 oklch(0.20 0.02 265 / 0.10),
     inset 0 0 0 1px oklch(0.20 0.02 265 / 0.08),
@@ -355,6 +364,19 @@
   --card-foreground: oklch(0.97 0.004 250);
   --popover: oklch(0.20 0.018 265 / 0.90);
   --popover-foreground: oklch(0.97 0.004 250);
+  /*
+    The dark half of --table-head, and it has to exist.
+
+    The token was declared once, in the light palette, as a near-white. Dark
+    mode inherited it — so the sticky header came out as a white bar carrying
+    pale grey column names, over dark rows. Every token that differs by theme
+    has to be redefined here or the theme silently borrows the other one's
+    value; a near-opaque surface is the case where that is impossible to miss.
+
+    Matched to --popover rather than --glass: both are surfaces that something
+    else passes behind, and this one is 0.97 for the reason given above.
+  */
+  --table-head: oklch(0.205 0.018 265 / 0.97);
 
   /*
     The brand lifts in the dark. An orange tuned for a white ground goes muddy
@@ -911,6 +933,47 @@
     box-shadow: var(--glass-rim), var(--glass-shadow-sm);
   }
 
+  /*
+    THE REGISTER'S SCROLLBAR.
+
+    Deliberately heavier than the app's default 10px hairline. It is now the
+    primary way to move across a fifteen-column register, so it has to look
+    like something you can take hold of — and because the box is height-capped
+    it is always on screen, which is the whole point of the change.
+
+    `scrollbar-gutter: stable` reserves the track whether or not it is needed,
+    so a register that grows past the fold does not shift its columns sideways
+    by 14px the moment the vertical bar appears.
+  */
+  .table-scroller {
+    scrollbar-gutter: stable;
+    scrollbar-width: auto;
+    scrollbar-color: var(--input) transparent;
+  }
+  .table-scroller::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+  }
+  .table-scroller::-webkit-scrollbar-track {
+    background: oklch(from var(--foreground) l c h / 0.04);
+    border-radius: 999px;
+  }
+  .table-scroller::-webkit-scrollbar-thumb {
+    background: var(--input);
+    border: 4px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  .table-scroller::-webkit-scrollbar-thumb:hover {
+    background: oklch(from var(--foreground) l c h / 0.34);
+    background-clip: content-box;
+  }
+  /* The corner where the two bars meet, which otherwise renders as a small
+     opaque square in the browser's own colour. */
+  .table-scroller::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   /* Brand fills, so the gradient is defined once. */
   /*
     Skip to content. Off-screen until focused, then a real, visible control.
@@ -1212,6 +1275,20 @@
 
   thead {
     display: table-header-group;
+  }
+
+  /*
+    Let the register out of its box.
+
+    The scroller is capped at min(70vh, 42rem) and scrolls in both axes, which
+    is right on a screen and wrong on paper: printed, it clipped every register
+    to one screen of rows and dropped the rest silently — the worst kind of
+    failure, because the page looks complete. Print gets the whole table, with
+    `thead` repeating on each sheet by the rule above.
+  */
+  .table-scroller {
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   a[href]::after {

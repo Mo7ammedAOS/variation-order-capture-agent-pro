@@ -50,9 +50,23 @@ export function PhoneControls({
   if (!open) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        {/*
+          Icon only, in the row rather than above it. The label was the widest
+          thing in the register and it made every row four lines tall; `title`
+          and `aria-label` carry the words for a hover and a screen reader.
+          A number already on file is the one state worth showing, so a set
+          handset gets the brand tint and an empty one stays quiet.
+        */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="iconSm"
+          onClick={() => setOpen(true)}
+          title={phone ? `WhatsApp: ${phone}` : 'Add WhatsApp number'}
+          aria-label={phone ? `Change WhatsApp number for ${fullName}` : `Add a WhatsApp number for ${fullName}`}
+          className={phone ? 'text-primary' : undefined}
+        >
           <Smartphone aria-hidden className="size-4" />
-          {phone ?? 'Add WhatsApp number'}
         </Button>
         {state.ok ? (
           <p className="flex items-center gap-1 text-xs text-risk-green">
