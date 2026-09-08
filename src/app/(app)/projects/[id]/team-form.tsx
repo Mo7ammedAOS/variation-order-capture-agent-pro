@@ -48,8 +48,8 @@ export function AddMemberForm({
       <Card>
         <CardContent className="py-8 text-center">
           <p className="text-sm text-muted-foreground">
-            Everyone in the company is already on this project. Invite more people from
-            Settings → Users.
+            Everyone in the company is already on this project. Add more people
+            in Settings, then Users.
           </p>
         </CardContent>
       </Card>
@@ -61,8 +61,8 @@ export function AddMemberForm({
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Add someone to this project</CardTitle>
         <p className="text-sm text-muted-foreground">
-          The project role decides what they can do here. Their company role is separate
-          and does not change.
+          The project role decides what they can do on this project. Their company
+          role is separate and does not change.
         </p>
       </CardHeader>
       <CardContent>

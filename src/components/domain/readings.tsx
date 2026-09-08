@@ -207,8 +207,8 @@ export function FunnelRail({ stages }: { stages: FunnelStage[] }) {
   if (stages.every((stage) => stage.amount === 0)) {
     return (
       <p className="py-6 text-sm leading-relaxed text-muted-foreground">
-        No variation has been agreed by a client yet. This fills in as changes are
-        priced, submitted and approved.
+        No client has agreed a variation yet. This fills in once changes are priced,
+        sent and approved.
       </p>
     );
   }

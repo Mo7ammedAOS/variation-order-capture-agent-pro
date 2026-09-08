@@ -82,7 +82,8 @@ export function CasePanel({
               }
             />
             <p className="text-xs text-muted-foreground">
-              Somebody will read this in a year, and they were not there.
+              Someone will read this in a year, and they were not there when
+              it happened.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -167,8 +168,9 @@ function DeleteControl({ potentialChangeId }: { potentialChangeId: string }) {
             Delete permanently? This cannot be undone.
           </p>
           <p className="text-xs text-muted-foreground">
-            The change, its tasks, its pricing and any unissued notice go. Photographs and
-            documents stay in the project library, and the deletion is recorded against your name.
+            This removes the change, its tasks, its pricing and any notice not
+            yet sent. Photos and documents stay in the project library. Your
+            name is saved against the deletion.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <DeleteSubmit />
@@ -199,8 +201,9 @@ function DeleteControl({ potentialChangeId }: { potentialChangeId: string }) {
             Delete permanently
           </Button>
           <p className="text-xs text-muted-foreground">
-            For a record that should never have existed — a test, or the same change filed twice.
-            A real claim gets cancelled, not deleted.
+            Only for a record that should never have been made, like a test or
+            the same change entered twice. A real claim should be cancelled, not
+            deleted.
           </p>
         </div>
       )}

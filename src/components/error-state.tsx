@@ -38,9 +38,9 @@ export function ErrorState({
           Something went wrong at our end
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          This is a fault in the application, not something you did, and nothing you
-          had entered has been lost. Try again first. If it happens twice, sign out
-          and back in — that clears a stale session, which is the most common cause.
+          Something broke in the app. It was not your fault, and nothing you typed
+          has been lost. Try again. If it happens twice, sign out and sign back
+          in, which fixes it most of the time.
         </p>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">

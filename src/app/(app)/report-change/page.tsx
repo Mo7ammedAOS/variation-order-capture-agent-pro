@@ -26,8 +26,8 @@ export default async function ReportChangePage({
       <header>
         <h1 className="page-title">Report a change</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Capture it now. The notice clock starts from the date it happened, not the date
-          it was written up.
+          Report it now. Your deadline is counted from the day it happened, not
+          the day someone wrote it down.
         </p>
       </header>
 

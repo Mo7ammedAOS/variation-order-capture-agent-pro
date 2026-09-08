@@ -49,8 +49,8 @@ export function AssessmentForm({ potentialChangeId }: { potentialChangeId: strin
           Notice assessment
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Your decision is recorded against your name and cannot be made by anyone else on
-          your behalf.
+          Your name is saved against this decision. Nobody else can make it for
+          you.
         </p>
       </CardHeader>
       <CardContent>

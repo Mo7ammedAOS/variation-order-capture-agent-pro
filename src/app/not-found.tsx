@@ -32,8 +32,9 @@ export default function NotFound() {
           That page is not here
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-          The address may be wrong, the record may have been closed, or it may sit on a
-          project you are not assigned to. Your dashboard will have the current position.
+          The address might be wrong, the record might have been closed, or it
+          might be on a project you are not on. Your overview page will show where
+          things stand.
         </p>
 
         <div className="mt-6 flex flex-wrap justify-center gap-2">

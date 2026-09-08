@@ -27,7 +27,8 @@ export default async function PermissionsPage() {
             <CardContent className="py-12 text-center">
               <p className="font-medium">Permissions are restricted</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Only a company administrator can change who may do what.
+                Only a company administrator can change who is allowed to do
+                what.
               </p>
             </CardContent>
           </Card>
@@ -63,9 +64,9 @@ export default async function PermissionsPage() {
         <div>
           <h1 className="page-title">Permissions</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Who may do what, on your director&apos;s authority rather than ours. Changes take
-            effect within seconds and every one is recorded against your name. A cell that is
-            not ticked is a refusal, not a gap.
+            Who is allowed to do what. Your director decides this, not us.
+            Changes work within seconds, and your name is saved against each
+            one. An empty box means no. It does not mean nobody has decided yet.
           </p>
         </div>
         <ResetDefaultsButton />
@@ -89,9 +90,9 @@ export default async function PermissionsPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Project roles</CardTitle>
           <p className="text-sm text-muted-foreground">
-            What someone can do on a project they have been added to, set on the project&apos;s
-            Team tab. Where a person holds two roles they get the union of both, never the
-            narrower one.
+            What someone can do on a project they have been added to. You set
+            this on the project&apos;s Team tab. If a person has two roles, they get
+            everything both roles allow.
           </p>
         </CardHeader>
         <CardContent className="min-w-0">

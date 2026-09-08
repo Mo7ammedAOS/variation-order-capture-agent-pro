@@ -158,9 +158,9 @@ export function ContractRulesForm({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Notice</CardTitle>
           <p className="text-sm text-muted-foreground">
-            The notice period turns an event date into a contractual deadline. Changing it
-            applies to changes captured from now on; deadlines already calculated on
-            existing changes stay as they were.
+            The notice period turns the date something happened into your
+            deadline. Changing it here only affects changes reported from now
+            on. Deadlines already worked out stay as they are.
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -174,7 +174,7 @@ export function ContractRulesForm({
             name="contractClauseReference"
             label="Clause reference"
             value={values.contractClauseReference}
-            hint="The clause the notice is served under."
+            hint="The clause in the contract that the notice is sent under."
             placeholder="20.1"
           />
           <DaysField
@@ -182,20 +182,20 @@ export function ContractRulesForm({
             label="Notice period (days)"
             value={values.noticePeriodDays}
             max={365}
-            hint="Calendar days from the event date. Read this off the contract, not from memory."
+            hint="How many days you get to send a notice, counted from the day it happened. Every day counts, including weekends. Check the contract, do not guess."
           />
           <DaysField
             name="detailedClaimPeriodDays"
             label="Detailed claim period (days)"
             value={values.detailedClaimPeriodDays}
             max={365}
-            hint="For the fully particularised claim that follows the notice."
+            hint="How many days you get to send the full priced claim after the notice."
           />
           <TextField
             name="noticeDeliveryMethod"
             label="Delivery method"
             value={values.noticeDeliveryMethod}
-            hint="How the contract requires notices to be served."
+            hint="The way your contract says a notice must be sent."
             placeholder="Email and registered post"
           />
           <TextField
@@ -221,9 +221,9 @@ export function ContractRulesForm({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Approval thresholds</CardTitle>
           <p className="text-sm text-muted-foreground">
-            The value at which a change needs that person&apos;s approval. Leave one blank
-            to mean there is no threshold at that level — zero would mean the opposite,
-            that everything needs it.
+            How much a change must be worth before this person has to approve
+            it. Leave it empty if they never need to. Do not put zero, because
+            zero means they approve everything.
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -243,7 +243,7 @@ export function ContractRulesForm({
             name="highRiskVoValue"
             label="High risk value"
             value={values.highRiskVoValue}
-            hint="Above this, a change is flagged as high risk regardless of status."
+            hint="Any change worth more than this is marked high risk, whatever stage it is at."
           />
         </CardContent>
       </Card>
@@ -252,8 +252,8 @@ export function ContractRulesForm({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Turnaround targets</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Internal targets, not contractual deadlines. They set task due dates and decide
-            when a change is counted as a bottleneck.
+            These are your own targets, not contract deadlines. They decide when
+            tasks are due and when something counts as stuck.
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -286,9 +286,9 @@ export function ContractRulesForm({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Chasing the client</CardTitle>
           <p className="text-sm text-muted-foreground">
-            The only thing this system sends outside the company. How hard a client is
-            chased is a commercial decision, so it is yours to set per project — including
-            not to chase at all.
+            This is the only thing the system sends to people outside your
+            company. How often you chase a client is your decision, set for each
+            project. You can also turn chasing off.
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -313,13 +313,13 @@ export function ContractRulesForm({
             label="Client response period (days)"
             value={values.voResponseDays}
             max={365}
-            hint="The client's own period to answer a submitted variation. Nothing is chased inside it."
+            hint="How long the client has to reply. Nobody is chased until this time is up."
           />
           <DaysField
             name="clientFollowUpDays"
             label="Chase every (days)"
             value={values.clientFollowUpDays}
-            hint="Days between one chase and the next, after the response period has run. 7 is weekly."
+            hint="Once the client is late, how many days to wait between reminders. Put 7 for once a week."
           />
         </CardContent>
       </Card>

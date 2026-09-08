@@ -22,8 +22,8 @@ export default async function NewProjectPage() {
           <CardContent className="py-12 text-center">
             <p className="font-medium">Creating projects is restricted</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Ask your administrator to set the project up, or to grant your role
-              permission on Settings → Permissions.
+              Ask your administrator to create the project, or to give your
+              role permission in Settings, then Permissions.
             </p>
           </CardContent>
         </Card>
@@ -37,8 +37,9 @@ export default async function NewProjectPage() {
       <header>
         <h1 className="text-2xl font-extrabold tracking-[-0.02em]">New project</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Code, name and client are enough to start. Contract details, the team and the
-          notice rules are all set afterwards, on the project itself.
+          A code, a name and a client are enough to start. You add the contract
+          details, the team and the notice rules afterwards, on the project
+          itself.
         </p>
       </header>
       <ProjectForm />

@@ -73,8 +73,8 @@ export function CompanyForm({ defaults }: { defaults: CompanyDefaults }) {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Company</CardTitle>
           <p className="text-sm text-muted-foreground">
-            The display name appears in the sidebar and on the sign-in page, so this
-            deployment looks like your company rather than like a product.
+            This name is what people see when they sign in. It makes the app
+            look like your company, not like software you bought.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -97,7 +97,7 @@ export function CompanyForm({ defaults }: { defaults: CompanyDefaults }) {
               </Select>
             </Field>
             <Field name="whatsappBusinessNumber" label="WhatsApp business number"
-              hint="The number capture messages arrive on.">
+              hint="The WhatsApp number your team sends reports to.">
               <Input id="whatsappBusinessNumber" name="whatsappBusinessNumber" type="tel"
                 inputMode="tel" defaultValue={defaults.whatsappBusinessNumber}
                 placeholder="+971 4 000 0000" />
@@ -110,8 +110,8 @@ export function CompanyForm({ defaults }: { defaults: CompanyDefaults }) {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Dates and deadlines</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Not presentation. Notice deadlines are counted from here, so a wrong timezone
-            moves a contractual date.
+            This is not just for show. Deadlines are counted using this
+            timezone, so getting it wrong moves real dates in your contract.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -136,7 +136,7 @@ export function CompanyForm({ defaults }: { defaults: CompanyDefaults }) {
           </div>
 
           <Field name="riskAmberThresholdDays" label="Warn when a notice is this close"
-            hint="Days remaining before a notice turns amber. Red is zero or breached, and is not configurable — a passed deadline is not a preference.">
+            hint="A notice goes amber when it has this many days left. Red means the deadline has already passed, and you cannot change that.">
             <Input id="riskAmberThresholdDays" name="riskAmberThresholdDays" type="number"
               min={1} max={60} required defaultValue={defaults.riskAmberThresholdDays}
               className="sm:max-w-40" />
@@ -148,8 +148,8 @@ export function CompanyForm({ defaults }: { defaults: CompanyDefaults }) {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Outbound email</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Who notices and reports appear to come from. Used once the delivery lanes are
-            connected.
+            The name and address your emails will come from. It starts working
+            once email sending is switched on.
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">

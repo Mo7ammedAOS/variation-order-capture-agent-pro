@@ -19,7 +19,7 @@ export default async function CompanySettingsPage() {
           <CardContent className="py-12 text-center">
             <p className="font-medium">Company settings are restricted</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Only a company administrator can change them.
+              Only a company administrator can change these.
             </p>
           </CardContent>
         </Card>
@@ -34,8 +34,9 @@ export default async function CompanySettingsPage() {
       <header>
         <h1 className="page-title">Company settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          One record for the whole deployment. Every change here is recorded against your
-          name, because two of these settings move dates people are judged against.
+          These settings apply to the whole company. Your name is saved against
+          every change, because two of them move deadlines that people are judged
+          on.
         </p>
       </header>
 

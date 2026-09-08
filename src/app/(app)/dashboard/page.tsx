@@ -85,7 +85,8 @@ export default async function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Where the money is</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Agreed by the client, then what has actually been asked for and received.
+              What the client has agreed, then what you have actually invoiced
+              and been paid.
             </p>
           </CardHeader>
           <CardContent>
@@ -279,7 +280,7 @@ export default async function DashboardPage() {
           label="Conceded on variations"
           value={formatMoney(Number(money.shortfallValue), 'AED', { abbreviate: true })}
           icon={Wallet}
-          hint="Submitted less what the client agreed"
+          hint="Submitted, minus what the client agreed"
         />
         </div>
       </section>
@@ -314,7 +315,7 @@ export default async function DashboardPage() {
           label="Credited back"
           value={formatMoney(Number(money.creditedTotal), 'AED', { abbreviate: true })}
           icon={RotateCcw}
-          hint="Issued credit notes against applications"
+          hint="Credit notes you have issued against invoices"
         />
         <StatCard
           label="Days claimed"
@@ -331,7 +332,7 @@ export default async function DashboardPage() {
           value={String(money.time.daysConceded)}
           icon={CalendarX2}
           tone={money.time.daysConceded > 0 ? 'red' : 'green'}
-          hint="Claimed less what the client agreed"
+          hint="Claimed, minus what the client agreed"
         />
         </div>
       </section>

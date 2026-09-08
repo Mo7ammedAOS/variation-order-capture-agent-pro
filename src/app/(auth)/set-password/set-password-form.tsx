@@ -203,8 +203,9 @@ export function SetPasswordForm() {
           {phase.message}
         </p>
         <p className="text-sm text-muted-foreground">
-          These links expire, and some mail apps open them for you before you do, which uses
-          them up. Ask for another and use it straight away.
+          These links run out after a while. Some email apps also open the link
+          before you do, which uses it up. Ask for a new one and use it straight
+          away.
         </p>
 
         {resend.sent ? (
@@ -261,7 +262,7 @@ export function SetPasswordForm() {
           minLength={MIN_PASSWORD}
         />
         <p className="text-xs text-muted-foreground">
-          Nobody can look it up later, including us.
+          Nobody can look this up later, not even us.
         </p>
       </div>
 

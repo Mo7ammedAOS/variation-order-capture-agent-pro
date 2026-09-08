@@ -116,8 +116,9 @@ export function PhoneControls({
       ) : null}
 
       <p className="text-xs text-muted-foreground">
-        Every WhatsApp report from this handset is filed under this person&apos;s name. Saving it
-        here removes it from anybody else who had it. Leave it empty to take the number away.
+        Anything reported from this phone is filed under this person&apos;s name. Saving
+        it here takes the number off anyone else who had it. Leave it empty to
+        remove the number.
       </p>
     </form>
   );

@@ -189,8 +189,9 @@ export function NoticePanel({
                 className="font-mono text-xs leading-relaxed"
               />
               <p className="text-xs text-muted-foreground">
-                Written for you from the change and the contract rules. Read it before it goes
-                to the approvers. It states a position in the company&apos;s name.
+                Written for you from the change and the contract rules. Read
+                it before you send it for approval. It speaks for your
+                company.
               </p>
             </div>
 
@@ -292,7 +293,8 @@ export function NoticePanel({
                 Record the client&apos;s acknowledgement
               </Button>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Only when you have actually seen it. A reply is not an acknowledgement.
+                Only tick this if you have actually seen their
+                acknowledgement. Any old reply does not count.
               </p>
             </div>
           )

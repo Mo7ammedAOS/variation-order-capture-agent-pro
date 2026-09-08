@@ -68,8 +68,8 @@ export function AddContactForm({ projectId }: { projectId: string }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Add a contact</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Everyone on the other side of this project, and what each of them can actually
-          bind the client to.
+          Everyone on the client&apos;s side of this project, and what each of them is
+          allowed to agree to.
         </p>
       </CardHeader>
       <CardContent>
@@ -119,7 +119,7 @@ export function AddContactForm({ projectId }: { projectId: string }) {
                 placeholder="+971 50 000 0000"
               />
               <p className="text-xs text-muted-foreground">
-                The number their WhatsApp messages arrive from.
+                The number their WhatsApp messages come from.
               </p>
             </div>
           </div>
@@ -127,9 +127,9 @@ export function AddContactForm({ projectId }: { projectId: string }) {
           <fieldset className="flex flex-col gap-3 rounded-xl bg-secondary/50 p-4">
             <legend className="px-1 text-sm font-semibold">What can they authorise?</legend>
             <p className="-mt-1 text-sm text-muted-foreground">
-              Leave anything you are unsure of switched off. An unverified contact who can
-              do nothing is a true record; one who can approve cost because a form assumed
-              it is not.
+              If you are not sure, leave it switched off. A contact who can do
+              nothing is safe. A contact who can approve money because someone
+              guessed is not.
             </p>
 
             <label className="flex cursor-pointer items-start gap-3">

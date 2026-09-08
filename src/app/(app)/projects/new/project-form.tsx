@@ -76,7 +76,7 @@ export function ProjectForm() {
             <Field
               name="projectCode"
               label="Project code"
-              hint="Appears on every change number, e.g. PC-DXB-001-0001"
+              hint="This goes on every change number, for example PC-DXB-001-0001"
               error={err.projectCode}
             >
               <Input
@@ -141,7 +141,7 @@ export function ProjectForm() {
             <Field
               name="originalContractValue"
               label="Contract value"
-              hint="Figures only. The currency is set beside it."
+              hint="Numbers only. Pick the currency in the box next to it."
             >
               <Input
                 id="originalContractValue"

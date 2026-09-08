@@ -23,7 +23,8 @@ export default async function BottlenecksPage() {
       <header>
         <h1 className="page-title">Held Up</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          What is blocked, who owns it, and how much is waiting on it.
+          What is stuck, who has to move it, and how much money is waiting behind
+          it.
         </p>
       </header>
 

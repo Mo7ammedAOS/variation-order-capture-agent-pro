@@ -30,7 +30,8 @@ export default async function UsersPage() {
             <CardContent className="py-12 text-center">
               <p className="font-medium">User administration is restricted</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Only a company owner or administrator can manage accounts.
+                Only a company owner or administrator can add or change
+                accounts.
               </p>
             </CardContent>
           </Card>

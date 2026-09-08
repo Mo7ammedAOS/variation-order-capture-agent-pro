@@ -25,7 +25,8 @@ export function SignupForm() {
         <Label htmlFor="companyName">Company name</Label>
         <Input id="companyName" name="companyName" required placeholder="Osman Contracting" />
         <p className="text-xs text-muted-foreground">
-          Shown on this screen, in notices, and at the top of every page. Changeable later.
+          Shown on this screen and on the notices you send. You can change it
+          later.
         </p>
       </div>
 
@@ -58,7 +59,7 @@ export function SignupForm() {
           minLength={1}
         />
         <p className="text-xs text-muted-foreground">
-          Nobody can look it up later, including us.
+          Nobody can look this up later, not even us.
         </p>
       </div>
 

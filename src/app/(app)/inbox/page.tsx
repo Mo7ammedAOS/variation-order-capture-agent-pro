@@ -34,8 +34,8 @@ export default async function InboxPage() {
       <header>
         <h1 className="page-title">Capture inbox</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Messages that arrived by WhatsApp or email and could not be placed on a project by
-          themselves. Each one needs a person to say where it belongs.
+          Messages that came in by WhatsApp or email that the system could not
+          match to a project. Someone has to say where each one belongs.
         </p>
       </header>
 

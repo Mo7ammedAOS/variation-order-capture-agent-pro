@@ -199,7 +199,7 @@ export function EditPanel({
                       is the difference between a variation and rework we pay
                       for, so nearly right is not good enough. */}
                   <p className="text-xs text-muted-foreground">
-                    Who wanted the change, not who reported it.
+                    Who asked for the change, not who reported it.
                   </p>
                 </div>
               </div>
@@ -216,7 +216,7 @@ export function EditPanel({
                   {/* Said here because it is the one field on this form that
                       moves a contractual date, and it does so silently. */}
                   <p className="text-xs text-muted-foreground">
-                    Moving this moves the notice deadline with it.
+                    Changing this date changes your notice deadline too.
                   </p>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1.5">
@@ -268,9 +268,10 @@ export function EditPanel({
                   placeholder="What was wrong, or what has come to light since."
                 />
                 <p className="text-xs text-muted-foreground">
-                  This sends the change back for rework and withdraws any approval still
-                  pending. Approvals already given stay on the record; they simply no longer
-                  apply to the new version.
+                  This sends the change back to be redone and cancels any
+                  approval still waiting. Approvals already given stay on
+                  the record, but they no longer count for the new
+                  version.
                 </p>
                 <Feedback state={reopenState} />
                 <div className="flex flex-wrap items-center gap-3">

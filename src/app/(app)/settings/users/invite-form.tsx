@@ -27,8 +27,9 @@ export function InviteForm() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Invite someone</CardTitle>
         <p className="text-sm text-muted-foreground">
-          They set their own password from the emailed link. Project access is granted
-          separately, on the project&apos;s Team tab.
+          The account is made straight away and no email is sent. Give them a
+          password next, using Set password. Access to projects is added
+          separately, on each project&apos;s Team tab.
         </p>
       </CardHeader>
       <CardContent>
@@ -53,7 +54,8 @@ export function InviteForm() {
               <Label htmlFor="phone">Phone</Label>
               <Input id="phone" name="phone" type="tel" placeholder="+971 50 123 4567" />
               <p className="text-xs text-muted-foreground">
-                Used to match them when WhatsApp capture is connected.
+                Used to recognise them when they report a change by
+                WhatsApp.
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -66,8 +68,8 @@ export function InviteForm() {
                 ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                Directors and admins see every project. Everyone else sees only what they
-                are assigned.
+                Directors and admins can see every project. Everyone else
+                sees only the projects they are put on.
               </p>
             </div>
           </div>

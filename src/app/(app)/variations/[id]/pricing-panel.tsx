@@ -286,7 +286,8 @@ export function PricingPanel(props: PricingPanelProps) {
                     ))}
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    A star rate is new work with no comparable rate, and it is the line the
+                    A star rate is new work with no price in the
+                    contract to compare it to. This is the line the
                     client will question first.
                   </p>
                 </div>
@@ -344,8 +345,9 @@ export function PricingPanel(props: PricingPanelProps) {
                   <Label htmlFor="reason">Which part of the contract already covers this?</Label>
                   <Textarea id="reason" name="reason" rows={2} required placeholder="e.g. Covered by BOQ item 2.14 — blockwork to all internal partitions, measured as provisional." />
                   <p className="text-xs text-muted-foreground">
-                    The engineer who raised it will see this. So, in all likelihood, will the
-                    client, if they ever ask why it was not claimed.
+                    The engineer who reported it will see this. The
+                    client probably will too, if they ever ask why you
+                    did not claim.
                   </p>
                   <Note state={noneState} />
                   <div className="flex flex-wrap items-center gap-3">
@@ -362,7 +364,8 @@ export function PricingPanel(props: PricingPanelProps) {
                     This is not a variation
                   </Button>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    The work is already covered by the contract, so there is nothing to claim.
+                    The contract already covers this work, so there is
+                    nothing to claim.
                   </p>
                 </div>
               )}
@@ -372,7 +375,7 @@ export function PricingPanel(props: PricingPanelProps) {
 
         {!canPrice && !frozen ? (
           <p className="border-t border-border/60 pt-4 text-sm text-muted-foreground">
-            Waiting on the quantity surveyor to price this.
+            Waiting for the quantity surveyor to price this.
           </p>
         ) : null}
       </CardContent>

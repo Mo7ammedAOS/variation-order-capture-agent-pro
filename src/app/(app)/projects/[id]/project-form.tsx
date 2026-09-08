@@ -91,7 +91,8 @@ export function ProjectForm({
           <Field
             name="projectCode"
             label="Project code"
-            hint="Changing it does not rewrite references already issued — PC-DXB-001-0004 stays as it was served."
+            hint="Changing this does not rename changes you have already sent out. A change
+            already called PC-DXB-001-0004 keeps the name the client saw."
           >
             <Input id="projectCode" name="projectCode" defaultValue={values.projectCode} required />
           </Field>
@@ -145,7 +146,8 @@ export function ProjectForm({
           <Field
             name="originalContractValue"
             label="Original contract value"
-            hint="The contract sum before any variation. Blank if it is not agreed yet."
+            hint="The contract value before any changes. Leave it empty if it is not
+            agreed yet."
           >
             <Input
               id="originalContractValue"
@@ -166,7 +168,8 @@ export function ProjectForm({
           <Field
             name="projectStatus"
             label="Status"
-            hint="Only active and awarded projects are chased, reported on, or offered when a change is captured."
+            hint="Only active and awarded projects are chased, included in reports, or
+            offered when someone reports a change."
           >
             <select
               id="projectStatus"

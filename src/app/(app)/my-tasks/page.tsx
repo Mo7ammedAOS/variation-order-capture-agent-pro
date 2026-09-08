@@ -27,7 +27,7 @@ export default async function MyTasksPage() {
       <header>
         <h1 className="page-title">My Tasks</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Late first, then due today, then everything else.
+          Late ones first, then the ones due today, then the rest.
         </p>
       </header>
 

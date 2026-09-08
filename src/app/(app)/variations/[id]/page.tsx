@@ -761,7 +761,8 @@ export default async function PotentialChangeDetailPage({
             <CardContent>
               {change.documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No evidence attached. No instruction means weak proof.
+                  Nothing attached yet. With no photos and no written
+                  instruction, the proof is weak.
                 </p>
               ) : (
                 <ul className="grid gap-2 sm:grid-cols-2">
@@ -791,8 +792,8 @@ export default async function PotentialChangeDetailPage({
                   Possible duplicates
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Suggested by similarity. Nothing has been merged or closed — judge for
-                  yourself.
+                  These look similar. Nothing has been joined together or
+                  closed. Decide for yourself.
                 </p>
               </CardHeader>
               <CardContent>

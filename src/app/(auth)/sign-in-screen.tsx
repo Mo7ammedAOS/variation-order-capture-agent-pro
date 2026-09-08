@@ -94,8 +94,8 @@ export async function SignInScreen({
         <div className="mt-7 border-t border-border pt-6">
           <p className="text-sm font-semibold">Nobody has set this company up yet.</p>
           <p className="mt-1 text-sm leading-snug text-muted-foreground">
-            Create the first administrator account. It can add everybody else, and this
-            button disappears the moment it exists.
+            Make the first administrator account. That account can add everyone
+            else. This button disappears as soon as it exists.
           </p>
           <Button asChild variant="outline" size="lg" className="mt-4 w-full">
             <Link href="/admin-signup">

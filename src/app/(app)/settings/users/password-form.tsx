@@ -97,7 +97,7 @@ export function PasswordControls({
       </form>
 
       <p className="text-xs text-muted-foreground">
-        Or set one yourself, for somebody you cannot reach by email:
+        Set a password for them here. This works straight away, with no email:
       </p>
 
       <form action={setAction} className="flex flex-col gap-2">
@@ -148,8 +148,8 @@ export function PasswordControls({
       ) : null}
 
       <p className="text-xs text-muted-foreground">
-        Every reset is recorded against your name. The password itself is never
-        stored anywhere it can be read back.
+        Your name is saved against every password you set. The password is never
+        stored in a form anyone can read, so nobody can look it up later.
       </p>
     </div>
   );

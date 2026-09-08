@@ -81,7 +81,7 @@ function SourceFields() {
           <Label htmlFor="sourceOccurredAt">When were you told?</Label>
           <Input id="sourceOccurredAt" name="sourceOccurredAt" type="datetime-local" />
           <p className="text-xs text-muted-foreground">
-            Leave blank if it is the same as the date below.
+            Leave empty if it is the same as the date below.
           </p>
         </div>
       </div>
@@ -163,7 +163,7 @@ export function ReportChangeForm({
             <Label htmlFor="location">Where on site?</Label>
             <Input id="location" name="location" placeholder="Reception, Level 2" />
             <p className="text-xs text-muted-foreground">
-              The part of the works affected.
+              The part of the job this affects.
             </p>
           </div>
 
@@ -179,7 +179,7 @@ export function ReportChangeForm({
               <Label htmlFor="eventDate">When did it happen?</Label>
               <Input id="eventDate" name="eventDate" type="date" defaultValue={today} required />
               <p className="text-xs text-muted-foreground">
-                The notice deadline counts from this date.
+                Your notice deadline is counted from this date.
               </p>
               <FieldError message={errors.eventDate} />
             </div>
@@ -222,7 +222,8 @@ export function ReportChangeForm({
               className="py-1.5"
             />
             <p className="text-xs text-muted-foreground">
-              No proof means a weak claim. Attach what you can see now.
+              Without proof the claim is weak. Add photos of what you can see
+              now.
             </p>
           </div>
         </CardContent>
@@ -252,7 +253,8 @@ export function ReportChangeForm({
               inputMode="decimal"
             />
             <p className="text-xs text-muted-foreground">
-              A rough figure for triage. The QS prices it properly later.
+              A rough number, just to sort it. The QS works out the real price
+              later.
             </p>
           </div>
           <label className="flex items-center gap-3 text-sm">

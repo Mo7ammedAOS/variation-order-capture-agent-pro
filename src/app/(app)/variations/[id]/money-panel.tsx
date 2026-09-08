@@ -281,8 +281,8 @@ export function MoneyPanel({
             <input type="hidden" name="variationOrderId" value={vo.id} />
             <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
             <p className="text-sm text-muted-foreground">
-              Send it to the client, then record the date here. The response clock runs from
-              that date, not from today.
+              Send it to the client, then put the date here. The time they
+              have to reply is counted from that date, not from today.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
@@ -315,8 +315,9 @@ export function MoneyPanel({
                 placeholder="Ceiling grid could not start until the revised layout was issued, and the fit-out follows it."
               />
               <p className="text-xs text-muted-foreground">
-                Which activity moved, and why it is on the critical path. Days with no basis
-                get rejected, and a rejected claim makes the next one harder.
+                Say which activity was delayed and why it holds up the
+                finish date. Days you cannot explain get rejected, and a
+                rejected claim makes the next one harder.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -370,7 +371,8 @@ export function MoneyPanel({
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    The difference stays on the file as conceded. It is not written off.
+                    The difference is saved on the file as given away.
+                    It is not deleted.
                   </p>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -443,8 +445,9 @@ export function MoneyPanel({
               <input type="hidden" name="variationOrderId" value={vo.id} />
               <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
               <p className="text-sm text-muted-foreground">
-                Enter how complete the variation is at the end of the period. Everything else —
-                what was applied for before, retention, VAT, the total — is worked out from that.
+                Enter how much of the work is done at the end of the period.
+                Everything else is worked out from that: what you claimed
+                before, retention, VAT and the total.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
