@@ -1,7 +1,7 @@
 # Implementation Status
 
 **Phase 1 — DEPLOYED and live at https://vo.osmanflow.com.**
-Last updated 2026-08-30.
+Last updated 2026-09-08.
 
 ## Gates
 
@@ -435,3 +435,114 @@ first paid call is a decision rather than a side effect of a deploy.
   what it cannot place, and without a screen those messages fall into a hole.
 - Contract rules, contacts, team and project creation now have forms. The
   "API-only" limitation above is out of date.
+
+---
+
+## Since 2026-09-01
+
+Seven days that were mostly about the front door and the frame, plus one fault
+that had made the whole application unreachable.
+
+### The way in existed on paper only
+
+Every account in this system is created by somebody else, so every person
+arrives through a link in an email. That link went to `/login`, and `/login`
+had no way to read it — a recovery token arrives in the URL **fragment**, which
+browsers never send to a server, so no server component could have used it even
+if it had tried. **No account this system created could be opened by the person
+it was created for.** Not the first owner, and not any of the staff a
+deployment invites.
+
+`/set-password` is that missing screen. It accepts all four link shapes
+Supabase emits depending on project settings, clears the token out of the
+address bar the moment it reads it, and treats an expired link as routine
+rather than a dead end — they time out, and some mail clients spend them by
+prefetching every URL in a message.
+
+Alongside it, the front door split in two. `/signin` for everybody;
+`/admin-signin` for whoever stands the company up, carrying **Set up the
+company**. That button is safe on a public URL for one reason: set-up is open
+only while the company has **no users at all**, and the first account closes it
+permanently. The count is checked twice — once to show the button, once inside
+the transaction that writes the row, holding an advisory lock — so two people
+opening the page on a fresh deployment cannot both become owner. The Supabase
+identity is created outside that transaction and deleted again if the
+transaction finds it lost the race, because an identity with no profile row
+behind it is the one state this system cannot tolerate.
+
+Set-up also lays down the permission matrix when none exists. A wiped database
+has no `role_permissions` rows, and a missing row is a denial, so without it the
+first owner signs in successfully and can then do nothing whatever — including
+grant themselves the permission that would fix it.
+
+`/login` remains as a redirect. The old address is in sent invitations and
+bookmarks, and a dead front door is a support call.
+
+### The fault that 500'd every page
+
+The shell imported `NAV_LINKS` — an array — from `nav.tsx`, a `'use client'`
+module. In a production build React replaces such an export with a
+client-reference proxy, so the layout called `.map` on an object without one.
+`tsc`, ESLint, `next build` and `next dev` were all happy; it failed only in a
+production build.
+
+The data moved to `nav-links.ts`, which carries no directive. The guard is
+`tests/unit/client-boundary.test.ts`, which walks `src/app` for server files
+reading named bindings out of client modules. Its first version did not catch
+the bug it was written for — it treated any leading capital as a component, and
+`NAV_LINKS` has one. It now demands real PascalCase, verified by putting the
+bug back and watching it fail.
+
+### The clock can be moved
+
+Almost everything contractual here is a function of dates, so "run now" proved
+nothing on the day the data was entered — the honest answer from every sweep was
+"nothing is due yet". `run-job` now takes an optional `as_of`; the sweep reads
+the world as it will be on that date and decides for itself. Gated on
+`ALLOW_JOB_TIME_TRAVEL`, capped at 400 days, echoed back as `ran_as_of` /
+`simulated`.
+
+n8n gained **lane M** — a manual trigger over one Code node holding the job and
+the date — and **lane S4**, the schedule `client_followup` never had. It was
+reachable from `run-job` and nothing ever called it, so the only chase a client
+received was one somebody sent by hand.
+
+### The interface was rebuilt
+
+Osman's work, over three passes: a photographic ground with frosted-glass
+surfaces, light and dark as two different photographs rather than one palette
+inverted, the brand moved to lime so it can never be confused with the RAG
+scale, and the sidebar replaced by a floating icon rail beside a top bar
+carrying search, theme and sign-out. `UI_SPEC.md` is the authority on all of it.
+
+Three absences were filled in the same work: a **404** — there was none, so a
+bookmark to a deleted variation got unstyled Helvetica; a **loading state** —
+without one Next had no boundary to suspend at, so the browser sat on the
+previous page for the length of the query; and a **skip link**, past a shell
+that puts eleven controls ahead of every page's first heading.
+
+One real bug went with it: the phone bar rendered `NAV_LINKS.slice(0, 4)` — the
+raw list, ignoring the permission filter the shell had already computed. An
+administrator who may reach nine pages got the same four as a site engineer,
+and **sign-out lived only in the desktop rail, so there was no way out of the
+app on a phone at all.**
+
+### Open
+
+- **Company name is absent from the app shell.** It was at the top of the old
+  sidebar; the new one does not carry it. Signed in, the client's name appears
+  on no screen but Settings and the printed report — for a product deployed one
+  stack per client under the client's own domain, that wants a decision.
+- **WhatsApp media never arrives.** Lane A is webhook → shape → sign → post,
+  with no download step, and `A2` hard-codes `media: []`. Photographs and voice
+  notes both reach the app as a message with no file attached. The sign-in
+  screen promises "evidence, filed where it belongs"; over WhatsApp that is not
+  yet true.
+- **Voice notes are not transcribed and cannot be.** `transcribeVoiceNote` has
+  no callers, the mock returns a fake, and the real provider throws because
+  Claude has no speech-to-text. Making it true needs a second vendor.
+- **Backgrounds are heavy** — 510 KB light, 400 KB dark, 2000×1116. They are
+  blurred behind glass and would survive being resized.
+- `N8N_NOTIFY_EMAIL_URL` and `N8N_NOTIFY_WHATSAPP_URL` are still blank, so
+  nothing is sent. `AI_PROVIDER` is still `mock`.
+

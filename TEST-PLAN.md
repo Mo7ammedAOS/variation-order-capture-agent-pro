@@ -160,7 +160,9 @@ defaults, creates the company record, and creates one owner account.
 ### Pass when
 
 - [ ] You are signed in at `https://vo.osmanflow.com` under the name you typed
-- [ ] The sidebar shows **Overview, My Tasks, Variations, Held Up, Capture Inbox, Projects, Company, Users, Permissions**
+- [ ] The **icon rail** down the left has nine icons. Hover each one and the
+      tooltip reads **Overview, My Tasks, Variations, Held Up, Capture Inbox,
+      Projects, Company, Users, Permissions**
 - [ ] Overview is empty — no changes, no value, no tasks
 - [ ] Sign out, then open `/admin-signup` directly. It redirects to sign-in and
       offers no set-up button. **Set-up has closed behind you.**
@@ -205,14 +207,23 @@ In the Supabase dashboard → **Authentication** → **URL Configuration**:
 
 ### Do
 
-`Company` in the sidebar. Set the legal and display name, currency **AED**,
-timezone **Asia/Dubai**, the email sender name and address, and the WhatsApp
-business number. Leave the amber threshold at **7 days**.
+**Company** in the icon rail — the building icon, second from the bottom. Set
+the legal and display name, currency **AED**, timezone **Asia/Dubai**, the
+email sender name and address, and the WhatsApp business number. Leave the
+amber threshold at **7 days**.
 
 ### Pass when
 
-- [ ] The company name appears at the top of the sidebar
 - [ ] Reloading keeps every value
+- [ ] Sign out. The **sign-in screen** carries the display name you set —
+      this is what a client sees on their own domain
+- [ ] The name also heads the printed project report (Stage 22)
+
+> **Known gap, not a test failure.** The company name used to sit at the top of
+> the old sidebar and is not anywhere in the new shell — once you are signed in,
+> the client's name appears on no screen but Settings and the printed report.
+> For a product deployed one stack per client under the client's own domain,
+> that is worth a decision rather than an accident. Note it and carry on.
 
 ---
 
@@ -364,7 +375,7 @@ name, email and company to the matching client.
 
 ### Do
 
-Sign in as each person and look at the sidebar.
+Sign in as each person and read the **icon rail** (hover for tooltips).
 
 | Signed in as | Should see |
 |---|---|
@@ -374,6 +385,15 @@ Sign in as each person and look at the sidebar.
 | Ahmed (SE) | Overview · My Tasks · Variations · Held Up — **four only** |
 | Osman (QS) | Overview · My Tasks · Variations · Held Up — **four only** |
 
+**Then do the whole table again on a phone.** This is the point of the stage,
+not an afterthought: the two navigations are built from the same list but are
+different components, and until recently the phone bar ignored the permission
+filter entirely and showed a fixed four to everybody. An administrator could
+not reach the capture inbox or any settings screen from a phone at all.
+
+On a phone the bar holds four items and a **More** button; everything past the
+fourth lives behind More. Count what is reachable, not what is visible.
+
 Then, still signed in as **Ahmed**, type these into the browser bar directly:
 `/settings/permissions`, `/settings/users`, `/inbox`.
 
@@ -381,7 +401,9 @@ Then sign out and open **`/admin-signup`** directly.
 
 ### Pass when
 
-- [ ] Each person sees exactly the rows above
+- [ ] Each person sees exactly the rows above **in the rail**
+- [ ] Each person reaches exactly the same set **on a phone**, counting what is
+      behind **More** — the two must agree, person by person
 - [ ] Ahmed is refused all three pages, with a page that explains rather than a crash
 - [ ] `/admin-signup` redirects to sign-in and offers no set-up button —
       **the door closed behind Stage 0 and stays closed**
@@ -389,6 +411,55 @@ Then sign out and open **`/admin-signup`** directly.
 
 > Hiding a link is not the enforcement. If any of those three opened for Ahmed,
 > stop and report it.
+
+---
+
+# Stage 7b · The shell itself
+
+**Goal** — the frame every other stage is read through. None of this existed
+until the redesign, so none of it has ever been exercised.
+
+### Do
+
+Signed in as anybody, on a laptop first.
+
+**1. Search.** Click the wide search pill in the top bar. Then close it and
+press **⌘K** (Ctrl+K on Windows). Both must open the same panel. They take
+different code paths — the pill fakes the keystroke — so one working proves
+nothing about the other.
+
+**2. Theme.** The toggle offers **Light · Auto · Dark**. Set Dark, reload, and
+it stays dark. Set Auto and it follows the laptop's own setting. Now open the
+app on your phone: the phone has its own preference, because the choice is
+stored against the device rather than the account.
+
+**3. Skip link.** Load any page and press **Tab** once. A "Skip to content"
+button appears; Enter jumps past the menu.
+
+**4. Loading.** Click Variations from Overview and watch the middle of the
+screen. Grey placeholder shapes appear immediately, then the real rows replace
+them. The page must never sit on the *previous* screen doing nothing.
+
+**5. Not found.** Type `/variations/does-not-exist`.
+
+**6. Sign out — on the phone.** Until recently this was reachable only from the
+desktop rail, so on a phone there was no way out of the app at all. On a shared
+site tablet that matters.
+
+### Pass when
+
+- [ ] The pill and ⌘K both open the search panel
+- [ ] Searching a PC number jumps straight to that change
+- [ ] Dark survives a reload; Auto follows the device
+- [ ] The phone's theme is independent of the laptop's
+- [ ] Tab reveals the skip link, and Enter lands past the menu
+- [ ] A slow page shows placeholders, not a frozen previous page
+- [ ] `/variations/does-not-exist` gives a **styled** page with a way back —
+      not black-on-white Helvetica
+- [ ] That page does **not** say whether the record exists. "Deleted" and
+      "not yours to see" must read identically, or it answers a question the
+      person was refused
+- [ ] You can sign out from a phone
 
 ---
 
