@@ -21,14 +21,15 @@ import { createFirstAdministrator } from '../setup';
  * audited, and never returned.
  */
 
-const MIN_PASSWORD = 10;
+// No rule of our own — see user.service.ts. Supabase's own floor still applies.
+const MIN_PASSWORD = 1;
 
 const schema = z
   .object({
     fullName: z.string().trim().min(2, 'Enter your name'),
     companyName: z.string().trim().min(2, 'Enter the company name'),
     email: z.string().trim().email('Enter a valid email address'),
-    password: z.string().min(MIN_PASSWORD, `Use at least ${MIN_PASSWORD} characters`),
+    password: z.string().min(MIN_PASSWORD, 'Enter a password'),
     confirm: z.string(),
   })
   .refine((value) => value.password === value.confirm, {

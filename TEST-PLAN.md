@@ -250,26 +250,40 @@ amber threshold at **7 days**.
 > **project role**, granted in Stage 5. A system role is what somebody can do
 > company-wide, and a PM should be able to do nothing company-wide.
 
-### What each person sees
+**Adding an account sends nothing.** The account exists the moment you press
+the button, with no password on it. That is deliberate: Supabase's built-in
+mailer allows only a handful of messages an hour, and adding seven people in
+one sitting used to fail partway through with *email rate limit exceeded* —
+and fail completely, because the limit is checked before the account is
+written. Creating somebody should not depend on a message you did not ask to
+send.
 
-An email with a link. It opens **`/set-password`**, where they choose their own
-password and are then sent to `/signin` to use it. You never see their
-password, and neither does anybody else — it cannot be looked up later, only
-replaced.
+### Then give each of them a password — two ways
 
-**If a link is dead**, that is routine rather than a fault: they expire, and
-some mail apps spend them by opening every link in a message to build a
-preview. The `/set-password` screen offers a new one — or use
-`Users` → the person → **Email a reset link**.
+**Set it yourself** (instant, no email). `Users` → the person → **Set
+password** → type one → hand it over. Use this for the test: it is immediate,
+and it is what you will do on a site where somebody is standing in front of
+you.
+
+**Or email a link** (`Users` → the person → **Email a reset link**). They set
+their own at `/set-password` and you never learn it. Better when the person is
+somewhere else — but it is the path that can hit the rate limit, so do not
+queue seven of them at once.
+
+There is **no minimum length** of ours any more. Supabase still enforces its
+own, 6 characters unless changed in the project's Auth settings, and if it
+refuses the screen now tells you exactly what it said.
 
 ### Pass when
 
 - [ ] Seven accounts listed, all Active
-- [ ] Each person receives an invitation email
-- [ ] The link opens `/set-password` on the live domain — **not** `localhost`
-- [ ] At least two of them set a password and sign in at `/signin`
-- [ ] Ask one of them to try their link a second time. It refuses, and the
-      screen offers to send another rather than dead-ending
+- [ ] Adding all six in one sitting works — **no rate-limit error at any point**
+- [ ] Setting a password takes effect immediately, with no email involved
+- [ ] At least two of them sign in at `/signin` with the password you set
+- [ ] A short password is either accepted, or refused with the provider's own
+      reason quoted — never refused with no reason given
+- [ ] Send one person a reset link instead. It opens `/set-password` on the
+      live domain — **not** `localhost` — and they can set their own
 
 ---
 

@@ -18,21 +18,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const updateUserById = vi.fn(async () => ({ data: {}, error: null }));
+const createUser = vi.fn(async () => ({ data: { user: { id: 'auth-1' } }, error: null }));
+const inviteUserByEmail = vi.fn(async () => ({ data: { user: { id: 'auth-1' } }, error: null }));
 
 vi.mock('@/lib/auth/supabase', () => ({
-  createSupabaseAdminClient: () => ({ auth: { admin: { updateUserById } } }),
+  createSupabaseAdminClient: () => ({
+    auth: { admin: { updateUserById, createUser, inviteUserByEmail } },
+  }),
 }));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     user: {
-      findUnique: async () => ({
-        id: 'user-1',
-        email: 'invited@company.ae',
-        fullName: 'Invited Person',
-        active: true,
-      }),
+      findUnique: async (args: { where: { email?: string } }) =>
+        args.where.email
+          ? null // nobody with that address yet, so the invite proceeds
+          : { id: 'user-1', email: 'invited@company.ae', fullName: 'Invited Person', active: true },
+      create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        user: { create: async ({ data }: { data: Record<string, unknown> }) => data },
+      }),
   },
 }));
 
@@ -42,7 +49,7 @@ vi.mock('@/services/project-access.service', () => ({
 
 vi.mock('@/services/audit-log.service', () => ({ recordAudit: async () => undefined }));
 
-const { resetUserPassword } = await import('@/services/user.service');
+const { resetUserPassword, inviteUser } = await import('@/services/user.service');
 
 const actor = { id: 'admin-1', systemRole: 'company_owner' } as never;
 
@@ -68,5 +75,41 @@ describe('an administrator setting a password', () => {
     } as never);
 
     expect(JSON.stringify(result)).not.toContain('a-long-enough-password');
+  });
+});
+
+/**
+ * Creating an account must not depend on an email being sent.
+ *
+ * `inviteUserByEmail` sends an invitation, and Supabase's built-in mailer is
+ * rate limited to a handful an hour on any project without its own SMTP. Adding
+ * a team of seven in one sitting failed partway through with "email rate limit
+ * exceeded" — and failed completely, because the limit is enforced before the
+ * identity is written. An administrator sitting at the screen adding people
+ * should not be blocked by a message they did not ask to send.
+ */
+describe('adding a user', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const input = {
+    email: 'new@company.ae',
+    fullName: 'New Person',
+    systemRole: 'standard_user',
+    preferredLanguage: 'en',
+  };
+
+  it('sends no email at all', async () => {
+    await inviteUser(actor, input as never);
+
+    expect(inviteUserByEmail).not.toHaveBeenCalled();
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms the address, because there is no invitation to click', async () => {
+    await inviteUser(actor, input as never);
+
+    const [payload] = createUser.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(payload.email_confirm).toBe(true);
+    expect(payload.email).toBe('new@company.ae');
   });
 });

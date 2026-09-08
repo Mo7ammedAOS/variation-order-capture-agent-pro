@@ -34,7 +34,8 @@ import { requestNewLink, type ResendState } from './actions';
  * otherwise walk straight past.
  */
 
-const MIN_PASSWORD = 10;
+// No rule of our own — see user.service.ts. Supabase's own floor still applies.
+const MIN_PASSWORD = 1;
 
 type Phase =
   | { kind: 'checking' }
@@ -144,7 +145,7 @@ export function SetPasswordForm() {
     const confirm = String(formData.get('confirm') ?? '');
 
     if (password.length < MIN_PASSWORD) {
-      setError(`Use at least ${MIN_PASSWORD} characters.`);
+      setError('Enter a password.');
       return;
     }
     if (password !== confirm) {
@@ -260,7 +261,7 @@ export function SetPasswordForm() {
           minLength={MIN_PASSWORD}
         />
         <p className="text-xs text-muted-foreground">
-          At least {MIN_PASSWORD} characters. Nobody can look it up later, including us.
+          Nobody can look it up later, including us.
         </p>
       </div>
 

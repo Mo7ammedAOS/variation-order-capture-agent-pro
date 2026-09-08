@@ -53,11 +53,38 @@ export async function inviteUser(actor: AuthenticatedUser, input: z.infer<typeof
   if (existing) throw new ConflictError('A user with that email already exists');
 
   const supabase = createSupabaseAdminClient();
-  const env = getEnv();
 
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(input.email, {
-    redirectTo: `${env.APP_URL}/set-password`,
-    data: { full_name: input.fullName },
+  /*
+    Create the identity WITHOUT sending anything.
+
+    This was `inviteUserByEmail`, which sends an invitation — and Supabase's
+    built-in mailer is rate limited to a handful of messages an hour on every
+    project that has not been given its own SMTP. Adding a team of seven in one
+    sitting therefore failed partway through with "email rate limit exceeded",
+    and the account was not created at all: the limit is enforced before the
+    identity is written, so the failure is total rather than partial.
+
+    Worse, the email was on the critical path for something it was not needed
+    for. An administrator adding people is sitting at the screen. Whether a
+    message leaves at that moment has nothing to do with whether the account
+    should exist.
+
+    So creation and credentials are now two separate steps, and only the second
+    one can involve email:
+
+      1. here — the account exists, confirmed, with no password and nothing sent
+      2. Settings → Users → Set password  (instant, no email)
+         or  Email a reset link           (email, and may be rate limited)
+
+    `email_confirm: true` because there is no invitation to click. Supabase
+    refuses password sign-in for an unconfirmed address, which is exactly the
+    fault fixed on 2026-09-08; an account created here and given a password
+    would otherwise be unusable in the same way.
+  */
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: input.email,
+    email_confirm: true,
+    user_metadata: { full_name: input.fullName },
   });
 
   if (error || !data.user) {
@@ -101,13 +128,27 @@ export async function inviteUser(actor: AuthenticatedUser, input: z.infer<typeof
  * the policy says — the only defence is that it is long enough to survive
  * being guessed by somebody who heard half of it.
  */
-const MIN_PASSWORD_LENGTH = 12;
+/*
+  Osman's call, 2026-09-08: no length rule of our own.
+
+  This was 12, which is a good password and a bad rule for this product. The
+  people being given accounts are site engineers and project managers who are
+  handed a password by an administrator standing next to them, and a rule they
+  cannot satisfy is answered by writing something down, not by choosing better.
+
+  The floor that remains is Supabase's, set in the project's Auth settings and
+  6 characters by default. It cannot be turned off from here and this deliberately
+  does not try — a password that our schema accepts and the provider then rejects
+  is the worst of the three options, because the administrator sees a failure
+  with no rule attached to it.
+*/
+const MIN_PASSWORD_LENGTH = 1;
 
 export const passwordResetSchema = z.object({
   userId: z.string().uuid(),
   password: z
     .string()
-    .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`)
+    .min(MIN_PASSWORD_LENGTH, 'Enter a password')
     .max(72, 'Too long — 72 characters is the limit'),
 });
 
@@ -170,9 +211,22 @@ export async function resetUserPassword(
   });
 
   if (error) {
-    // The provider's message can quote the password back in a validation
-    // error, so only its shape is passed on.
-    throw new IntegrationError('Could not set the password. Check it meets the provider policy.');
+    /*
+      Say what the provider actually objected to.
+
+      This used to answer every failure with "check it meets the provider
+      policy", on the reasoning that the message might quote the password back.
+      That was defensible while we had a rule of our own to state up front; now
+      that Supabase's setting is the ONLY rule, a refusal with no reason
+      attached leaves an administrator guessing at a number they were never
+      told — and the commonest one, "Password should be at least 6 characters",
+      is exactly the sentence they need.
+
+      The password is stripped from the message before it goes anywhere, which
+      costs nothing and removes the original objection.
+    */
+    const detail = error.message.split(input.password).join('•••');
+    throw new IntegrationError(`Could not set the password. ${detail}`);
   }
 
   await recordAudit({

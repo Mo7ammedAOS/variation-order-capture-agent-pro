@@ -55,10 +55,10 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={10}
+          minLength={1}
         />
         <p className="text-xs text-muted-foreground">
-          At least 10 characters. Nobody can look it up later, including us.
+          Nobody can look it up later, including us.
         </p>
       </div>
 
@@ -70,7 +70,7 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={10}
+          minLength={1}
         />
       </div>
 

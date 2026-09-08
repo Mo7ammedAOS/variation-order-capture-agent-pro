@@ -114,11 +114,11 @@ export function PasswordControls({
           type="text"
           autoComplete="off"
           spellCheck={false}
-          minLength={12}
+          minLength={1}
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="At least 12 characters"
+          placeholder="The password to hand over"
           className="font-mono text-sm"
         />
         <div className="flex flex-wrap items-center gap-2">
