@@ -1,13 +1,13 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AlertCircle, BellRing, CheckCircle2, UserPlus } from 'lucide-react';
+import { AlertCircle, BellRing, CheckCircle2, UserMinus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
-import { assignMemberAction, type MemberFormState } from './actions';
+import { assignMemberAction, removeMemberAction, type MemberFormState } from './actions';
 
 /**
  * Adding someone to a project, and saying whether they should be told about it.
@@ -133,5 +133,67 @@ export function AddMemberForm({
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Taking someone off a project.
+ *
+ * ── Why this is not a delete ──────────────────────────────────────────────
+ * The membership row stays and is marked inactive. That matters more than it
+ * looks: months later, when a claim turns on who was entitled to instruct work
+ * in March, the record still answers — where a deleted row would say nobody was
+ * ever on the project. Adding them back reactivates the same row, so their time
+ * here reads as one continuous history rather than two unrelated stints.
+ *
+ * ── Why it still asks ─────────────────────────────────────────────────────
+ * Removing the project manager on a live job stops their tasks and their
+ * notifications the moment it is pressed. Cheap to undo, expensive to not
+ * notice — so it names the person before it does it.
+ */
+function RemovePending({ fullName }: { fullName: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+      {pending ? 'Removing…' : `Remove ${fullName}`}
+    </Button>
+  );
+}
+
+export function RemoveMemberButton({
+  memberId,
+  projectId,
+  fullName,
+}: {
+  memberId: string;
+  projectId: string;
+  fullName: string;
+}) {
+  const [asking, setAsking] = useState(false);
+
+  if (!asking) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-risk-red"
+        onClick={() => setAsking(true)}
+      >
+        <UserMinus aria-hidden className="size-4" />
+        Remove
+      </Button>
+    );
+  }
+
+  return (
+    <form action={removeMemberAction} className="flex flex-wrap items-center justify-end gap-2">
+      <input type="hidden" name="memberId" value={memberId} />
+      <input type="hidden" name="projectId" value={projectId} />
+      <RemovePending fullName={fullName} />
+      <Button type="button" variant="outline" size="sm" onClick={() => setAsking(false)}>
+        Keep
+      </Button>
+    </form>
   );
 }

@@ -527,6 +527,39 @@ administrator who may reach nine pages got the same four as a site engineer,
 and **sign-out lived only in the desktop rail, so there was no way out of the
 app on a phone at all.**
 
+### Removing people, 2026-09-08
+
+Both halves existed at the service layer and neither had a button.
+
+**Off a project** — `removeMember` was written, tested by nothing, and reachable
+from no screen, so a team could be built and never corrected. It is now a
+**Remove** on the Team tab, asking once and naming the person. It stays a soft
+removal: the membership row is marked inactive rather than deleted, so a claim
+that turns on who was entitled to instruct work in March can still be answered,
+and re-adding somebody reactivates the same row instead of starting a second
+unrelated stint.
+
+**Out of the company** — new, and deliberately conditional. `deleteUser` refuses
+anyone the commercial record still points at, listing what points at them, and
+tells the administrator to deactivate instead. The reasoning is that deleting a
+`users` row does not delete their work; every reference is `onDelete: SetNull`,
+so the changes, notices, prices and approvals all survive with an empty column
+where the person used to be. A change that said who reported it would say
+nobody. Delete is therefore for an account added by mistake, deactivate is for a
+person who has left, and the service decides which one it is looking at by
+counting rather than asking.
+
+The order of the two deletes is the safety argument: the **Supabase identity
+goes first**, then the row. The other way round leaves an identity that can
+authenticate with no profile behind it — the state that bricked this deployment
+on 2026-09-05 — whereas a failure after the first step leaves an inert row that
+pressing the button again finishes off. It is two operations rather than one
+transaction on purpose: a network call does not belong inside a database
+transaction, and rolling Postgres back would not bring the identity back.
+
+`tests/unit/user-delete.test.ts` locks down the ordering, the refusals, and that
+a refusal touches nothing at all. TEST-PLAN Stage 20b walks both by hand.
+
 ### Open
 
 - **Company name is absent from the app shell.** It was at the top of the old

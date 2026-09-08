@@ -798,6 +798,58 @@ to edit one he did not report.
 
 ---
 
+# Stage 20b · Removing people
+
+**Goal** — two removals that look alike and are not. One is reversible and
+keeps the history. The other is permanent, and the app refuses it for anyone
+who has history to keep.
+
+### Do
+
+**A. Off a project.** `Projects` → **AUH-003** → **Team** → **Remove** next to
+Hassan. It asks first, naming him. Confirm. Then add him back with the same
+project role.
+
+**B. An account added by mistake.** `Settings` → `Users` → `Invite`. Make one
+up — `test-delete@example.com`, Standard User, no password, no projects. Then
+find that row and press **Delete**. It asks, naming the person and saying the
+sign-in goes too. Confirm.
+
+**C. Somebody who has actually worked.** On Ahmed's row, look for **Delete**.
+
+**D. Your own row.** Look for **Delete** on yourself.
+
+### Expect
+
+**A** is a soft removal. The row leaves the team table and Hassan loses access
+to AUH-003 immediately, but the membership record survives underneath. That
+matters months later: when a claim turns on who was entitled to instruct work
+in March, the system can still answer. Adding him back reactivates the same
+record, so his time on the job reads as one continuous history — check the
+**Activity** tab shows both the removal and the return.
+
+**C** shows no Delete button. In its place is a line saying what still names
+him — *"3 changes they reported and 1 notices they issued still name them.
+Deactivate instead."* This is the important one. Deleting Ahmed would not
+delete his work; it would leave the work and remove his name from it, so a
+change that used to say who reported it would say nobody. **Deactivate** is
+the answer for a leaver: he cannot get in, and the record still holds.
+
+### Pass when
+
+- [ ] Remove asks before it acts, and names the person
+- [ ] Hassan disappears from AUH-003's team and can no longer open the project
+- [ ] Re-adding him restores the same role, and Activity shows both events
+- [ ] The made-up account deletes cleanly and disappears from the list
+- [ ] Signing in as that deleted address fails — **the sign-in went with it**
+- [ ] Ahmed shows **no** Delete button, and the reason names what points at him
+- [ ] Your own row shows no Delete button at all
+- [ ] Try deleting the last administrator: refused, with a reason
+- [ ] `Settings` → `Users` still shows the deletion in the activity trail with
+      your name on it
+
+---
+
 # Stage 21 · Isolation — move the handset
 
 **Goal** — the sharpest test in the plan. A person on one project cannot reach

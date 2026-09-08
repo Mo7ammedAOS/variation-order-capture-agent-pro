@@ -22,7 +22,7 @@ import { humanise } from '@/services/dashboard.service';
 import { PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { hasCapability } from '@/services/permissions.service';
 import { BackButton } from '@/components/ui/page-actions';
-import { AddMemberForm } from './team-form';
+import { AddMemberForm, RemoveMemberButton } from './team-form';
 import { AddContactForm } from './contact-form';
 import { toggleMemberNotifyAction } from './actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -496,6 +496,7 @@ async function TeamTab({ user, projectId }: { user: User; projectId: string }) {
                 <TableHead>Project role</TableHead>
                 <TableHead>Notified</TableHead>
                 <TableHead>Assigned</TableHead>
+                {canManage ? <TableHead className="text-end">Action</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -531,6 +532,15 @@ async function TeamTab({ user, projectId }: { user: User; projectId: string }) {
                   <TableCell className="tabular text-muted-foreground">
                     {formatInstant(member.assignedAt)}
                   </TableCell>
+                  {canManage ? (
+                    <TableCell className="text-end">
+                      <RemoveMemberButton
+                        memberId={member.id}
+                        projectId={projectId}
+                        fullName={member.user.fullName}
+                      />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

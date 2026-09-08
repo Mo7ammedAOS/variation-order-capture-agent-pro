@@ -33,6 +33,77 @@ export const inviteSchema = z.object({
   preferredLanguage: z.enum(['en', 'ar']).default('en'),
 });
 
+/**
+ * What still points at a person, and therefore what deleting them would detach.
+ *
+ * ── Why deletion is conditional ───────────────────────────────────────────
+ * Two different things get called "remove this person", and they need
+ * different answers.
+ *
+ * An account added by mistake — the wrong address, the wrong person, the same
+ * man typed twice — has done nothing at all. Leaving a permanent
+ * "Deactivated" row for it clutters the list forever and teaches everyone to
+ * stop reading the status column. Those should really go.
+ *
+ * Somebody who has worked here is not the same case. Their name is on changes
+ * they reported, notices they issued, prices they submitted, approvals they
+ * gave. Delete the row and every one of those columns quietly empties: the
+ * work stays, the person who did it disappears, and a claim that used to say
+ * who instructed what now says nobody. That is not tidying up, it is damaging
+ * the record — the exact thing an audit trail exists to prevent, done from
+ * inside the app.
+ *
+ * So: delete is for accounts, deactivate is for people. The service decides
+ * which one it is looking at by counting, rather than asking an administrator
+ * to know.
+ *
+ * Order matters. The refusal names the first few, so the commercial references
+ * come before the catch-all.
+ */
+const HISTORY_RELATIONS = {
+  reportedChanges: 'changes they reported',
+  ownedChanges: 'changes they own',
+  pricingSubmitted: 'prices they submitted',
+  noticesDrafted: 'notices they drafted',
+  noticesIssued: 'notices they issued',
+  noticesAcknowledged: 'notices they acknowledged',
+  vosSubmitted: 'variation orders they submitted',
+  vosResponseRecorded: 'client responses they recorded',
+  invoicesIssued: 'invoices they issued',
+  creditNotesIssued: 'credit notes they issued',
+  paymentsRecorded: 'payments they recorded',
+  approvalsDecided: 'approvals they decided',
+  approvalsAssigned: 'approvals waiting on them',
+  assignedTasks: 'tasks assigned to them',
+  delegatedTasks: 'tasks they gave out',
+  uploadedDocuments: 'documents they uploaded',
+  createdProjects: 'projects they created',
+  blockingBottlenecks: 'blockers recorded against them',
+  activityLogs: 'entries in the activity trail',
+} as const;
+
+type HistoryRelation = keyof typeof HISTORY_RELATIONS;
+
+const HISTORY_COUNT_SELECT = Object.fromEntries(
+  Object.keys(HISTORY_RELATIONS).map((relation) => [relation, true]),
+) as Record<HistoryRelation, true>;
+
+/**
+ * Plain language for what a person is still attached to. Empty means the
+ * account has no history and can safely be deleted outright.
+ *
+ * Exported because the Users page has to show the same answer the service will
+ * give. A screen offering a button the service then refuses is worse than no
+ * button, and a screen hiding one that would have worked is worse again.
+ */
+export function describeUserHistory(
+  counts: Partial<Record<HistoryRelation, number>>,
+): string[] {
+  return (Object.keys(HISTORY_RELATIONS) as HistoryRelation[])
+    .filter((relation) => (counts[relation] ?? 0) > 0)
+    .map((relation) => `${counts[relation]} ${HISTORY_RELATIONS[relation]}`);
+}
+
 export async function listUsers(user: AuthenticatedUser) {
   await assertCapability(user, 'user.manage');
   return prisma.user.findMany({
@@ -42,6 +113,8 @@ export async function listUsers(user: AuthenticatedUser) {
         where: { active: true },
         select: { projectRole: true, project: { select: { id: true, projectCode: true } } },
       },
+      // So the page can say, per row, whether Delete is honest here.
+      _count: { select: HISTORY_COUNT_SELECT },
     },
   });
 }
@@ -311,6 +384,85 @@ export async function setUserActive(
     });
     return updated;
   });
+}
+
+/**
+ * Removing an account from the company for good.
+ *
+ * ── The order of the two deletes is the whole safety argument ─────────────
+ * A person exists in two places: a Supabase Auth identity, which is what can
+ * sign in, and our `users` row, which is what the app knows about them.
+ * Deleting them in the wrong order has already bricked this deployment once —
+ * a row removed while its identity survived left somebody who could
+ * authenticate but had no profile, and every page they touched died on the
+ * missing record, including the ones an administrator needed to fix it.
+ *
+ * So the sign-in goes first. If the second half then fails, what is left is a
+ * profile row that can no longer sign in — inert, visible in this list, and
+ * removable by pressing the button again. That is the survivable direction,
+ * and it is why this is not one transaction: a network call to Supabase does
+ * not belong inside a database transaction, and rolling back Postgres would
+ * not bring the identity back anyway.
+ *
+ * ── What it refuses ───────────────────────────────────────────────────────
+ * Yourself, the last administrator, and anyone the commercial record still
+ * points at — see HISTORY_RELATIONS above for why that last one is a refusal
+ * rather than a warning. Deactivation is the answer in that case and the
+ * message says so.
+ */
+export async function deleteUser(actor: AuthenticatedUser, userId: string) {
+  await assertCapability(actor, 'user.manage');
+
+  if (userId === actor.id) {
+    throw new ConflictError('You cannot delete your own account');
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { _count: { select: HISTORY_COUNT_SELECT } },
+  });
+  if (!target) throw new NotFoundError('User not found');
+
+  if (target.canAdministerCompany) await assertAnotherAdminRemains(userId);
+
+  const history = describeUserHistory(target._count);
+  if (history.length > 0) {
+    throw new ConflictError(
+      `${target.fullName} has worked on this system — ${history.join(', ')}. ` +
+        'Deleting the account would take their name off all of it. Deactivate them ' +
+        'instead: they lose access immediately and the record still says who did what.',
+    );
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.auth.admin.deleteUser(userId);
+  if (error && !/not.?found/i.test(error.message)) {
+    // Already gone is not a failure — that is the half-finished state this
+    // ordering is designed to let an administrator finish.
+    throw new IntegrationError(`Could not remove the sign-in: ${error.message}`);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.delete({ where: { id: userId } });
+
+    // Written AFTER the row is gone, and attributed to the administrator, so
+    // the trail outlives the account. `recordId` keeps the id, which is what
+    // ties this to the row that created it.
+    await recordAudit({
+      db: tx,
+      userId: actor.id,
+      recordType: 'user',
+      recordId: userId,
+      actionType: 'deleted',
+      oldValue: {
+        email: target.email,
+        fullName: target.fullName,
+        systemRole: target.systemRole,
+      },
+    });
+  });
+
+  return { fullName: target.fullName, email: target.email };
 }
 
 /**

@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { requirePageUser } from '@/lib/auth/session';
-import { listUsers } from '@/services/user.service';
+import { describeUserHistory, listUsers } from '@/services/user.service';
 import { isAppError } from '@/lib/errors';
 import { SYSTEM_ROLE_LABELS, PROJECT_ROLE_LABELS } from '@/lib/rbac';
 import { formatInstant } from '@/lib/dates';
 import { PasswordControls } from './password-form';
+import { DeleteControls } from './delete-form';
 import { PhoneControls } from './phone-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +51,13 @@ export default async function UsersPage() {
           sign-up — every account exists because someone here created it. Administration is
           its own column because whoever runs the app is chosen by the company, and their job
           is usually something else.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          <strong className="font-semibold text-foreground">Deactivate</strong> when someone
+          leaves: they cannot get in any more, and their name stays on the work they did.{' '}
+          <strong className="font-semibold text-foreground">Delete</strong> is for an account
+          added by mistake. It is permanent, it removes the sign-in too, and it is only
+          offered while nothing in the record names that person.
         </p>
       </header>
 
@@ -142,6 +150,14 @@ export default async function UsersPage() {
                           {row.active ? 'Deactivate' : 'Reactivate'}
                         </Button>
                       </form>
+                      {/* Last, and the only one that cannot be pressed again to
+                          undo it. Offered only when nothing in the record names
+                          this person — see describeUserHistory. */}
+                      <DeleteControls
+                        userId={row.id}
+                        fullName={row.fullName}
+                        blockedBy={describeUserHistory(row._count)}
+                      />
                     </div>
                   ) : null}
                 </TableCell>

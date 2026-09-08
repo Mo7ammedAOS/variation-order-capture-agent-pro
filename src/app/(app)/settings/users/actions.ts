@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requirePageUser } from '@/lib/auth/session';
 import {
+  deleteUser,
   inviteSchema,
   inviteUser,
   passwordResetSchema,
@@ -78,6 +79,37 @@ export async function setUserPhoneAction(
     if (error instanceof Error && error.name === 'ZodError') {
       return { error: 'That is not a phone number' };
     }
+    throw error;
+  }
+}
+
+export interface DeleteState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * Deleting an account outright.
+ *
+ * Returns its refusal instead of throwing, because the commonest refusal is
+ * not a fault: "this person has history, deactivate them instead" is the
+ * correct answer and the administrator needs to read it, not meet an error
+ * page that loses the row they were looking at.
+ */
+export async function deleteUserAction(
+  _prev: DeleteState,
+  formData: FormData,
+): Promise<DeleteState> {
+  const actor = await requirePageUser();
+  const userId = String(formData.get('userId') ?? '');
+  if (userId === '') return { error: 'No user' };
+
+  try {
+    const removed = await deleteUser(actor, userId);
+    revalidatePath('/settings/users');
+    return { ok: `${removed.fullName} deleted. Their sign-in no longer exists.` };
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
     throw error;
   }
 }
