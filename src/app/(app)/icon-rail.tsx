@@ -54,6 +54,17 @@ export function IconRail({ links }: { links: NavLink[] }) {
         */
         'hidden w-14 flex-col items-center gap-2 md:flex print:hidden',
         /*
+          `relative z-30` so the tooltips are not painted behind the stage.
+
+          `.panel` on the stage carries `backdrop-filter`, and a backdrop
+          filter CREATES A STACKING CONTEXT. That made the stage an atomic
+          layer painting at its own position in the tree — after the rail —
+          so the tooltip's own `z-50` was competing inside the rail's context
+          and lost to a sibling that outranked the whole rail. Raising the
+          rail itself is the fix; raising the tooltip further never could be.
+        */
+        'relative z-30',
+        /*
           Centred, and exactly as tall as its buttons — without leaving the flow.
 
           `self-center` overrides the flex row's default stretch, so the panel
@@ -121,6 +132,15 @@ export function IconRail({ links }: { links: NavLink[] }) {
               className={cn(
                 'panel glass-chrome pointer-events-none absolute start-[calc(100%+0.6rem)] z-50',
                 'whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold',
+                /*
+                  `text-foreground` explicitly, because this sits INSIDE the
+                  link — and an active link is `brand-fill`, which sets
+                  `color: var(--brand-ink)`: a near-black green meant to be
+                  read on top of lime. Inherited onto a dark tooltip it was
+                  dark green on charcoal, and the label for the page you were
+                  actually on was the one nobody could read.
+                */
+                'text-foreground',
                 'opacity-0 transition-opacity duration-150',
                 'group-hover:opacity-100 group-focus-visible:opacity-100',
               )}
