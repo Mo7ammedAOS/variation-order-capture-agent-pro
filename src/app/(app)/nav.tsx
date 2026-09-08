@@ -141,9 +141,23 @@ export function MobileNav({ links }: { links: NavLink[] }) {
                     'relative flex flex-col items-center gap-1 px-1 py-2.5',
                     'text-[11px] font-semibold transition-colors duration-200',
                     'active:scale-95',
-                    // `--primary`, not `--brand`: the brand lime is a FILL colour and
-                    // measures 1.04:1 as text on a light panel.
-                    active ? 'text-primary' : 'text-muted-foreground',
+                    /*
+                      Light: `--primary`, the readable olive-lime. NOT `--brand`,
+                      which is a fill colour and measures 1.04:1 as text on a
+                      light panel.
+
+                      Dark: plain white. Osman's call, 2026-09-08 — `--primary`
+                      in dark is a bright lime, and on the black glass of the
+                      phone bar a lit-up green word read as a warning rather
+                      than as "you are here". White carries the same meaning and
+                      claims none of the colour vocabulary: in this product
+                      colour on text means risk, and the only thing that should
+                      shout on a dark screen is a breached deadline.
+
+                      The active item is still obvious without it — the lozenge
+                      sits behind it and the inactive labels are muted grey.
+                    */
+                    active ? 'text-primary dark:text-white' : 'text-muted-foreground',
                   )}
                 >
                   <Lozenge active={active} />
