@@ -145,6 +145,28 @@ export async function resetUserPassword(
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase.auth.admin.updateUserById(target.id, {
     password: input.password,
+    /*
+      Confirm the address in the same call, and this is the whole fix for a
+      fault that made every invited account unusable.
+
+      `inviteUserByEmail` creates an identity that is NOT confirmed; it becomes
+      confirmed when the person clicks the link in the invitation. Supabase
+      refuses `signInWithPassword` for an unconfirmed address. So an
+      administrator who set a password here — the documented remedy when the
+      email is slow, and Supabase's own mailer is rate limited to a handful an
+      hour — produced an account with a valid password that could not sign in.
+      Worse, the login screen answers "those details do not match an account"
+      for every failure, so it read as a mistyped password and sent people
+      hunting the wrong thing.
+
+      Setting it here is correct rather than a shortcut: an administrator
+      typing somebody's password IS the out-of-band verification that the
+      confirmation email exists to perform. They created the account, they know
+      who the person is, and they are handing the password over in person or by
+      a channel they already trust. There is nothing left for the email to
+      prove.
+    */
+    email_confirm: true,
   });
 
   if (error) {

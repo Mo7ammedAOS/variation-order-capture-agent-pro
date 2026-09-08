@@ -42,7 +42,18 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
 
   // One message for a wrong password and for an unknown address. Distinguishing
   // them tells an attacker which addresses are real.
-  if (error || !data.user) return { error: 'Those details do not match an account' };
+  //
+  // But the SERVER says which it was, because that single message once cost a
+  // day: an administrator set a password for an invited user, the address was
+  // still unconfirmed, Supabase refused the sign-in, and the screen reported it
+  // as a credential mismatch. Everyone went looking for a mistyped password.
+  // The browser still learns nothing; the log names the cause.
+  if (error || !data.user) {
+    console.warn(
+      `[auth] sign-in refused for ${email}: ${error?.message ?? 'no user returned'}`,
+    );
+    return { error: 'Those details do not match an account' };
+  }
 
   const profile = await prisma.user.findUnique({ where: { id: data.user.id } });
 
