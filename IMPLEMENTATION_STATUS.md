@@ -411,11 +411,18 @@ to point at a live instance:
 Cost, per captured message: one call, ~2k output cap, with the instructions as
 a cached prefix billed at a tenth on every message after the first.
 
-Still mock or absent: **voice transcription** (Claude has no speech-to-text —
-it throws rather than inventing a transcript), scope checking against contract
-and BOQ (that is the pgvector path, already built and separate), notice
-drafting assistance, and impact assessment. Duplicate detection continues to
-run on local MiniLM and costs nothing.
+**Voice transcription is a second vendor, and now has one.** Claude has no
+speech-to-text, so `transcribeVoiceNote` came off the AI interface entirely
+rather than staying as a method its one real implementation could only throw
+from. `src/integrations/transcription/` holds the new boundary, with an
+ElevenLabs Scribe adapter; `TRANSCRIPTION_PROVIDER` defaults to `none`, which
+is a working configuration — the audio is filed as evidence and a person plays
+it. See "Hearing a voice note" below.
+
+Still mock or absent: scope checking against contract and BOQ (that is the
+pgvector path, already built and separate), notice drafting assistance, and
+impact assessment. Duplicate detection continues to run on local MiniLM and
+costs nothing.
 
 **`AI_PROVIDER` still defaults to `mock`.** Nothing calls Anthropic until an
 `ANTHROPIC_API_KEY` is set and the provider switched — deliberately, so the
@@ -560,6 +567,82 @@ transaction, and rolling Postgres back would not bring the identity back.
 `tests/unit/user-delete.test.ts` locks down the ordering, the refusals, and that
 a refusal touches nothing at all. TEST-PLAN Stage 20b walks both by hand.
 
+### Seven gaps closed, 2026-09-12
+
+Osman's list, worked in order of commercial weight rather than size.
+
+**The verbal instruction, flagged and answered.** `instructionRoute` had been
+captured since capture existed and nothing had ever branched on it: a change
+instructed verbally was treated identically to one carrying a signed site
+instruction. Under UAE Civil Code Art. 887 those are not the same thing at all.
+`verbal-confirmation.service.ts` now raises a red panel on the change and
+drafts a confirmation of verbal instruction — a letter that RECORDS rather than
+claims, because a letter that argues invites a reply arguing back and what is
+wanted is a confirmation, not a correspondence.
+
+Three decisions inside it worth keeping:
+
+- **Meetings count, WhatsApp does not.** Minutes are written afterwards by one
+  side and are routinely disputed. WhatsApp is written, timestamped and the
+  normal instruction channel on a UAE fit-out; flagging it would put a warning
+  on most of the register and train everyone to ignore warnings.
+- **No approval gate.** A notice commits the company and takes two seats. This
+  letter's value is almost entirely in going out the same day, so gating it
+  would mean the document that must be contemporaneous is the one that waits.
+- **Green on acknowledged, never on sent.** Sending is our act; the article
+  asks for the employer's agreement.
+
+It shares the `Notice` table because it needs the same plumbing — versions, a
+live draft, issue, a filed PDF, delivery and acknowledgement. `Notice.kind`
+keeps the two series apart, which forced every query on that table to be
+scoped: seven of them would otherwise have superseded a notice when a
+confirmation was meant, or issued one in place of the other, on exactly the
+changes that matter most. `fileUnfiledNotices` deliberately still covers both
+kinds, because a confirmation whose PDF failed to file is exactly as lost as a
+notice.
+
+**Three money figures on the dashboard.** Pending VO value, approved VO value,
+and work started without approval — count and exposure. Three aggregates added
+to the existing `Promise.all`, so the overview costs the same round trip it did
+before.
+
+**The evidence pack.** `src/lib/zip.ts` writes a store-only archive — no
+DEFLATE, because photographs and PDFs are already compressed and the CPU buys
+nothing. The contents file names what is inside AND what was left out, by name:
+a pack that silently dropped the one photograph over the size cap would be
+worse than no pack.
+
+**A client-ready variation order PDF**, separate from the notice letter, with
+the build-up line by line and the basis of each rate. `vo-template.ts` never
+computes: every figure arrives as a string already rounded by the money engine.
+
+**Original scope versus changed scope** — two columns, a migration, and the
+pair printed side by side.
+
+**CSV export of the register**, reading the register's own URL parameters so
+what downloads is what is on screen. UTF-8 BOM or Excel renders Arabic as
+mojibake; leading `=`, `+`, `-` and `@` are defused.
+
+**Hearing a voice note.** Transcription moved off `AiProvider` — Claude has no
+speech-to-text, so the method could only throw — into
+`src/integrations/transcription/`, with an ElevenLabs Scribe adapter chosen
+because site voice notes are half Arabic, half English, often both in one
+sentence, and Scribe detects the language rather than being told it. `none` is
+the default and is a working configuration.
+
+The transcript never replaces anything: the audio is the record, a typed
+caption is the reporter's own words and stays first, and only where the message
+had no words at all does the transcript become the report. A vendor failure is
+logged and the change is created anyway. Wired at both entry points, so a voice
+note parked in triage before a vendor was configured is read when a coordinator
+files it rather than staying `[media only]` for ever.
+
+A bug found on the way: the evidence pack called `listNotices(id)` with a
+CHANGE id where that function takes a PROJECT id. It would have produced packs
+with no notice trail at all, silently. `listNoticesForChange` now exists.
+
+Suite 578 -> 652.
+
 ### Open
 
 - **Company name is absent from the app shell.** It was at the top of the old
@@ -571,9 +654,11 @@ a refusal touches nothing at all. TEST-PLAN Stage 20b walks both by hand.
   notes both reach the app as a message with no file attached. The sign-in
   screen promises "evidence, filed where it belongs"; over WhatsApp that is not
   yet true.
-- **Voice notes are not transcribed and cannot be.** `transcribeVoiceNote` has
-  no callers, the mock returns a fake, and the real provider throws because
-  Claude has no speech-to-text. Making it true needs a second vendor.
+- **Voice notes are transcribed only once media arrives.** The transcriber is
+  built and wired at both capture entry points, but it reads bytes and only
+  bytes — it will not fetch a URL an inbound payload names. Until the WhatsApp
+  lane downloads the file, there is no audio for it to read, so this gap is the
+  one above wearing a different hat.
 - **Backgrounds are heavy** — 510 KB light, 400 KB dark, 2000×1116. They are
   blurred behind glass and would survive being resized.
 - `N8N_NOTIFY_EMAIL_URL` and `N8N_NOTIFY_WHATSAPP_URL` are still blank, so

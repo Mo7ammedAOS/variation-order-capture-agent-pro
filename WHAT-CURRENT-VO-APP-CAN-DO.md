@@ -293,36 +293,42 @@ courier carrying a payload the app authored.
 
 # Part 2 · The limits
 
+> **Updated 12 Sep 2026.** Seven of the gaps below were closed after this file
+> was first written: the verbal-instruction flag and its confirmation letter,
+> the client-ready VO PDF, original-versus-changed scope, the CSV register
+> export, the evidence-pack download, the three money figures on the dashboard,
+> and voice-note transcription. They are recorded at the end of this part under
+> **Closed since this file was written**, with what each one does and does not
+> do, rather than quietly deleted — a list of weaknesses is only worth anything
+> if it is honest in both directions.
+
 ## Things that do not work at all
 
 | | What is actually true |
 |---|---|
-| **WhatsApp photos, voice notes, PDFs** | Text arrives. **Media does not.** The capture lane has no download step and `media: []` is hard-coded, so a photo arrives as a message with no file attached. |
-| **Voice note transcription** | Not implemented. The function has no callers and the real provider throws, because the model in use has no speech-to-text. Needs a second vendor. |
-| **Verbal-instruction chase** | `verbal` is captured, stored and labelled — and **nothing branches on it.** No red flag, no risk elevation, no confirmation-letter generation. Under UAE Civil Code Art. 887 this is the single biggest commercial gap in the product. |
-| **Client-ready VO document** | There is a **notice letter** PDF. There is **no variation order PDF**. |
-| **Excel / Google Sheets export** | Nothing exports. The register prints; it does not download as CSV or XLSX. |
+| **WhatsApp photos, voice notes, PDFs** | Text arrives. **Media does not.** The capture lane has no download step and `media: []` is hard-coded, so a photo arrives as a message with no file attached. This is the one gap that still holds back two of the features below: transcription works, and has nothing to transcribe until media arrives. |
 | **Employer-specific forms** | No Emaar, Nakheel, DM or RTA templates. No Aconex export. If the QS retypes it into Aconex, the integration has sold nothing. |
 | **Arabic documents** | The interface is structurally RTL-ready and each user has a language preference, but the PDF generator has **no Arabic font embedded**. English output only. |
 | **Escalation service** | An empty stub. Reminders and chasing exist; formal escalation levels do not. |
-| **Original scope vs changed scope** | One description field. No tendered-scope / revised-scope pair for a side-by-side. |
 | **Affected programme activities** | No programme link. You can record 14 days; you cannot say which activities. |
 | **Drawing revision comparison** | Documents are stored and searchable. Nothing compares a revision against the tendered drawing. |
-| **Auto-assembled evidence pack** | Everything is attached and traceable. There is no "produce the pack" output. |
 
 ## Things that half work
 
-- **AI extraction.** Every field, prompt and route exists and is tested, but the
-  live server runs `AI_PROVIDER=mock`, so what you see on screen today is a
-  fixture. Switching it on is a configuration change, not a build.
+- **AI extraction.** Every field, prompt and route exists and is tested. Whether
+  it is live depends on one environment line: with `AI_PROVIDER=mock` what you
+  see on screen is a fixture, and with `claude` and a key it is a real reading
+  of the message. Switching it on is a configuration change, not a build, and
+  it starts costing money per captured message.
+- **Voice-note transcription.** Built, tested, and behind
+  `TRANSCRIPTION_PROVIDER`. With `none` — the default — the audio is captured
+  and filed and a person plays it. With `elevenlabs` and a key, a voice note
+  that arrives with no text becomes the description of the change. It is
+  waiting on **WhatsApp media**, above: until the capture lane downloads the
+  file, there is no audio for it to read.
 - **Outbound WhatsApp.** The notification path is wired and the n8n lane is
   active, but the gateway URL on the app side is empty, so app-initiated
   WhatsApp has nowhere to go.
-- **Dashboard money.** 18 cards, ageing and risk are there. The figures a
-  commercial manager shows a board are not: **total pending VO value**,
-  **approved value**, and — most importantly — **work started without
-  approval**. The `workStatus` field exists on every change and the approval
-  state exists; nothing crosses them. That is one query away.
 - **Weekly report lane.** Defined in the workflow map, not built.
 
 ## In the database but with no screen
@@ -339,6 +345,50 @@ These are real, used by the engine, and **cannot be changed without a developer*
 | Company logo, brand colours, default language | unset / defaults |
 | Notice and VO template names | unset |
 | Approval matrix JSON, reminder rules JSON, escalation rules JSON | unset |
+
+## Closed since this file was written
+
+Seven, in order of what they are worth commercially. Each is built, tested and
+on the live branch; the last two are configuration away from being visible.
+
+**The verbal-instruction flag, and the letter that answers it.** A change
+instructed verbally or in a progress meeting now raises a red panel on its own
+screen and offers to write a confirmation of verbal instruction — a letter that
+records what was said, by whom, when and where, says plainly that work has been
+put in hand where it has, and asks for a written reply. It is not behind an
+approval gate, because its value is almost entirely in going out the same day.
+The panel stays red until the **client acknowledges**, not when it is sent:
+Article 887 asks for the employer's agreement, and a screen that turned green
+on "sent" would tell a QS the position was safe when it is merely documented.
+WhatsApp deliberately does not raise the flag — it is written, timestamped and
+the normal instruction channel here, and flagging it would put a warning on
+most of the register and teach everyone to ignore warnings.
+
+**Three money figures on the dashboard.** Pending VO value, approved VO value,
+and **work started without approval** — the count and the exposure. The last
+one is the number a commercial manager is actually asked for.
+
+**The evidence pack, as one download.** A change comes out as a single archive:
+the photographs, the notices with their delivery references, the drawings, the
+approvals, and a contents file that states what is inside — including, by name,
+anything too large to include. Nothing is dropped silently.
+
+**A client-ready variation order PDF.** Separate from the notice letter. It
+prints the build-up line by line with the basis of each rate, and claims time
+only where days are claimed.
+
+**Original scope versus changed scope.** Two fields rather than one
+description, so the tendered scope and the revised scope sit side by side and
+print that way.
+
+**CSV export of the QS register.** The register's own filters apply, so what
+downloads is what is on screen. UTF-8 with a byte-order mark, because without
+it Excel renders Arabic as mojibake, and leading formula characters are
+defused.
+
+**Voice-note transcription.** ElevenLabs Scribe, behind its own provider
+because Claude has no speech-to-text. See **Things that half work** for what it
+is still waiting on.
 
 ## Deployment and compliance
 
@@ -373,12 +423,13 @@ the part that takes months.
 
 What is missing falls into three groups:
 
-**Days of work, high value** — the verbal-instruction flag and confirmation
-letter, the "work started without approval" card, a CSV export of the register.
+**One environment line each** — real AI reading of captured messages, and
+transcription of voice notes. Both are built and tested; both start spending
+money the day they are switched on.
 
-**Weeks** — a client-ready VO PDF, scope before and after, the money roll-up on
-the dashboard, turning the AI provider on and testing it.
+**One lane in n8n** — WhatsApp media. Until the capture lane downloads the
+file, a photograph arrives as a message with nothing attached and a voice note
+has nothing to transcribe. It gates more of the product than its size suggests.
 
 **Real projects, and two of them decide which customers you can sell to at
-all** — WhatsApp media, voice transcription, **Arabic documents**, employer
-forms and Aconex, and **UAE hosting**.
+all** — **Arabic documents**, employer forms and Aconex, and **UAE hosting**.
