@@ -893,6 +893,136 @@ Open `Overview` as Mohammed, then the per-project report from a project page.
 
 ---
 
+# Stage 23 · The verbal instruction
+
+**Goal** — the feature with the most money attached to it. Nine features went
+live on 12 Sep and nobody has clicked any of them on production yet; this is
+the one to walk first.
+
+### Do
+
+**A.** Report a change and answer the capture question with **verbal** — or open
+an existing change whose route is verbal or a meeting
+
+**B.** On the change, find the **red panel** near the top
+
+**C.** Press **Write the confirmation letter**, read the draft, press **Send**
+
+**D.** Press **Record their written confirmation**, enter a reference, save
+
+### Pass when
+
+- [ ] The panel is **red** and says nobody has confirmed the instruction
+- [ ] It cites the client's agreement **in writing** to the work and its price
+- [ ] The draft names **who** gave the instruction, **when**, and **where**
+- [ ] The letter says it **is a record and not a claim**
+- [ ] Where work has started it says so, in its own sentence
+- [ ] The reference starts **CVI-**, not NOT- — the two series must never be
+      confused at a glance
+- [ ] After **Send**, the panel is **still red** and says it stays red until
+      they reply
+- [ ] The PDF opens, is headed CONFIRMATION OF VERBAL INSTRUCTION, and carries
+      the same words as the draft
+- [ ] Only after **Record their written confirmation** does it turn **green**
+- [ ] A change instructed by **WhatsApp** shows **no panel at all**
+
+> Green on "sent" would be the failure. Sending is our act; the article asks
+> for the employer's agreement.
+
+---
+
+# Stage 24 · Money on the overview
+
+**Goal** — the three figures a commercial manager is actually asked for.
+
+Open `Overview` as Mohammed.
+
+### Pass when
+
+- [ ] **Pending VO value** — submitted, awaiting a client answer
+- [ ] **Approved VO value**
+- [ ] **Work started without approval** — a count and a value
+- [ ] Raising a change to `in_progress` without approval moves that third card
+- [ ] Approving it moves the value from pending to approved
+- [ ] Every figure carries a currency and matches the register underneath it
+
+---
+
+# Stage 25 · The three documents
+
+**Goal** — what leaves the building.
+
+### Do
+
+**A.** On a priced change: **the VO document** from the pricing panel
+
+**B.** On the register: filter by project and status, then **export**
+
+**C.** On a change with photos and a notice: **the evidence pack**
+
+### Pass when
+
+- [ ] The VO PDF is headed **VARIATION ORDER**, not NOTICE
+- [ ] It prints the build-up **line by line** with the basis of each rate
+- [ ] It claims **time only where days are claimed**
+- [ ] On a change with no VO raised, the number reads `PC-... (not yet raised)`
+      rather than a blank
+- [ ] The CSV opens in Excel with **Arabic intact**, not mojibake
+- [ ] The CSV holds **only the filtered rows** — what was on screen
+- [ ] The evidence ZIP opens on a Mac by double-click
+- [ ] It has `00 Contents.txt`, and folders for evidence, notices and drawings
+- [ ] Contents names the notice trail **and anything left out**, by file name
+
+> A pack that silently dropped the one photograph over the size cap would be
+> worse than no pack at all.
+
+---
+
+# Stage 26 · The model, reading a real message
+
+**Goal** — `AI_PROVIDER=claude` went live on 12 Sep. Until this stage passes,
+nobody has seen it read anything.
+
+Send a genuinely messy WhatsApp message — the way an engineer actually writes.
+
+### Pass when
+
+- [ ] The title is a **sentence a QS would write**, not the first six words
+- [ ] Location and trade are filled from the text, not left blank
+- [ ] Cost and time flags reflect what the message said
+- [ ] The description is **exactly what the reporter wrote** — untouched
+- [ ] Nothing invented: no date, no drawing number, no quantity, no price
+- [ ] Missing information lists what it could not find
+- [ ] The record says **Claude** read it, not the keyword extractor
+
+> If it says the keyword extractor, the model was unreachable and fell back.
+> Check the container log before assuming the key is wrong.
+
+---
+
+# Stage 27 · The voice note — BLOCKED
+
+**Goal** — nothing to test yet, recorded so nobody tests it and reports a bug.
+
+Transcription is live (ElevenLabs Scribe) and has nothing to hear. Lane A of
+the n8n workflow hard-codes `media: []` and has no download step, so a voice
+note reaches the app as a message with no file attached.
+
+This stage opens when the WhatsApp download node is built. It needs an
+Evolution instance **separate from the Sales OS outreach number** — a Baileys
+ban is permanent.
+
+### Pass when (once unblocked)
+
+- [ ] A voice note with no caption becomes the **description** of the change
+- [ ] The text ends `(Transcribed from a voice note.)`
+- [ ] The audio is in the evidence, playable, and was not replaced
+- [ ] A voice note **with** a caption keeps the caption first
+- [ ] Arabic comes back as Arabic
+- [ ] Site noise does **not** appear as `[drilling]` in the text
+
+---
+
 ## What to record
 
 For each stage: **Pass / Fail**. If failed — what you did, what you expected,
