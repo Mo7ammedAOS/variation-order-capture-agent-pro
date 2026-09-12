@@ -75,6 +75,30 @@ export function formatNoticeReference(projectCode: string, sequence: number): st
 }
 
 /**
+ * Confirmation of a verbal instruction: `CVI-DXB-001-0004`.
+ *
+ * A different prefix from a notice, off the same per-project counter. The two
+ * letters go to the same people about the same change and say very different
+ * things, so a reference that cannot be mistaken for the other at a glance is
+ * worth more than a tidy single sequence. CVI is the abbreviation used on UAE
+ * sites, which means it needs no explaining to the recipient.
+ */
+export function formatConfirmationReference(projectCode: string, sequence: number): string {
+  const code = projectCode.trim().toUpperCase();
+
+  if (!PROJECT_CODE_PATTERN.test(code)) {
+    throw new ValidationError(
+      `Project code "${projectCode}" must be upper-case alphanumerics and hyphens, e.g. DXB-001`,
+    );
+  }
+  if (!Number.isInteger(sequence) || sequence < 1) {
+    throw new ValidationError('Confirmation sequence must be a positive integer');
+  }
+
+  return `CVI-${code}-${String(sequence).padStart(PC_SEQUENCE_PAD, '0')}`;
+}
+
+/**
  * VO-{PROJECT_CODE}-{SEQUENCE} and INV-{PROJECT_CODE}-{SEQUENCE}.
  *
  * Three series on a project, all separate: a VO number is quoted on a payment

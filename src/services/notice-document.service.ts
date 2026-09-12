@@ -66,14 +66,18 @@ export async function draftNotice(
   },
 ): Promise<{ id: string; reference: string } | null> {
   const live = await tx.notice.findFirst({
-    where: { potentialChangeId: input.potentialChangeId, status: { not: 'superseded' } },
+    // `kind` on every one of these. A change can carry a notice AND a
+    // confirmation of a verbal instruction at the same time, and without the
+    // filter the wrong letter is found, superseded, or issued -- the kind of
+    // fault that only appears on the changes that matter most.
+    where: { potentialChangeId: input.potentialChangeId, kind: 'notice', status: { not: 'superseded' } },
     orderBy: { version: 'desc' },
     select: { id: true, reference: true },
   });
   if (live) return live;
 
   const latest = await tx.notice.findFirst({
-    where: { potentialChangeId: input.potentialChangeId },
+    where: { potentialChangeId: input.potentialChangeId, kind: 'notice' },
     orderBy: { version: 'desc' },
     select: { version: true },
   });
@@ -188,7 +192,7 @@ function describeSource(sourceType: string, sourceLocation: string | null): stri
 
 export async function getCurrentNotice(potentialChangeId: string) {
   return prisma.notice.findFirst({
-    where: { potentialChangeId, status: { not: 'superseded' } },
+    where: { potentialChangeId, kind: 'notice', status: { not: 'superseded' } },
     orderBy: { version: 'desc' },
     include: {
       draftedBy: { select: { fullName: true } },
@@ -200,9 +204,24 @@ export async function getCurrentNotice(potentialChangeId: string) {
   });
 }
 
+/**
+ * Every letter on one change, notices and confirmations together.
+ *
+ * Separate from `listNotices`, which answers a different question (everything
+ * on a PROJECT) and is filtered to notices because that is what the notices
+ * screen shows.
+ */
+export async function listNoticesForChange(potentialChangeId: string) {
+  return prisma.notice.findMany({
+    where: { potentialChangeId },
+    orderBy: [{ kind: 'asc' }, { version: 'asc' }],
+    include: { document: { select: { id: true } } },
+  });
+}
+
 export async function listNotices(projectId: string) {
   return prisma.notice.findMany({
-    where: { projectId },
+    where: { projectId, kind: 'notice' },
     orderBy: [{ reference: 'asc' }],
     include: {
       potentialChange: { select: { id: true, pcNumber: true, title: true } },
@@ -286,7 +305,7 @@ export async function issueNotice(
   input: { potentialChangeId: string; projectId: string; actorUserId: string },
 ): Promise<{ id: string; reference: string } | null> {
   const notice = await tx.notice.findFirst({
-    where: { potentialChangeId: input.potentialChangeId, status: 'draft' },
+    where: { potentialChangeId: input.potentialChangeId, kind: 'notice', status: 'draft' },
     orderBy: { version: 'desc' },
   });
   if (!notice) return null;
@@ -406,7 +425,13 @@ export async function fileNoticeDocument(noticeId: string): Promise<{ documentId
   return { documentId: document.id };
 }
 
-/** Notices that were issued but whose PDF never made it to storage. */
+/**
+ * Letters that were issued but whose PDF never made it to storage.
+ *
+ * Deliberately NOT filtered by kind: a confirmation of a verbal instruction
+ * that failed to file is exactly as lost as a notice that did, and both are
+ * filed the same way.
+ */
 export async function fileUnfiledNotices(limit = 25): Promise<{ filed: number; failed: number }> {
   const pending = await prisma.notice.findMany({
     where: { documentId: null, status: { in: ['issued', 'sent', 'acknowledged'] } },
@@ -556,7 +581,7 @@ export async function supersedeDraft(
   input: { potentialChangeId: string; projectId: string; actorUserId: string },
 ): Promise<void> {
   const current = await tx.notice.findFirst({
-    where: { potentialChangeId: input.potentialChangeId, status: 'draft' },
+    where: { potentialChangeId: input.potentialChangeId, kind: 'notice', status: 'draft' },
     orderBy: { version: 'desc' },
   });
   if (!current) return;

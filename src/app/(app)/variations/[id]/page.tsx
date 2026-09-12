@@ -10,6 +10,7 @@ import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
 import { findScopeMatches } from '@/services/document-index.service';
+import { confirmationState } from '@/services/verbal-confirmation.service';
 import { prisma } from '@/lib/prisma';
 import { daysSince, formatDate, formatDateTime, formatInstant, toDateInputValue, todayUtc } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
@@ -32,6 +33,7 @@ import { Money } from '@/components/domain/money';
 import { AssessmentForm } from './assessment-form';
 import { ApprovalPanel } from './approval-panel';
 import { NoticePanel, type NoticeView } from './notice-panel';
+import { ConfirmationPanel } from './confirmation-panel';
 import { MoneyPanel, type VoView } from './money-panel';
 import { EditPanel } from './edit-panel';
 import { CasePanel } from './case-panel';
@@ -95,9 +97,10 @@ export default async function PotentialChangeDetailPage({
 
   // Asked of the same source the service consults, so the page can never offer
   // a button the admin has revoked, nor hide one they have granted.
-  const [mayAssess, canChangeStatus] = await Promise.all([
+  const [mayAssess, canChangeStatus, confirmation] = await Promise.all([
     hasCapability(user.systemRole, projectRoles, 'potentialChange.assessNotice'),
     hasCapability(user.systemRole, projectRoles, 'potentialChange.changeStatus'),
+    confirmationState(change.id),
   ]);
 
   const canAssess = mayAssess && change.noticeStatus === 'not_assessed';
@@ -608,6 +611,30 @@ export default async function PotentialChangeDetailPage({
               </dl>
             </CardContent>
           </Card>
+
+          {/*
+            Above the notice, and that ordering is deliberate. A missed notice
+            deadline loses one claim. An unconfirmed verbal instruction means
+            the work may not be recoverable at all, however good the notice
+            was — so it is the first thing on the screen that needs doing.
+          */}
+          {confirmation.required ? (
+            <ConfirmationPanel
+              potentialChangeId={change.id}
+              stage={confirmation.stage}
+              letter={
+                'letter' in confirmation
+                  ? {
+                      id: confirmation.letter.id,
+                      reference: confirmation.letter.reference,
+                      documentId: confirmation.letter.documentId,
+                      acknowledgementReference: confirmation.letter.acknowledgementReference,
+                    }
+                  : null
+              }
+              canAct={mayDraftNotice}
+            />
+          ) : null}
 
           {notice ? <NoticePanel potentialChangeId={change.id} notice={notice} /> : null}
 

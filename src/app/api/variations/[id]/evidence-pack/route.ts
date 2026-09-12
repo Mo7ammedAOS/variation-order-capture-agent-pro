@@ -5,7 +5,7 @@ import { assertProjectAccess } from '@/services/project-access.service';
 import { listDocuments, readDocumentContent } from '@/services/document.service';
 import { getPricing } from '@/services/pricing.service';
 import { getVariationOrderForChange } from '@/services/variation-order.service';
-import { listNotices } from '@/services/notice-document.service';
+import { listNoticesForChange } from '@/services/notice-document.service';
 import { humanise } from '@/services/dashboard.service';
 import { formatDate, formatInstant, todayUtc } from '@/lib/dates';
 import { uniqueName, zipStore, type ZipEntry } from '@/lib/zip';
@@ -91,7 +91,7 @@ export async function GET(
 
     const [documents, notices, pricing, vo] = await Promise.all([
       listDocuments(user, { potentialChangeId: id }),
-      listNotices(id),
+      listNoticesForChange(id),
       getPricing(user, id),
       getVariationOrderForChange(id),
     ]);

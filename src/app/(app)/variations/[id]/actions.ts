@@ -32,6 +32,11 @@ export const EVIDENCE_TYPES: DocumentType[] = [
   'site_photo', 'voice_note', 'other',
 ];
 import { isAppError } from '@/lib/errors';
+import {
+  draftVerbalConfirmation,
+  issueVerbalConfirmation,
+  recordConfirmationReceived,
+} from '@/services/verbal-confirmation.service';
 import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
 import {
   acknowledgeNotice,
@@ -472,4 +477,73 @@ export async function acknowledgeNoticeAction(
     if (isAppError(error)) return { error: error.message };
     throw error;
   }
+}
+
+/* ─────────────────── confirmation of a verbal instruction ───────────────── */
+
+export interface ConfirmationActionState {
+  error?: string;
+  ok?: string;
+}
+
+/**
+ * Draft, send, confirm. Three separate actions rather than one, because they
+ * are three separate decisions and the middle one puts a letter in front of a
+ * client.
+ */
+export async function draftConfirmationAction(
+  _prev: ConfirmationActionState,
+  formData: FormData,
+): Promise<ConfirmationActionState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+
+  try {
+    await draftVerbalConfirmation(user, id);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/variations/${id}`);
+  return { ok: 'Letter drafted. Read it before it goes.' };
+}
+
+export async function issueConfirmationAction(
+  _prev: ConfirmationActionState,
+  formData: FormData,
+): Promise<ConfirmationActionState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+  const letterId = String(formData.get('letterId') ?? '');
+
+  try {
+    await issueVerbalConfirmation(user, letterId);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/variations/${id}`);
+  return { ok: 'Sent and filed. Chase a written reply.' };
+}
+
+export async function confirmationReceivedAction(
+  _prev: ConfirmationActionState,
+  formData: FormData,
+): Promise<ConfirmationActionState> {
+  const user = await requirePageUser();
+  const id = String(formData.get('potentialChangeId') ?? '');
+  const letterId = String(formData.get('letterId') ?? '');
+  const reference = String(formData.get('reference') ?? '').trim();
+
+  try {
+    await recordConfirmationReceived(user, letterId, reference === '' ? null : reference);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/variations/${id}`);
+  return { ok: 'Recorded. The instruction is now confirmed in writing.' };
 }
