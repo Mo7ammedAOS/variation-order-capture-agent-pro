@@ -108,6 +108,12 @@ enum NoticeStatus {
 /// particular piece of paper got to", and the two are deliberately separate:
 /// a change can need a notice long before one exists, and a superseded draft
 /// still has to be readable years later.
+/// Notice, or confirmation of a verbal instruction. See `Notice.kind`.
+enum NoticeKind {
+  notice
+  verbal_confirmation
+}
+
 enum NoticeIssueStatus {
   draft
   /// Both seats approved and it has been handed to the courier. NOT proof it
@@ -851,6 +857,20 @@ model PotentialChange {
   /// Null when the model was off, declined, or added nothing.
   summary     String?
 
+  /// What the contract said, and what is now being asked for.
+  ///
+  /// Deliberately TWO fields rather than one "change description", because a
+  /// consultant assessing a variation is answering exactly one question: is
+  /// this different from what was tendered? A single prose field makes them
+  /// infer the baseline from context, and an inferred baseline is the thing
+  /// that gets argued about six months later.
+  ///
+  /// Both optional. A change captured from site in thirty seconds has neither,
+  /// and the QS fills them in when pricing -- which is the moment somebody
+  /// actually opens the BOQ and can say what the tendered scope was.
+  scopeOriginal String? @map("scope_original")
+  scopeRevised  String? @map("scope_revised")
+
   sourceType                SourceType      @default(mobile_form) @map("source_type")
   /// WHERE the change was raised, which is not where the change is.
   /// `location` is the place on site the work is affected — "Reception, Level 2".
@@ -1238,6 +1258,22 @@ model Notice {
   version   Int               @default(1)
   status    NoticeIssueStatus @default(draft)
 
+  /// Which letter this is.
+  ///
+  /// A confirmation of a verbal instruction is not a notice -- it makes no
+  /// contractual reservation and starts no clock. It asks the other side to
+  /// put in writing what they have already said, because under UAE Civil Code
+  /// Art. 887 a contractor on a lump-sum muqawala generally cannot recover for
+  /// extra work without the employer's written agreement to the work AND to
+  /// its price.
+  ///
+  /// It lives on this model rather than its own because it needs the identical
+  /// machinery: draft, edit, supersede, approve, issue, file to Drive,
+  /// delivery callback, acknowledgement. And acknowledgement is the entire
+  /// point here -- the client acknowledging IS the written record the article
+  /// asks for.
+  kind NoticeKind @default(notice)
+
   subject String
   body    String
 
@@ -1276,7 +1312,7 @@ model Notice {
   issuedBy        User?            @relation("NoticeIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
   acknowledgedBy  User?            @relation("NoticeAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
 
-  @@unique([potentialChangeId, version])
+  @@unique([potentialChangeId, kind, version])
   @@unique([projectId, reference])
   @@index([projectId, status])
   @@map("notices")

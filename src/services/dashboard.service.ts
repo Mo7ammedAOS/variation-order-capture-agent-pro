@@ -23,6 +23,22 @@ export interface OverviewStats {
   noticesDueWithin7Days: number;
   noticesOverdue: number;
   potentialChangeEstimatedValue: number;
+
+  /**
+   * The three figures a commercial manager takes to a board meeting.
+   *
+   * They were absent, and their absence was the reason the dashboard read as
+   * an operations screen rather than a commercial one: it counted work and
+   * never counted money.
+   */
+  /** Put to the client, no answer yet. The number that is out of our hands. */
+  pendingVoValue: number;
+  /** What the client actually agreed, which is not what we submitted. */
+  approvedVoValue: number;
+  /** Changes where work is under way and nobody has agreed to pay for it. */
+  workStartedUnapproved: number;
+  workStartedUnapprovedValue: number;
+
   criticalBottlenecks: number;
   tasksDueToday: number;
   overdueTasks: number;
@@ -57,6 +73,9 @@ export async function getOverview(
     noticesDueWithin7Days,
     noticesOverdue,
     valueAggregate,
+    pendingVo,
+    approvedVo,
+    unapprovedWork,
     criticalBottlenecks,
     tasksDueToday,
     overdueTasks,
@@ -73,6 +92,44 @@ export async function getOverview(
       where: { ...openChange, noticeDueDate: { lt: today }, noticeStatus: { in: [...NOTICE_OUTSTANDING_STATUSES] } },
     }),
     prisma.potentialChange.aggregate({ where: openChange, _sum: { estimatedValue: true } }),
+    /*
+      Pending is `submitted` AND still awaiting an answer, not simply
+      `submitted`. A variation the client rejected last month is also in the
+      submitted family, and counting it as pending would inflate the one figure
+      nobody may be wrong about.
+    */
+    prisma.variationOrder.aggregate({
+      where: { ...scope, status: 'submitted', clientResponse: 'awaiting' },
+      _sum: { submittedValue: true },
+    }),
+    /*
+      `approvedValue`, never `submittedValue`. A part approval is the client
+      agreeing a LOWER figure, and reporting what we asked for as though they
+      agreed it is how a forecast quietly becomes fiction.
+    */
+    prisma.variationOrder.aggregate({
+      where: { ...scope, status: { in: ['approved', 'part_approved'] } },
+      _sum: { approvedValue: true },
+    }),
+    /*
+      Work started without approval: the most expensive thing on a fit-out job
+      and, until now, a number this system held every component of and never
+      put on a screen. Work is under way or finished on the ground, and the
+      change has not reached `variation_approved` -- so if the client says no,
+      it was done for nothing.
+
+      `included_scope` is excluded because that is the QS finding it was
+      already in the contract, which is a correct outcome, not exposure.
+    */
+    prisma.potentialChange.aggregate({
+      where: {
+        ...scope,
+        workStatus: { in: ['in_progress', 'completed'] },
+        currentStatus: { notIn: ['variation_approved', 'included_scope', 'cancelled'] },
+      },
+      _count: { _all: true },
+      _sum: { estimatedValue: true },
+    }),
     prisma.bottleneck.count({ where: { ...scope, resolvedAt: null, riskLevel: 'red' } }),
     prisma.task.count({ where: { ...scope, dueDate: today, status: { in: ['open', 'in_progress'] } } }),
     prisma.task.count({
@@ -100,6 +157,10 @@ export async function getOverview(
       noticesDueWithin7Days,
       noticesOverdue,
       potentialChangeEstimatedValue: Number(valueAggregate._sum.estimatedValue ?? 0),
+      pendingVoValue: Number(pendingVo._sum.submittedValue ?? 0),
+      approvedVoValue: Number(approvedVo._sum.approvedValue ?? 0),
+      workStartedUnapproved: unapprovedWork._count._all,
+      workStartedUnapprovedValue: Number(unapprovedWork._sum.estimatedValue ?? 0),
       criticalBottlenecks,
       tasksDueToday,
       overdueTasks,

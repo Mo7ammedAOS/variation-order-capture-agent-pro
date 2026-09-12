@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 import {
-  AlertOctagon, CalendarClock, CalendarX2, ClipboardList,
-  FileWarning, FolderKanban, Gavel, HandCoins, Landmark, PiggyBank, ReceiptText,
-  RotateCcw, Timer, Wallet,
+  AlertOctagon, BadgeCheck, CalendarClock, CalendarX2, ClipboardList, FileWarning, FolderKanban, Gavel, HandCoins, HardHat, Hourglass, Landmark, PiggyBank, ReceiptText, RotateCcw, Timer, Wallet,
 } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { getOverview } from '@/services/dashboard.service';
@@ -223,6 +221,26 @@ export default async function DashboardPage() {
           icon={FileWarning}
           href="/variations?status=new_potential_change"
         />
+        {/*
+          Work started without approval sits HERE, among the risk cards, and
+          not down in the money section. It is not an accounting figure — it is
+          work happening on the ground that nobody has agreed to pay for, and
+          if the client says no it was done for nothing. That belongs beside
+          the overdue notices, which is the other way this company loses money
+          it has already earned.
+        */}
+        <StatCard
+          label="Work started, not approved"
+          value={stats.workStartedUnapproved}
+          icon={HardHat}
+          tone={stats.workStartedUnapproved > 0 ? 'red' : 'green'}
+          hint={
+            stats.workStartedUnapproved > 0
+              ? `${formatMoney(stats.workStartedUnapprovedValue, 'AED', { abbreviate: true })} at risk`
+              : 'Nothing being built unapproved'
+          }
+          href="/variations"
+        />
         <StatCard label="Active projects" value={stats.activeProjects} icon={FolderKanban} href="/projects" />
         <StatCard
           label="Estimated value at stake"
@@ -246,7 +264,21 @@ export default async function DashboardPage() {
         <h2 id="h-money" className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">
           The money
         </h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <StatCard
+          label="Submitted, awaiting client"
+          value={formatMoney(stats.pendingVoValue, 'AED', { abbreviate: true })}
+          icon={Hourglass}
+          hint="Put to the client, no answer yet"
+          href="/variations"
+        />
+        <StatCard
+          label="Approved by the client"
+          value={formatMoney(stats.approvedVoValue, 'AED', { abbreviate: true })}
+          icon={BadgeCheck}
+          tone="green"
+          hint="What they agreed, not what we asked"
+        />
         <StatCard
           label="Approved, not invoiced"
           value={formatMoney(Number(money.unbilledValue), 'AED', { abbreviate: true })}

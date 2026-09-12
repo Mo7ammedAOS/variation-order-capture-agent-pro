@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FileWarning, PanelRightOpen } from 'lucide-react';
+import { Download, FileWarning, PanelRightOpen } from 'lucide-react';
 import { requirePageUser } from '@/lib/auth/session';
 import { listPotentialChanges } from '@/services/potential-change.service';
 import { listProjects } from '@/services/project.service';
@@ -10,6 +10,7 @@ import { Money } from '@/components/domain/money';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { EmptyState } from '@/components/domain/empty-state';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RegisterFilters } from './filters';
@@ -38,6 +39,17 @@ export default async function VariationsPage({
     listProjects(user),
   ]);
 
+  /*
+    Rebuilt from the recognised filter keys rather than passed through wholesale,
+    so a stray parameter in the address bar cannot ride into the export route.
+  */
+  const exportParams = new URLSearchParams();
+  for (const key of ['projectId', 'status', 'risk', 'trade', 'q', 'dueWithin'] as const) {
+    const value = params[key];
+    if (value) exportParams.set(key, value);
+  }
+  const exportQuery = exportParams.size > 0 ? `?${exportParams.toString()}` : '';
+
   return (
     <div className="mx-auto flex max-w-[110rem] flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -50,6 +62,25 @@ export default async function VariationsPage({
             {changes.length} {changes.length === 1 ? 'change' : 'changes'} in your projects
           </p>
         </div>
+
+        {/*
+          Export carries the CURRENT filters, which is the whole point of it.
+          A QS who has narrowed the register to one project and the overdue
+          ones wants that spreadsheet, not a dump of the company — and the
+          server applies their project access to it either way.
+
+          A plain link, not a button with an onClick: a download is a
+          navigation, and making it one means it works with middle-click, with
+          "save link as", and with JavaScript still loading.
+        */}
+        {changes.length > 0 ? (
+          <Button asChild variant="outline" size="sm">
+            <a href={`/api/variations/export${exportQuery}`} download>
+              <Download aria-hidden className="size-4" />
+              Export to Excel
+            </a>
+          </Button>
+        ) : null}
       </header>
 
       <RegisterFilters
