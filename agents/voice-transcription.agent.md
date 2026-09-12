@@ -149,6 +149,10 @@ produced it.
 - **A photograph or a PDF** — never sent. Only `audio/*` reaches the vendor.
 - **A forwarded voice note** — no different; the sender is resolved by the
   capture path, not here.
+- **Site noise** — Scribe tags non-speech by default and writes the tags into
+  the text, so a voice note recorded next to a core drill would arrive with
+  `[drilling]` in it and print that way in a notice. `tag_audio_events` is sent
+  as `false`. Confirmed against the live API, 2026-09-12.
 - **A message that turns out to contain no change at all** — capture decides
   that, on the transcript, exactly as it would on typed text.
 

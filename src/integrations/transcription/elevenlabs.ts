@@ -76,6 +76,19 @@ export const elevenLabsTranscriptionProvider: TranscriptionProvider = {
     );
     // Speaker labels are not asked for. One person records a site voice note,
     // and diarisation on a single speaker buys nothing but a bigger answer.
+
+    // Audio events OFF, and this is not a preference.
+    //
+    // Scribe tags non-speech by default and writes the tags INTO the text: a
+    // tone comes back as "[tone]", and a voice note recorded next to a core
+    // drill would come back with "[drilling]" and "[footsteps]" scattered
+    // through it. That text becomes the description of a Potential Change,
+    // which is printed in a notice and read by the other side's commercial
+    // team. A variation record carrying "[footsteps]" is not a small
+    // embarrassment; it is the sort of thing that gets a document dismissed.
+    // Confirmed against the live API on 2026-09-12.
+    form.append('tag_audio_events', 'false');
+
     if (input.languageHint) form.append('language_code', input.languageHint);
 
     let response: Response;

@@ -79,6 +79,18 @@ describe('the ElevenLabs adapter', () => {
     expect(form.get('file')).toBeInstanceOf(Blob);
   });
 
+  it('turns off audio-event tagging, which is on by default', async () => {
+    fetchMock.mockResolvedValue(ok(SCRIBE));
+    await elevenLabsTranscriptionProvider.transcribe({
+      audio: Buffer.from('fake-audio'),
+      mimeType: 'audio/ogg',
+    });
+    // Scribe writes non-speech tags INTO the text. A voice note recorded next
+    // to a core drill would otherwise reach a notice with "[drilling]" in it.
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.body as FormData).get('tag_audio_events')).toBe('false');
+  });
+
   it('does not tell the vendor what language to expect unless asked to', async () => {
     fetchMock.mockResolvedValue(ok(SCRIBE));
     await elevenLabsTranscriptionProvider.transcribe({
