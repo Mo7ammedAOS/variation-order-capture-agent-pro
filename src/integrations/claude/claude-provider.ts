@@ -429,17 +429,4 @@ export const claudeAiProvider: AiProvider = {
     };
   },
 
-  async transcribeVoiceNote() {
-    // Claude has no speech-to-text. Saying so is the only honest answer:
-    // returning a placeholder here would put an invented transcript on a file
-    // that people treat as a record of what was said.
-    //
-    // A voice note still captures — the audio is stored as evidence and the
-    // change is created — it simply arrives without a transcript until a
-    // transcription vendor is wired in. That is a second vendor and a separate
-    // decision, the same way embeddings were.
-    throw new IntegrationError(
-      'Claude cannot transcribe audio. Voice notes are stored as evidence and read by a person.',
-    );
-  },
 };

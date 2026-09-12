@@ -80,19 +80,6 @@ export const mockAiProvider: AiProvider = {
     };
   },
 
-  async transcribeVoiceNote(input) {
-    return {
-      extractedData: {
-        transcript: `[mock transcript of ${input.mimeType}, ${input.audio.byteLength} bytes]`,
-        language: 'en',
-      },
-      confidenceScore: 0.5,
-      sourceReferences: ['voice-note:original-audio'],
-      missingInformation: ['Real transcription requires the Phase 2 provider'],
-      suggestedNextAction: 'Review the transcript against the original audio',
-    };
-  },
-
   /**
    * The mock returns the report unchanged, on purpose.
    *

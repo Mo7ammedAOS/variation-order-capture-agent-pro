@@ -48,11 +48,10 @@ export interface AiProvider {
     senderName?: string | null;
   }): Promise<AgentEnvelope<CapturedChangeExtraction>>;
 
-  /** Transcribes a voice note. The original audio is never replaced. */
-  transcribeVoiceNote(input: {
-    audio: Buffer;
-    mimeType: string;
-  }): Promise<AgentEnvelope<{ transcript: string; language: string }>>;
+  // Transcription used to be declared here and it does not belong: Claude has
+  // no speech-to-text, so the one real implementation of this interface could
+  // only throw. It lives in `src/integrations/transcription` now, behind its
+  // own provider, because it is a different vendor with a different bill.
 
   /**
    * Turns a site report into the account of it that goes in a notice.

@@ -210,11 +210,10 @@ describe('when the third party is having a bad afternoon', () => {
     expect(result.envelope.missingInformation.join(' ')).toContain('fallback keyword extractor');
   });
 
-  it('does not pretend to transcribe audio', async () => {
-    // Claude has no speech-to-text. A placeholder transcript would put invented
-    // words on a file people treat as a record of what was said.
-    await expect(
-      claudeAiProvider.transcribeVoiceNote({ audio: Buffer.from(''), mimeType: 'audio/ogg' }),
-    ).rejects.toThrow(/cannot transcribe/);
+  it('has no transcription method at all', () => {
+    // Claude has no speech-to-text. The method used to be on this interface
+    // and could only ever throw; transcription is a separate vendor now, so
+    // the honest shape is that the method is not here to call.
+    expect('transcribeVoiceNote' in claudeAiProvider).toBe(false);
   });
 });

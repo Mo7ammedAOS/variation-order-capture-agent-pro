@@ -77,6 +77,16 @@ const serverSchema = z.object({
   ANTHROPIC_API_KEY: z.string().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
 
+  /**
+   * Speech to text is a SECOND VENDOR. Claude cannot transcribe audio, so
+   * hearing a voice note is a separate choice with its own key and its own
+   * bill, and `none` is a working configuration: the audio is captured and
+   * filed either way, and a person listens to it.
+   */
+  TRANSCRIPTION_PROVIDER: z.enum(['none', 'mock', 'elevenlabs']).default('none'),
+  ELEVENLABS_API_KEY: z.string().default(''),
+  ELEVENLABS_STT_MODEL: z.string().default('scribe_v2'),
+
   N8N_BASE_URL: z.string().default(''),
   N8N_WEBHOOK_SECRET: z.string().min(8),
   N8N_OUTBOUND_SECRET: z.string().default(''),
@@ -160,6 +170,9 @@ function parseEnv(): ServerEnv {
   }
   if (env.AI_PROVIDER === 'claude' && env.ANTHROPIC_API_KEY === '') {
     throw new Error('AI_PROVIDER=claude requires ANTHROPIC_API_KEY');
+  }
+  if (env.TRANSCRIPTION_PROVIDER === 'elevenlabs' && env.ELEVENLABS_API_KEY === '') {
+    throw new Error('TRANSCRIPTION_PROVIDER=elevenlabs requires ELEVENLABS_API_KEY');
   }
 
   return env;

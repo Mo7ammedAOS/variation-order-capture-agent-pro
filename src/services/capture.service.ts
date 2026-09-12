@@ -53,6 +53,7 @@ import {
 } from '@/lib/reply-intent';
 import { ambiguousSenderReason, resolveSender } from '@/services/sender-identity.service';
 import { storeCaptureEvidence, type CaptureAttachment } from '@/services/document.service';
+import { hearVoiceNotes } from '@/services/voice-note.service';
 
 /**
  * Capture from an external channel.
@@ -133,8 +134,18 @@ export async function captureFromChannel(
   //
   // Deletion only. Nothing here rewrites a word the reporter wrote.
   const cleaned = cleanCapturedText(rawInput.text);
-  const input: CaptureInput = { ...rawInput, text: cleaned.text };
-  const attachments = input.attachments ?? [];
+  const attachments = rawInput.attachments ?? [];
+
+  // A voice note becomes words BEFORE anything reads the message — before the
+  // answer matcher, before the project is chosen, before the AI reader. Fifteen
+  // seconds of audio is the fastest report anybody sends and it used to arrive
+  // as the text "[media only]", which no part of this system could act on.
+  //
+  // The audio itself is still filed as evidence and is never replaced. When
+  // there is no transcription vendor, or the vendor fails, the text is
+  // unchanged and everything below behaves exactly as it did before.
+  const heard = await hearVoiceNotes(cleaned.text, attachments);
+  const input: CaptureInput = { ...rawInput, text: heard.text };
 
   // Is this an ANSWER to a question we already asked? Checked first, because
   // "2" from someone with a question outstanding is not a new change, and
@@ -1728,12 +1739,22 @@ export async function fileTriagedEvent(
   const senderIdentifier = str(sender.phone) ?? str(from.address) ?? '';
   const senderName = str(sender.display_name) ?? str(from.name) ?? null;
 
-  const text =
+  const parked =
     str(message.text) ??
     str(message.caption) ??
     str(payload.body_text) ??
     str(payload.subject) ??
     '[media only]';
+
+  // The photographs and voice notes the message arrived with. Filing by hand
+  // must produce the same record as filing by reply, evidence included —
+  // otherwise the changes that needed a human are the ones missing their proof.
+  const attachments = attachmentsFromPayload(event.payloadJson);
+
+  // And the same transcript. A voice note that landed here BEFORE a vendor was
+  // configured, or while one was failing, gets read now rather than staying
+  // "[media only]" for ever because of when it happened to arrive.
+  const { text } = await hearVoiceNotes(parked, attachments);
 
   // Falls back to the person filing it only when the sender is not a user we
   // hold — an outside email, say. Attribution never silently becomes "nobody".
@@ -1761,10 +1782,7 @@ export async function fileTriagedEvent(
       eventDate: todayUtc(event.receivedAt),
       projectCodeHint: null,
       sourceSubject: str(payload.subject),
-      // The photographs the message arrived with. Filing by hand must produce
-      // the same record as filing by reply, evidence included — otherwise the
-      // changes that needed a human are the ones missing their proof.
-      attachments: attachmentsFromPayload(event.payloadJson),
+      attachments,
     },
   });
 
