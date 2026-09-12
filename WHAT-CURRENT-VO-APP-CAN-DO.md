@@ -7,12 +7,13 @@ schema, and the live server's configuration.
 | | |
 |---|---|
 | **Live at** | `vo.osmanflow.com` |
-| **Build** | `4908660` |
-| **Checked** | 12 September 2026 |
-| **Tests passing** | 578 across 40 files |
+| **Build** | `d108634` |
+| **Checked** | 13 September 2026 |
+| **Tests passing** | 653 across 45 files |
 | **Database** | Supabase Postgres, **Singapore** (`ap-southeast-1`) |
 | **File storage** | Google Drive, OAuth mode |
-| **AI provider** | **`mock`** — returns fixtures, not real analysis |
+| **AI provider** | **`claude`** — Sonnet 5, live since 12 Sep, real spend per capture |
+| **Transcription** | **`elevenlabs`** — Scribe, live, and **idle** until WhatsApp media arrives |
 | **Automation** | n8n `VO Capture & Control · MASTER`, 62 nodes, **active** |
 
 Read the two halves together. Part 1 is what works. Part 2 is what does not, and
@@ -293,8 +294,8 @@ courier carrying a payload the app authored.
 
 # Part 2 · The limits
 
-> **Updated 12 Sep 2026.** Seven of the gaps below were closed after this file
-> was first written: the verbal-instruction flag and its confirmation letter,
+> **Updated 13 Sep 2026.** Nine of the gaps below were closed after this file
+> was first written, and the two that needed a key are now live and paid for: the verbal-instruction flag and its confirmation letter,
 > the client-ready VO PDF, original-versus-changed scope, the CSV register
 > export, the evidence-pack download, the three money figures on the dashboard,
 > and voice-note transcription. They are recorded at the end of this part under
@@ -315,21 +316,18 @@ courier carrying a payload the app authored.
 
 ## Things that half work
 
-- **AI extraction.** Every field, prompt and route exists and is tested. Whether
-  it is live depends on one environment line: with `AI_PROVIDER=mock` what you
-  see on screen is a fixture, and with `claude` and a key it is a real reading
-  of the message. Switching it on is a configuration change, not a build, and
-  it starts costing money per captured message.
-- **Voice-note transcription.** Built, tested, and behind
-  `TRANSCRIPTION_PROVIDER`. With `none` — the default — the audio is captured
-  and filed and a person plays it. With `elevenlabs` and a key, a voice note
-  that arrives with no text becomes the description of the change. It is
-  waiting on **WhatsApp media**, above: until the capture lane downloads the
-  file, there is no audio for it to read.
-- **Outbound WhatsApp.** The notification path is wired and the n8n lane is
-  active, but the gateway URL on the app side is empty, so app-initiated
-  WhatsApp has nowhere to go.
+- **Voice-note transcription.** Live — ElevenLabs Scribe, key in place, model
+  id verified against the real API. It has **nothing to hear.** Until the
+  capture lane downloads the file, no audio reaches the app. Everything on our
+  side of that line is built, tested and idle.
+- **Outbound WhatsApp.** `N8N_NOTIFY_WHATSAPP_URL` is now set and the n8n lane
+  is active, but `EVOLUTION_API_URL` is empty, so the lane has no gateway to
+  hand the message to. Email notification is unaffected and does send.
 - **Weekly report lane.** Defined in the workflow map, not built.
+  `N8N_REPORT_DELIVERY_URL` is empty.
+- **Escalation.** `escalation.service.ts` is 21 lines and one export — a stub.
+  Reminders and daily chasing are real and work; formal escalation levels are
+  not written.
 
 ## In the database but with no screen
 
@@ -348,8 +346,9 @@ These are real, used by the engine, and **cannot be changed without a developer*
 
 ## Closed since this file was written
 
-Seven, in order of what they are worth commercially. Each is built, tested and
-on the live branch; the last two are configuration away from being visible.
+Nine, in order of what they are worth commercially. Every one is built, tested,
+merged and **deployed** — the two that needed a vendor key were switched on
+during the 12 September release and are being paid for now.
 
 **The verbal-instruction flag, and the letter that answers it.** A change
 instructed verbally or in a progress meeting now raises a red panel on its own
@@ -386,9 +385,17 @@ downloads is what is on screen. UTF-8 with a byte-order mark, because without
 it Excel renders Arabic as mojibake, and leading formula characters are
 defused.
 
+**Real AI reading every capture.** `AI_PROVIDER=claude`, Sonnet 5, live since
+12 September. Before that every message on screen had been read by a keyword
+matcher. It costs money per captured message, and a vendor failure falls back
+to the keyword reader and records that it did — a report is never lost because
+Anthropic is having a bad afternoon.
+
 **Voice-note transcription.** ElevenLabs Scribe, behind its own provider
-because Claude has no speech-to-text. See **Things that half work** for what it
-is still waiting on.
+because Claude has no speech-to-text. `tag_audio_events` is sent as `false`:
+Scribe writes non-speech tags into the text by default, so a voice note
+recorded beside a core drill would otherwise reach a notice carrying
+`[drilling]`. See **Things that half work** for what it is still waiting on.
 
 ## Deployment and compliance
 
@@ -398,6 +405,13 @@ is still waiting on.
 - The GitHub repository is **public**.
 - `ALLOW_JOB_TIME_TRAVEL` is off, which is correct — turning it on makes
   simulated runs send real messages to real people.
+- **Two vendors are now billed per use** — Anthropic per captured message,
+  ElevenLabs per minute of audio. Neither was spending anything before 12
+  September, and neither has a spend cap set on our side.
+- **Nothing in Part 1 has been walked by a person on production since the 12
+  September release.** `TEST-PLAN.md` stages 23 to 27 exist for exactly that
+  and have not been run. The unit suite proves the logic; it proves nothing
+  about whether a button is reachable or a PDF opens.
 
 ## Smaller known gaps
 
@@ -423,13 +437,15 @@ the part that takes months.
 
 What is missing falls into three groups:
 
-**One environment line each** — real AI reading of captured messages, and
-transcription of voice notes. Both are built and tested; both start spending
-money the day they are switched on.
+**Forty minutes of somebody's attention** — nothing shipped on 12 September has
+been used by a person on the live system. Stages 23 to 27 of `TEST-PLAN.md`
+cover it. This is the cheapest item on the list and the only one that can tell
+you whether the other nine are real.
 
 **One lane in n8n** — WhatsApp media. Until the capture lane downloads the
 file, a photograph arrives as a message with nothing attached and a voice note
-has nothing to transcribe. It gates more of the product than its size suggests.
+has nothing to transcribe. It gates more of the product than its size suggests,
+and it now gates a transcription vendor that is live and idle.
 
 **Real projects, and two of them decide which customers you can sell to at
 all** — **Arabic documents**, employer forms and Aconex, and **UAE hosting**.

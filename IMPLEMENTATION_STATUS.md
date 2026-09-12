@@ -661,6 +661,13 @@ Suite 578 -> 652.
   one above wearing a different hat.
 - **Backgrounds are heavy** — 510 KB light, 400 KB dark, 2000×1116. They are
   blurred behind glass and would survive being resized.
-- `N8N_NOTIFY_EMAIL_URL` and `N8N_NOTIFY_WHATSAPP_URL` are still blank, so
-  nothing is sent. `AI_PROVIDER` is still `mock`.
+- **Live vendor state, 12 Sep.** `AI_PROVIDER=claude` (Sonnet 5) and
+  `TRANSCRIPTION_PROVIDER=elevenlabs` are both on the VPS and both billing.
+  `N8N_NOTIFY_EMAIL_URL` and `N8N_NOTIFY_WHATSAPP_URL` are set; email sends,
+  WhatsApp does not, because `EVOLUTION_API_URL` is still empty and the lane
+  has no gateway to hand a message to. `N8N_BASE_URL`,
+  `N8N_DOCUMENT_MOVE_URL` and `N8N_REPORT_DELIVERY_URL` remain empty.
+- **Nothing from the 12 Sep release has been exercised by a person on
+  production.** `TEST-PLAN.md` stages 23 to 27 were written for it and have not
+  been walked.
 
