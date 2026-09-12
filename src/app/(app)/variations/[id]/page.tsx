@@ -516,6 +516,33 @@ export default async function PotentialChangeDetailPage({
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{change.description}</p>
               )}
 
+              {/*
+                Scope, before and after, shown only once somebody has filled it
+                in. An empty "Original scope: —" on every change would train
+                people to skip the block, and this is the block a consultant
+                reads first.
+              */}
+              {change.scopeOriginal || change.scopeRevised ? (
+                <div className="glass-inset grid gap-4 rounded-xl p-4 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                      What the contract said
+                    </p>
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">
+                      {change.scopeOriginal ?? 'Not stated'}
+                    </p>
+                  </div>
+                  <div className="min-w-0 sm:border-s sm:border-border sm:ps-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                      What is being asked for now
+                    </p>
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">
+                      {change.scopeRevised ?? 'Not stated'}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <dl className="grid gap-4 sm:grid-cols-2">
                 <Field label="Requested by" icon={User}>
                   {change.requestedByContact?.fullName ?? change.sourceSenderName ?? '—'}
@@ -655,6 +682,8 @@ export default async function PotentialChangeDetailPage({
             current={{
               title: change.title,
               description: change.description ?? '',
+              scopeOriginal: change.scopeOriginal,
+              scopeRevised: change.scopeRevised,
               location: change.location ?? '',
               trade: change.trade ?? '',
               eventDate: toDateInputValue(change.eventDate),

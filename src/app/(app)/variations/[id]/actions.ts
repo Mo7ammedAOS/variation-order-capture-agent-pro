@@ -211,6 +211,10 @@ export async function updateChangeAction(
   const parsed = potentialChangeUpdateSchema.safeParse({
     title: formData.get('title') || undefined,
     description: formData.get('description') || undefined,
+    // `|| null`, not `|| undefined`: emptying the box has to clear the field,
+    // or a scope typed in error can never be removed.
+    scopeOriginal: formData.get('scopeOriginal') || null,
+    scopeRevised: formData.get('scopeRevised') || null,
     location: formData.get('location') || undefined,
     trade: formData.get('trade') || undefined,
     instructedBy: formData.get('instructedBy') || undefined,

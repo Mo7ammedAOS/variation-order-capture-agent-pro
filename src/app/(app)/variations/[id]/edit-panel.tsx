@@ -73,6 +73,8 @@ export interface EditPanelProps {
   current: {
     title: string;
     description: string;
+    scopeOriginal: string | null;
+    scopeRevised: string | null;
     location: string;
     trade: string;
     eventDate: string;
@@ -174,6 +176,38 @@ export function EditPanel({
                   rows={3}
                   defaultValue={current.description}
                 />
+              </div>
+
+              {/*
+                The comparison a consultant actually assesses.
+
+                Two boxes, side by side, and deliberately optional: the site
+                report that started this record was filed in a minute from a
+                phone and could not have contained either. These get filled in
+                when the QS opens the BOQ, which is also the moment somebody
+                can say what the tendered scope really was.
+              */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <Label htmlFor="scopeOriginal">What the contract said</Label>
+                  <Textarea
+                    id="scopeOriginal"
+                    name="scopeOriginal"
+                    rows={3}
+                    defaultValue={current.scopeOriginal ?? ''}
+                    placeholder="The tendered scope, and the bill item it came from"
+                  />
+                </div>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <Label htmlFor="scopeRevised">What is being asked for now</Label>
+                  <Textarea
+                    id="scopeRevised"
+                    name="scopeRevised"
+                    rows={3}
+                    defaultValue={current.scopeRevised ?? ''}
+                    placeholder="The revised scope, as instructed"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">

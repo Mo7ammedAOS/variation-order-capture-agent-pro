@@ -39,6 +39,16 @@ export const potentialChangeCreateSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().trim().min(3, 'Describe the change in a few words').max(200),
   description: z.string().trim().min(3, 'Say what changed').max(5000),
+  /*
+    The tendered scope and the revised scope, both optional.
+
+    Not on the capture path in practice: a site engineer filing from a phone
+    does not know what the BOQ said, and asking would slow down the one step
+    the whole product depends on being fast. The QS fills them in at pricing,
+    which is the first moment anybody has the contract open.
+  */
+  scopeOriginal: z.string().trim().max(5000).optional().nullable(),
+  scopeRevised: z.string().trim().max(5000).optional().nullable(),
   eventDate: z.coerce.date(),
   location: z.string().trim().max(200).optional().nullable(),
   trade: z.string().trim().max(100).optional().nullable(),
@@ -223,6 +233,8 @@ export async function createPotentialChange(
           pcNumber,
           title: input.title,
           description: input.description,
+          scopeOriginal: input.scopeOriginal ?? null,
+          scopeRevised: input.scopeRevised ?? null,
           eventDate: input.eventDate,
           location: input.location ?? null,
           trade: input.trade ?? null,

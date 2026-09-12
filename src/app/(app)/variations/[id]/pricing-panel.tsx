@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AlertCircle, CheckCircle2, FileX2, Trash2, TriangleAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, FileX2, Trash2, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select, Textarea } from '@/components/ui/input';
@@ -134,6 +134,29 @@ export function PricingPanel(props: PricingPanelProps) {
   return (
     <Card tone={frozen ? 'plain' : 'insight'}>
       <CardHeader className="pb-3">
+        {/*
+          The client-ready document, available from the moment there is
+          something to show — not held back until a VO is formally raised. A QS
+          wants to read it before submitting, and attach it to an internal
+          approval, and both of those happen first.
+
+          It opens in the browser rather than downloading, because the point of
+          pressing it is to check the page.
+        */}
+        {items.length > 0 ? (
+          <div className="mb-2 flex justify-end">
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={`/api/variations/${potentialChangeId}/vo-document`}
+                target="_blank"
+                rel="noopener"
+              >
+                <FileText aria-hidden className="size-4" />
+                Client document
+              </a>
+            </Button>
+          </div>
+        ) : null}
         <CardTitle className="text-base">
           {pricingStatus === 'approved'
             ? 'Approved price'
