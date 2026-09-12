@@ -2,9 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  AlertTriangle, ClipboardList, Copy, FileSearch, FileText, History, MapPin, Paperclip,
-  ShieldAlert, User,
+  AlertTriangle, ClipboardList, Copy, FileArchive, FileSearch, FileText, History, MapPin,
+  Paperclip, ShieldAlert, User,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { requirePageUser } from '@/lib/auth/session';
 import { allowedNextStatuses, getPotentialChange } from '@/services/potential-change.service';
 import { findSimilarChanges } from '@/services/search.service';
@@ -782,10 +783,24 @@ export default async function PotentialChangeDetailPage({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Paperclip aria-hidden className="size-4" />
-                Evidence
-              </CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Paperclip aria-hidden className="size-4" />
+                  Evidence
+                </CardTitle>
+                {/*
+                  Always offered, even with nothing attached. The pack is not
+                  just the files: it carries the notice trail, the delivery
+                  proof and every approval with a name and a time against it,
+                  and those are records that exist nowhere else as a document.
+                */}
+                <Button asChild variant="outline" size="sm">
+                  <a href={`/api/variations/${change.id}/evidence-pack`} download>
+                    <FileArchive aria-hidden className="size-4" />
+                    Evidence pack
+                  </a>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {change.documents.length === 0 ? (
