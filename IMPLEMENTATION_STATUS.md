@@ -440,6 +440,9 @@ first paid call is a decision rather than a side effect of a deploy.
   of the eight `src/workers/*` stubs should never be written.
 - The Unassigned Capture Inbox moved from stage 8 to stage 4. Capture parks
   what it cannot place, and without a screen those messages fall into a hole.
+  **Superseded 2026-09-13** — the screen was taken out of the navigation at
+  Osman's request. The hole is back, deliberately and with the cost written
+  down; see "The Capture Inbox leaves the navigation" below.
 - Contract rules, contacts, team and project creation now have forms. The
   "API-only" limitation above is out of date.
 
@@ -642,6 +645,47 @@ CHANGE id where that function takes a PROJECT id. It would have produced packs
 with no notice trail at all, silently. `listNoticesForChange` now exists.
 
 Suite 578 -> 652.
+
+### The Capture Inbox leaves the navigation, 2026-09-13
+
+Osman's call. The screen listed every message that arrived and read as noise
+beside the work it was meant to support. It is out of the sidebar, the phone
+bar, the icon rail and the command palette.
+
+**The route is deliberately still alive at `/inbox` and nothing was deleted.**
+A parked message is a variation report that exists in the database, and a
+screen still reachable by URL is the difference between "not in the way" and
+"gone". One line in `nav-links.ts` puts the tab back.
+
+What it costs is written into `nav-links.ts` rather than left to be
+rediscovered: a message the system could not place is now on no screen anybody
+opens. Unknown sender, a number two people share, a sender on no active
+project, somebody naming a job they are not assigned to, an unanswered
+question. **Osman has not yet said where those should surface instead** — the
+options put to him were a bottleneck on `Held Up`, an email to an
+administrator, or accepting it.
+
+The back-and-forth questions on WhatsApp and email were explicitly kept.
+
+### A voice note on the web form, 2026-09-13
+
+The form has accepted `audio/*` since it was built and filed the clip as a
+silent document, because `reportChange` goes through `createPotentialChange`
+and not through `captureFromChannel` where `hearVoiceNotes` had been wired.
+Somebody standing in front of the wall records fifteen seconds rather than
+typing with one glove off, and every word of it was invisible to the register,
+to the AI reader and to the notice.
+
+It is also the only channel where transcription works TODAY: the form holds the
+bytes in the browser, and WhatsApp will not until the download lane exists.
+Email already carried attachments, so an emailed voice note was already read.
+
+The file bytes are now read ONCE and used twice — transcription and upload —
+because asking the browser for them a second time reads a consumed stream. The
+typed description stays first; the audio is filed whether or not it was read.
+
+**Evidence by channel:** form yes, email yes (lane B forwards attachments and
+names any it could not read), WhatsApp blocked on Evolution credentials.
 
 ### Open
 

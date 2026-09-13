@@ -30,6 +30,11 @@ report was the least useful one to receive.
 - `fileTriagedEvent()` — a coordinator filing a parked message by hand. A voice
   note that arrived before a vendor was configured is read when it is filed,
   rather than staying `[media only]` for ever because of when it landed.
+- `reportChange()` — the web form (added 2026-09-13). It does NOT go through
+  `captureFromChannel`, which is why the form accepted `audio/*` for months and
+  filed it as a silent document. **This is the only channel where transcription
+  works today**, because the form holds the bytes in the browser and the
+  WhatsApp lane does not download the file.
 
 SOP: `/workflows/whatsapp-capture.md`.
 

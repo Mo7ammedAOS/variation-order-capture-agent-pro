@@ -160,9 +160,13 @@ defaults, creates the company record, and creates one owner account.
 ### Pass when
 
 - [ ] You are signed in at `https://vo.osmanflow.com` under the name you typed
-- [ ] The **icon rail** down the left has nine icons. Hover each one and the
-      tooltip reads **Overview, My Tasks, Variations, Held Up, Capture Inbox,
-      Projects, Company, Users, Permissions**
+- [ ] The **icon rail** down the left has eight icons. Hover each one and the
+      tooltip reads **Overview, My Tasks, Variations, Held Up, Projects,
+      Company, Users, Permissions**
+- [ ] There is **no Capture Inbox**. It was taken out of the navigation on
+      13 Sep. `/inbox` still answers if you type it, by design — a parked
+      message is a variation report and deleting the only way to reach one
+      would lose it
 - [ ] Overview is empty — no changes, no value, no tasks
 - [ ] Sign out, then open `/admin-signup` directly. It redirects to sign-in and
       offers no set-up button. **Set-up has closed behind you.**
@@ -393,8 +397,8 @@ Sign in as each person and read the **icon rail** (hover for tooltips).
 
 | Signed in as | Should see |
 |---|---|
-| You (Owner) | All nine items |
-| Mohammed (MD) | All except **Capture Inbox** |
+| You (Owner) | All eight items |
+| Mohammed (MD) | All eight |
 | Abdelmoneim (PM) | Overview · My Tasks · Variations · Held Up · **Projects** |
 | Ahmed (SE) | Overview · My Tasks · Variations · Held Up — **four only** |
 | Osman (QS) | Overview · My Tasks · Variations · Held Up — **four only** |
@@ -403,13 +407,15 @@ Sign in as each person and read the **icon rail** (hover for tooltips).
 not an afterthought: the two navigations are built from the same list but are
 different components, and until recently the phone bar ignored the permission
 filter entirely and showed a fixed four to everybody. An administrator could
-not reach the capture inbox or any settings screen from a phone at all.
+not reach any settings screen from a phone at all.
 
 On a phone the bar holds four items and a **More** button; everything past the
 fourth lives behind More. Count what is reachable, not what is visible.
 
 Then, still signed in as **Ahmed**, type these into the browser bar directly:
-`/settings/permissions`, `/settings/users`, `/inbox`.
+`/settings/permissions`, `/settings/users`, `/inbox`. All three must refuse
+him. `/inbox` is out of the navigation but is still capability-gated, and a
+route nobody links to is exactly the kind that quietly loses its guard.
 
 Then sign out and open **`/admin-signup`** directly.
 
@@ -1000,26 +1006,43 @@ Send a genuinely messy WhatsApp message — the way an engineer actually writes.
 
 ---
 
-# Stage 27 · The voice note — BLOCKED
+# Stage 27 · The voice note
 
-**Goal** — nothing to test yet, recorded so nobody tests it and reports a bug.
+**Goal** — prove transcription on the one channel where it works today.
 
-Transcription is live (ElevenLabs Scribe) and has nothing to hear. Lane A of
-the n8n workflow hard-codes `media: []` and has no download step, so a voice
-note reaches the app as a message with no file attached.
+Two of the three reporting channels can carry a voice note now. The form has
+the audio bytes in the browser; email carries them as an attachment. **WhatsApp
+cannot** — lane A hard-codes `media: []` and has no download step, so a voice
+note arrives as a message with no file attached.
 
-This stage opens when the WhatsApp download node is built. It needs an
-Evolution instance **separate from the Sales OS outreach number** — a Baileys
-ban is permanent.
+### Do
 
-### Pass when (once unblocked)
+**A.** Open `/report-change` on a phone. Write a short description, then attach
+a voice recording — speak a sentence about a change, in Arabic or English
 
-- [ ] A voice note with no caption becomes the **description** of the change
-- [ ] The text ends `(Transcribed from a voice note.)`
-- [ ] The audio is in the evidence, playable, and was not replaced
-- [ ] A voice note **with** a caption keeps the caption first
+**B.** Submit, and open the change it creates
+
+**C.** Repeat by emailing a report with a voice note attached
+
+### Pass when
+
+- [ ] The description holds **what you typed first**, unchanged
+- [ ] Underneath it: `From the voice note sent with it:` and your words
+- [ ] The audio file is in the evidence, **playable**, and was not replaced
 - [ ] Arabic comes back as Arabic
-- [ ] Site noise does **not** appear as `[drilling]` in the text
+- [ ] Background noise does **not** appear as `[drilling]` or `[tone]`
+- [ ] The same happens for the emailed one
+- [ ] With no vendor key set, the change is still created and the audio still
+      filed — only the transcript is absent
+
+> A transcript is a reading of the audio, never the record. If the recording
+> is ever missing while the text survives, stop — that is the wrong way round.
+
+### Still blocked
+
+WhatsApp voice notes, until the download node is built. It needs an Evolution
+instance **separate from the Sales OS outreach number** — a Baileys ban is
+permanent.
 
 ---
 

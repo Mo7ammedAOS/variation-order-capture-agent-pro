@@ -99,6 +99,11 @@ Everything below is set per project, not hardcoded:
   idempotent so a retried delivery never doubles a record.
 - **Email** — parsed the same way; replies land on the original thread.
 - **Watched document folder** — files arriving are registered and indexed.
+- **A voice note becomes words.** Attach a recording to the web form or to an
+  email report and it is transcribed, with the typed text kept first and the
+  transcript added under it, attributed. The audio is filed as evidence either
+  way and is never replaced. WhatsApp voice notes cannot do this yet — the
+  capture lane does not download the file.
 
 **The conversation, when something is unclear.** The system asks rather than
 guesses — which project, is this new or evidence for an existing change, when
@@ -247,9 +252,15 @@ drawing, email, WhatsApp, meeting.
 
 `/dashboard` · `/my-tasks` · `/projects` · `/projects/[id]` (8 tabs) ·
 `/projects/new` · `/projects/[id]/report` · `/variations` · `/variations/[id]` ·
-`/report-change` · `/bottlenecks` · `/inbox` · `/notifications` ·
+`/report-change` · `/bottlenecks` · `/notifications` ·
 `/settings/company` · `/settings/users` · `/settings/permissions` · `/signin` ·
 `/admin-signin` · `/set-password`
+
+`/inbox` — the Capture Inbox — still answers but is **not in the navigation**
+since 13 Sep. Osman's call: it listed every message that arrived and read as
+noise. Nothing was deleted, and the consequence is stated plainly under
+**Deployment and compliance** below, because it is not visible from the screen
+itself.
 
 - **Dashboard**: 18 stat cards ordered by **urgency, not by total** — overdue
   notices first — plus four charts (by project, by status, by risk, overdue
@@ -408,6 +419,13 @@ recorded beside a core drill would otherwise reach a notice carrying
 - **Two vendors are now billed per use** — Anthropic per captured message,
   ElevenLabs per minute of audio. Neither was spending anything before 12
   September, and neither has a spend cap set on our side.
+- **A message the system cannot place is now visible on no screen anybody
+  opens.** The Capture Inbox came out of the navigation on 13 Sep. It happens
+  when the sender is not a known user, when two people share a number, when the
+  sender is on no active project, when somebody names a job they are not
+  assigned to, and when a follow-up question goes unanswered. Each is a
+  variation report sitting in the database. `/inbox` still reaches them if you
+  type it.
 - **Nothing in Part 1 has been walked by a person on production since the 12
   September release.** `TEST-PLAN.md` stages 23 to 27 exist for exactly that
   and have not been run. The unit suite proves the logic; it proves nothing
