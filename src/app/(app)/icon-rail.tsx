@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import {
-  AlertOctagon, Building2, FileWarning, FolderKanban, Inbox,
-  LayoutDashboard, ListChecks, LogOut, Settings, ShieldCheck,
+  AlertOctagon, Building2, FileWarning, FolderKanban, LayoutDashboard, ListChecks, LogOut, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
@@ -15,7 +14,6 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   '/my-tasks': ListChecks,
   '/variations': FileWarning,
   '/bottlenecks': AlertOctagon,
-  '/inbox': Inbox,
   '/projects': FolderKanban,
   '/settings/company': Building2,
   '/settings/users': Settings,

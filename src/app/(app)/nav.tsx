@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  AlertOctagon, Building2, FileWarning, FolderKanban, Inbox, LayoutDashboard,
+  AlertOctagon, Building2, FileWarning, FolderKanban, LayoutDashboard,
   ListChecks, LogOut, MoreHorizontal, Settings, ShieldCheck, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,6 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   '/my-tasks': ListChecks,
   '/variations': FileWarning,
   '/bottlenecks': AlertOctagon,
-  '/inbox': Inbox,
   '/projects': FolderKanban,
   '/settings/company': Building2,
   '/settings/users': Settings,

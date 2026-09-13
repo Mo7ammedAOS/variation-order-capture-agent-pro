@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  AlertOctagon, Building2, FileText, FileWarning, FolderKanban, Inbox,
-  LayoutDashboard, ListChecks, Loader2, Plus, Search, Settings, ShieldCheck,
+  AlertOctagon, Building2, FileText, FileWarning, FolderKanban, LayoutDashboard, ListChecks, Loader2, Plus, Search, Settings, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -69,7 +68,6 @@ const PALETTE_ICONS: Record<string, Item['icon']> = {
   '/my-tasks': ListChecks,
   '/variations': FileWarning,
   '/bottlenecks': AlertOctagon,
-  '/inbox': Inbox,
   '/projects': FolderKanban,
   '/settings/company': Building2,
   '/settings/users': Settings,

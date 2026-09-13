@@ -51,11 +51,19 @@ export const NAV_LINKS: NavLink[] = [
   { href: '/my-tasks', label: 'My Tasks', short: 'Tasks', capability: null },
   { href: '/variations', label: 'Variations', short: 'Changes', capability: null },
   { href: '/bottlenecks', label: 'Held Up', short: 'Held Up', capability: null },
-  // The triage queue for messages the system could not place. It is the
-  // administrator's desk, not a shared inbox: it holds other people's
-  // half-understood reports, and the answer to most of them is a question
-  // somebody has to ask by hand.
-  { href: '/inbox', label: 'Capture Inbox', short: 'Inbox', capability: 'capture.triage' },
+  // The Capture Inbox is deliberately NOT here. Osman's call, 2026-09-13: the
+  // screen listed every message that arrived and read as noise beside the work
+  // it was supposed to support. The route still exists at `/inbox` and still
+  // files a parked message, so nothing captured is lost and nothing was
+  // deleted — it simply is not in the navigation. Put this line back to
+  // restore it.
+  //
+  // WHAT THIS COSTS, stated because it is not obvious: a message the system
+  // could not place is now visible on no screen anybody opens. The cases are
+  // an unknown sender, a number shared by two people, a sender on no active
+  // project, somebody naming a job they are not assigned to, and a question
+  // that went unanswered. Each one is a variation report that exists in the
+  // database and that nobody will see.
   { href: '/projects', label: 'Projects', short: 'Projects', capability: 'project.update' },
   { href: '/settings/company', label: 'Company', short: 'Company', capability: 'companySettings.manage' },
   { href: '/settings/users', label: 'Users', short: 'Users', capability: 'user.manage' },

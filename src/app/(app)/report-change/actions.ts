@@ -10,6 +10,7 @@ import {
 } from '@/services/potential-change.service';
 import { uploadDocument } from '@/services/document.service';
 import { indexPotentialChange } from '@/services/search.service';
+import { hearVoiceNotes } from '@/services/voice-note.service';
 
 export interface ReportState {
   error?: string;
@@ -58,25 +59,66 @@ export async function reportChange(_prev: ReportState, formData: FormData): Prom
     return { error: 'Check the highlighted fields', fieldErrors };
   }
 
+  const files = formData.getAll('evidence').filter((f): f is File => f instanceof File && f.size > 0);
+
+  // Read once, used twice: transcription needs the bytes and so does the
+  // upload, and asking the browser for them a second time would read a stream
+  // that has already been consumed.
+  const attached = await Promise.all(
+    files.map(async (file) => ({
+      file,
+      bytes: Buffer.from(await file.arrayBuffer()),
+    })),
+  );
+
+  // A voice note attached HERE is transcribed, exactly as one sent over
+  // WhatsApp would be.
+  //
+  // This form accepted `audio/*` from the day it was built and then filed the
+  // clip as a silent document, because it takes a different path from the
+  // capture lanes. Somebody standing in front of the wall records fifteen
+  // seconds rather than typing with one glove off, and every word of it was
+  // invisible to the register, to the AI reader and to the notice.
+  //
+  // It is also the only channel where this works today: the form has the
+  // bytes, and WhatsApp does not until the download lane is built.
+  //
+  // The typed description always comes first and is never replaced; the
+  // transcript is added under it, attributed. A vendor failure is logged and
+  // the description is unchanged.
+  const heard = await hearVoiceNotes(
+    parsed.data.description,
+    attached.map(({ file, bytes }) => ({
+      externalId: file.name,
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      contentBase64: bytes.toString('base64'),
+    })),
+  );
+
   let change;
   try {
-    change = await createPotentialChange(user, parsed.data);
+    change = await createPotentialChange(user, {
+      ...parsed.data,
+      description: heard.text,
+    });
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;
   }
 
-  const files = formData.getAll('evidence').filter((f): f is File => f instanceof File && f.size > 0);
   let failedUploads = 0;
 
-  for (const file of files) {
+  for (const { file, bytes } of attached) {
     try {
       await uploadDocument(user, {
         projectId: parsed.data.projectId,
         potentialChangeId: change.id,
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
-        content: Buffer.from(await file.arrayBuffer()),
+        // The audio itself is filed whether or not it was transcribed. The
+        // recording is the record; the transcript is a reading of it.
+        content: bytes,
       });
     } catch (error) {
       // The commercial record is already safe, so this never fails the capture.
