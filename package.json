@@ -17,6 +17,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx --conditions=react-server prisma/seed.ts",
     "db:wipe": "tsx --conditions=react-server scripts/wipe.ts",
+    "db:reset-data": "tsx --conditions=react-server scripts/reset-data.ts",
     "db:bootstrap": "tsx --conditions=react-server scripts/bootstrap.ts",
     "worker": "tsx --conditions=react-server src/workers/index.ts",
     "test:db": "vitest run tests/integration",
