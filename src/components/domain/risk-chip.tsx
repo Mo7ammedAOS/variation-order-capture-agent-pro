@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import type { RiskLevel } from '@prisma/client';
 import { Badge } from '@/components/ui/badge';
 import { humanise } from '@/lib/labels';
+import { customerStatus } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 
 const CONFIG = {
@@ -59,4 +60,22 @@ export function StatusChip({ status }: { status: string }) {
   // would title-case the acronyms it deliberately left alone — which is how
   // "QS pricing" was rendering as "Qs Pricing" on the register.
   return <Badge variant="secondary">{humanise(status)}</Badge>;
+}
+
+/**
+ * Where a change is, in the seven words a person uses.
+ *
+ * Separate from `StatusChip` on purpose: that one renders any enum, including
+ * `noticeStatus` and an authority status, and those must go on reading exactly
+ * as they are stored. This one is only ever the lifecycle stage, and it is the
+ * only thing that may be shown for it outside the rework dropdown.
+ */
+export function StageChip({
+  status,
+  vo,
+}: {
+  status: string;
+  vo?: { submitted?: boolean; answered?: boolean } | null;
+}) {
+  return <Badge variant="secondary">{customerStatus(status, vo)}</Badge>;
 }

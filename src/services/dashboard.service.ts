@@ -22,6 +22,28 @@ export interface OverviewStats {
   noticeAssessmentRequired: number;
   noticesDueWithin7Days: number;
   noticesOverdue: number;
+
+  /**
+   * The notice, tracked along its own track.
+   *
+   * It stopped being a stage of the change on 2026-09-22 — pricing runs beside
+   * it — so it stopped being visible in a status count. These five are the
+   * only way anybody now sees a notice that has stalled, and the fourth one is
+   * the reason they exist: a delivery that failed is invisible everywhere else,
+   * because from the app's side it was sent.
+   */
+  /** Drafted, waiting for the PM to read it and press send. */
+  noticesAwaitingSend: number;
+  /** Sent from here, no word back from the courier yet. */
+  noticesPendingDelivery: number;
+  /** The courier came back and said no. Somebody must retry it. */
+  noticesDeliveryFailed: number;
+  /** Delivered, and the client has not acknowledged it. */
+  noticesAwaitingAcknowledgement: number;
+
+  /** Where the open work actually sits, in the two stages that hold it. */
+  changesAwaitingPricing: number;
+  changesAwaitingApproval: number;
   potentialChangeEstimatedValue: number;
 
   /**
@@ -70,6 +92,12 @@ export async function getOverview(
     activeProjects,
     newPotentialChanges,
     noticeAssessmentRequired,
+    noticesAwaitingSend,
+    noticesPendingDelivery,
+    noticesDeliveryFailed,
+    noticesAwaitingAcknowledgement,
+    changesAwaitingPricing,
+    changesAwaitingApproval,
     noticesDueWithin7Days,
     noticesOverdue,
     valueAggregate,
@@ -85,6 +113,31 @@ export async function getOverview(
     prisma.project.count({ where: { ...projectScope, projectStatus: { in: ['active', 'awarded'] } } }),
     prisma.potentialChange.count({ where: { ...scope, currentStatus: 'new_potential_change' } }),
     prisma.potentialChange.count({ where: { ...scope, noticeStatus: 'not_assessed' } }),
+
+    // Counted on the NOTICE, not on the change, because the two no longer move
+    // together. `kind: 'notice'` throughout: a confirmation of verbal
+    // instruction lives in the same table and is a different letter with a
+    // different deadline.
+    prisma.notice.count({ where: { ...scope, kind: 'notice', status: 'draft' } }),
+    prisma.notice.count({
+      where: {
+        ...scope,
+        kind: 'notice',
+        status: 'issued',
+        OR: [
+          { notification: { status: { in: ['pending', 'queued'] } } },
+          { notification: null },
+        ],
+      },
+    }),
+    prisma.notice.count({
+      where: { ...scope, kind: 'notice', status: 'issued', notification: { status: 'failed' } },
+    }),
+    prisma.notice.count({ where: { ...scope, kind: 'notice', status: 'sent' } }),
+
+    prisma.potentialChange.count({ where: { ...scope, currentStatus: 'qs_pricing' } }),
+    prisma.potentialChange.count({ where: { ...scope, currentStatus: 'internal_approval' } }),
+
     prisma.potentialChange.count({
       where: { ...openChange, noticeDueDate: { gte: today, lte: in7Days } },
     }),
@@ -154,6 +207,12 @@ export async function getOverview(
       activeProjects,
       newPotentialChanges,
       noticeAssessmentRequired,
+      noticesAwaitingSend,
+      noticesPendingDelivery,
+      noticesDeliveryFailed,
+      noticesAwaitingAcknowledgement,
+      changesAwaitingPricing,
+      changesAwaitingApproval,
       noticesDueWithin7Days,
       noticesOverdue,
       potentialChangeEstimatedValue: Number(valueAggregate._sum.estimatedValue ?? 0),

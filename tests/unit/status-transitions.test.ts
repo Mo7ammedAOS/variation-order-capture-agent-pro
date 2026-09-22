@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PotentialChangeStatus } from '@prisma/client';
 import { allowedNextStatuses } from '@/services/potential-change.service';
-import { isRework, statusLabel } from '@/lib/status-labels';
+import { customerStatus, isRework, statusLabel } from '@/lib/status-labels';
 
 /**
  * The lifecycle guard, as pure logic so it runs without a database.
@@ -159,5 +159,36 @@ describe('the words people actually read', () => {
     // would demand a rework reason for finishing something.
     expect(isRework('qs_pricing', 'cancelled')).toBe(false);
     expect(isRework('internal_approval', 'variation_approved')).toBe(false);
+  });
+});
+
+describe('the seven words a person reads', () => {
+  it('collapses everything the project manager holds into one', () => {
+    // Four internal states, one answer. The difference between "not assessed"
+    // and "waiting for what we asked for" matters to the chase and to nobody
+    // reading the register.
+    for (const status of ['notice_assessment', 'needs_evidence', 'pm_scope_review', 'notice_required']) {
+      expect(customerStatus(status)).toBe('PM review');
+    }
+  });
+
+  it('never shows a retired stage by name', () => {
+    expect(customerStatus('pm_scope_review')).not.toMatch(/scope/i);
+    expect(customerStatus('notice_required')).not.toMatch(/notice/i);
+  });
+
+  it('tells sent-to-client from waiting-on-them from finished', () => {
+    expect(customerStatus('variation_approved')).toBe('Sent to client');
+    expect(customerStatus('variation_approved', { submitted: true })).toBe('Client decision');
+    expect(customerStatus('variation_approved', { submitted: true, answered: true })).toBe('Closed');
+  });
+
+  it('closes the two endings that are not approvals', () => {
+    expect(customerStatus('included_scope')).toBe('Closed');
+    expect(customerStatus('cancelled')).toBe('Closed');
+  });
+
+  it('never leaks a raw enum, even for something it has never seen', () => {
+    expect(customerStatus('some_future_stage')).not.toContain('_');
   });
 });

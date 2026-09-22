@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Money } from '@/components/domain/money';
-import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
+import { RiskChip, StageChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { StatCard } from '@/components/domain/stat-card';
 import { getProjectRoles } from '@/services/project-access.service';
@@ -253,7 +253,7 @@ async function ChangesTab({ user, projectId }: { user: User; projectId: string }
               </TableCell>
               <TableCell className="max-w-72 truncate">{change.title}</TableCell>
               <TableCell>
-                <StatusChip status={change.currentStatus} />
+                <StageChip status={change.currentStatus} />
               </TableCell>
               <TableCell>
                 <NoticeCountdown noticeDueDate={change.noticeDueDate} compact />

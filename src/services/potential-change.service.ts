@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Prisma, PotentialChangeStatus, RiskLevel } from '@prisma/client';
 import { z } from 'zod';
+import { statusesForFilter } from '@/lib/status-labels';
 import { prisma } from '@/lib/prisma';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/errors';
 import { calculateNoticeDueDate, todayUtc } from '@/lib/dates';
@@ -128,7 +129,13 @@ export async function listPotentialChanges(
     await assertProjectAccess(user, filters.projectId);
     where.projectId = filters.projectId;
   }
-  if (filters.status) where.currentStatus = filters.status as PotentialChangeStatus;
+  if (filters.status) {
+    // One filter value may cover several internal statuses — "PM review" is
+    // four of them. `statusesForFilter` passes a raw status straight through,
+    // so saved links and the dashboard's precise deep-links still work.
+    const statuses = statusesForFilter(filters.status) as PotentialChangeStatus[];
+    where.currentStatus = statuses.length === 1 ? statuses[0] : { in: statuses };
+  }
   if (filters.riskLevel) where.riskLevel = filters.riskLevel;
   if (filters.ownerUserId) where.currentOwnerUserId = filters.ownerUserId;
   if (filters.trade) where.trade = filters.trade;

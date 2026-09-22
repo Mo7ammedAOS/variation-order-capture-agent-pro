@@ -1,14 +1,39 @@
 # Implementation Status
 
 **Phase 1 — DEPLOYED and live at https://vo.osmanflow.com.**
-Last updated 2026-09-08.
+Last updated 2026-09-22.
+
+## The workflow changed on 2026-09-22
+
+The project manager now reviews a change and decides the notice on one screen,
+and **QS pricing starts at that moment** rather than waiting for the notice to
+clear a gate. The notice runs on its own track beside the commercial chain.
+
+- The two-seat approval gate on the notice is **gone**. The PM drafts, reads
+  and sends the notice himself.
+- The managing director holds **no approval seat**. The PM is the company's
+  internal approver of the final priced variation.
+- Approving the variation **is** sending it: raise, render, file, queue,
+  submit, in one act.
+- `pm_scope_review` and `notice_required` are **retired statuses**. Nothing
+  enters them; rows that stopped there still read and still have a way forward.
+- Eleven internal statuses now map onto **seven** the interface shows.
+
+Nothing was deleted to do it. Every enum value, capability and historical
+approval stands, and a change a managing director approved goes on showing
+that.
+
+**Not yet applied to the live database:** migration
+`20260922100000_pm_notice_decision` (three nullable columns on
+`potential_changes`). Deploy with `deploy/release.sh`, which builds the
+`migrate` service by name.
 
 ## Gates
 
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 107 tests, 20 of them against the real database
+npm test            PASS — 685 unit tests; `npm run test:db` for the database suite
 npm run build       PASS
 npm run db:migrate  PASS — 4 migrations: schema, capture source fields,
                     pgvector indexes, row level security

@@ -209,17 +209,61 @@ export default async function DashboardPage() {
           href="/my-tasks"
         />
         <StatCard
-          label="Notice assessment required"
+          label="Notices needing a decision"
           value={stats.noticeAssessmentRequired}
           icon={Gavel}
           tone={stats.noticeAssessmentRequired > 0 ? 'amber' : 'neutral'}
-          href="/variations?status=notice_assessment"
+          href="/variations?status=pm_review"
+        />
+        {/*
+          The notice's own track.
+
+          Pricing no longer waits for the notice, which means a stalled notice
+          no longer shows up as a stalled change. These four are the only place
+          it surfaces — and the failed one most of all, because from this app's
+          side it was sent, so nothing else will ever mention it again.
+        */}
+        <StatCard
+          label="Notices drafted, not sent"
+          value={stats.noticesAwaitingSend}
+          icon={FileWarning}
+          tone={stats.noticesAwaitingSend > 0 ? 'amber' : 'neutral'}
+        />
+        <StatCard
+          label="Notices pending delivery"
+          value={stats.noticesPendingDelivery}
+          icon={Hourglass}
+        />
+        <StatCard
+          label="Notice delivery failed"
+          value={stats.noticesDeliveryFailed}
+          icon={AlertOctagon}
+          tone={stats.noticesDeliveryFailed > 0 ? 'red' : 'neutral'}
+        />
+        <StatCard
+          label="Notices awaiting acknowledgement"
+          value={stats.noticesAwaitingAcknowledgement}
+          icon={CalendarClock}
+          tone={stats.noticesAwaitingAcknowledgement > 0 ? 'amber' : 'neutral'}
+        />
+        <StatCard
+          label="Waiting on the QS"
+          value={stats.changesAwaitingPricing}
+          icon={ReceiptText}
+          href="/variations?status=qs_pricing"
+        />
+        <StatCard
+          label="Waiting on PM approval"
+          value={stats.changesAwaitingApproval}
+          icon={BadgeCheck}
+          tone={stats.changesAwaitingApproval > 0 ? 'amber' : 'neutral'}
+          href="/variations?status=pm_approval"
         />
         <StatCard
           label="New potential changes"
           value={stats.newPotentialChanges}
           icon={FileWarning}
-          href="/variations?status=new_potential_change"
+          href="/variations?status=new"
         />
         {/*
           Work started without approval sits HERE, among the risk cards, and

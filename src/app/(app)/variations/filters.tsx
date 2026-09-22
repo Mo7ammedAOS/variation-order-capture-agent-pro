@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { STAGE_FILTERS } from '@/lib/status-labels';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -8,11 +9,7 @@ import { Input, Label, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const STATUSES = [
-  'new_potential_change', 'notice_assessment', 'notice_required', 'needs_evidence',
-  'pm_scope_review', 'qs_pricing', 'cm_review', 'internal_approval',
-  'variation_approved', 'included_scope', 'cancelled',
-];
+
 
 /**
  * Filters live in the URL rather than component state, so a filtered register
@@ -121,9 +118,9 @@ export function RegisterFilters({ projects }: { projects: { id: string; label: s
             onChange={(event) => setParam('status', event.target.value)}
           >
             <option value="">Any status</option>
-            {STATUSES.map((status) => (
-              <option key={status} value={status} className="capitalize">
-                {status.replace(/_/g, ' ')}
+            {STAGE_FILTERS.map((stage) => (
+              <option key={stage.value} value={stage.value}>
+                {stage.label}
               </option>
             ))}
           </Select>

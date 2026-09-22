@@ -7,7 +7,7 @@ import { listProjects } from '@/services/project.service';
 import { formatDate, daysSince } from '@/lib/dates';
 import { humanise } from '@/services/dashboard.service';
 import { Money } from '@/components/domain/money';
-import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
+import { RiskChip, StageChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { EmptyState } from '@/components/domain/empty-state';
 import { Button } from '@/components/ui/button';
@@ -159,7 +159,7 @@ export default async function VariationsPage({
                       <NoticeCountdown noticeDueDate={change.noticeDueDate} compact />
                     </TableCell>
                     <TableCell>
-                      <StatusChip status={change.currentStatus} />
+                      <StageChip status={change.currentStatus} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {change.currentOwner?.fullName ?? (
@@ -209,7 +209,7 @@ export default async function VariationsPage({
                       <RiskChip level={change.riskLevel} />
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <StatusChip status={change.currentStatus} />
+                      <StageChip status={change.currentStatus} />
                       <NoticeCountdown noticeDueDate={change.noticeDueDate} compact />
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">

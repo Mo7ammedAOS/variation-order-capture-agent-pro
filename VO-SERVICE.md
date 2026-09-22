@@ -47,10 +47,10 @@ This system is built so that all three are structurally difficult to get wrong.
 | Role | What they do in the system |
 |---|---|
 | **Site engineer / foreman** | Reports a change from the field, usually by WhatsApp with a photo. Never has to open the app. |
-| **Project manager** | Decides whether a change needs a formal notice; approves the notice; owns scope. |
+| **Project manager** | Decides whether a change needs a formal notice, sends it, and approves the final priced variation. The company's internal approver. |
 | **Quantity surveyor / commercial** | Prices the variation, raises applications and invoices, tracks payment. |
 | **Commercial manager / director** | Oversees the register, approves value, watches the exposure across projects. |
-| **Managing director** | Final approval authority; sees everything; can move any decision forward. |
+| **Managing director** | Sees everything, and is told about anything three working days late. Holds no approval seat: a second signature on every change was a person who could be on a plane. |
 | **Client / main contractor** | Receives notices and priced variations, and is followed up automatically. |
 
 Authority is defined by a **capability matrix**, not by job title. Who may

@@ -27,7 +27,7 @@ import { isAppError } from '@/lib/errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BackButton } from '@/components/ui/page-actions';
 import { Badge } from '@/components/ui/badge';
-import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
+import { RiskChip, StageChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { calculateNoticeCountdown } from '@/lib/risk';
 import { noticeDisplayStatus, noticeNeedsWarning } from '@/lib/notice-status';
@@ -505,7 +505,7 @@ export default async function PotentialChangeDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusChip status={change.currentStatus} />
+          <StageChip status={change.currentStatus} />
           <RiskChip level={change.riskLevel} />
         </div>
       </header>

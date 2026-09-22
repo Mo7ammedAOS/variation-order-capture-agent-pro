@@ -132,10 +132,16 @@ drawing, email, WhatsApp, meeting.
 ## 5. The record and its lifecycle
 
 - **Race-safe numbering** — `PC-DXB-001-0004`, from an atomic counter.
-- **11 statuses**: new potential change → notice assessment → notice required →
-  needs evidence → PM scope review → QS pricing → CM review → internal approval
-  → **variation approved** *or* **included scope** (the QS found it was already
-  in the contract) *or* cancelled.
+- **Seven stages, in the words people read**: new change → PM review → QS
+  pricing → PM approval → sent to client → client decision → closed.
+- Eleven statuses still exist underneath, because the engine has to tell "not
+  yet assessed" from "waiting for something we asked for" to know whose list a
+  change is on. Two of them — `notice_required` and `pm_scope_review` — are
+  retired and nothing enters them; rows that stopped there before 22 September
+  2026 still read, and still have one way forward.
+- **The notice runs beside the chain, not inside it.** The project manager
+  decides it, and QS pricing starts at that moment. A notice being drafted,
+  sent or acknowledged never holds up a price.
 - **Transitions are gated.** You cannot jump a stage, and the allowed next
   statuses are computed rather than listed in the UI.
 - Cancel with a reason, then reinstate with the **original capture date**
@@ -154,15 +160,27 @@ drawing, email, WhatsApp, meeting.
 - Live countdown with RAG colour: green above the amber threshold (7 days by
   default, company-configurable), amber inside it, **red at zero or breached and
   not configurable** — a passed deadline is not a preference.
-- **Notice assessment** by the project manager: required, not required, or needs
-  more information. Each outcome routes differently.
+- **One PM review screen** carries the whole decision: reference, project,
+  location, what changed, the reporter's original message word for word, who
+  reported it, the instruction date, whether work has started, the evidence,
+  then the project's own notice period, the deadline and the days left.
+- **Three answers, each with what it requires.** Yes drafts a notice. No
+  requires a reason from a fixed list of six. Need more information requires
+  saying what is missing, raises a task for whoever reported it quoting those
+  words, and keeps the change with the PM — pricing may run beside it, but only
+  if the PM ticks the box, and the register goes on showing the gap.
+- **Deciding is not sending.** A draft opens as a preview — recipient, delivery
+  method, reference, deadline, attachments, then the words — with **Edit
+  notice**, **Save draft** and **Send initial notice**. Nothing reaches the
+  client until that last button.
 - Deadlines **recalculate** if the event date is corrected.
-- **Notice documents**: draft, edit, supersede a draft, approve, issue, file to
-  the project's Drive folder, mark delivered, record acknowledgement. Generated
-  as a **PDF letter** built from the record itself — same dates, same words,
-  same evidence.
-- Delivery is **confirmed by callback**, never assumed. Until n8n reports back it
-  is `pending`, and on failure `failed` with a retry — never "notice sent".
+- **Seven delivery states**, read from the change, the notice and the message
+  carrying it together, because no one of them answers "where is my notice":
+  not applicable, draft, pending delivery, delivered, delivery failed,
+  acknowledgement pending, acknowledged.
+- Delivery is **confirmed by callback**, never assumed. Nothing reads delivered
+  on the strength of our own outbound request. A failure says so in red, offers
+  a **retry**, and leaves pricing running.
 
 ## 7. Evidence
 
@@ -193,12 +211,25 @@ drawing, email, WhatsApp, meeting.
 
 ## 9. Approvals
 
-- **Value thresholds per project** for PM, CM, Commercial Director and MD.
-- A **gate** opens with the seats it requires; the system works out who may fill
-  each seat from the capability matrix, **not from a job title**.
-- Decisions record the approver, the timestamp and their comments.
-- A project manager cannot approve above his threshold regardless of whose
-  laptop he is holding.
+- **The project manager is the only internal approver.** One gate, one seat.
+  The managing director's seat came out on 22 September 2026: in a company this
+  size the second signature did not add a check, it added a person who could be
+  on a plane.
+- **Approving sends it.** One button raises the VO, renders the client-ready
+  PDF, files a copy in `09 Variation Orders`, sends it to the recipient in the
+  project's contract rules, and records the submission — which starts the
+  client's response period and the follow-up.
+- **A required notice that is not confirmed delivered puts a red warning on
+  that screen**, naming the state it is actually in. It is a warning, not a
+  block: an approver told "you cannot proceed" while a client waits will
+  proceed somewhere this system cannot see.
+- The system works out who may fill a seat from the capability matrix, **not
+  from a job title**. Decisions record the approver, the timestamp and their
+  comments.
+- **Approvals given before the change are untouched.** A variation a managing
+  director approved goes on showing that, for ever.
+- **Value thresholds per project** are stored for PM, CM, Commercial Director
+  and MD, and are not currently wired into who may carry a gate.
 
 ## 10. Variation orders and the money
 
@@ -227,7 +258,7 @@ drawing, email, WhatsApp, meeting.
 
 ## 12. Tasks, reminders and bottlenecks
 
-- **12 task types**: notice assessment, PM scope review, QS pricing, procurement
+- **12 task types**: notice assessment, PM scope review (retired), QS pricing, procurement
   quotation, subcontractor quotation, EOT assessment, CM review, internal
   approval, evidence collection, client follow-up, document request, other.
 - **My Tasks** — overdue, then due today, then upcoming.

@@ -605,48 +605,101 @@ Sign in as Abdelmoneim and open `Variations` → the new change.
 
 ---
 
-# Stage 13 · Notice assessment
+# Stage 13 · The PM review, and the decision
 
-**Goal** — the decision, and that it clears for everybody.
+**Goal** — one screen carries the whole question, and answering it starts the
+pricing.
 
-Sign in as **Mohammed (MD)** — not the PM — and assess it: `Notice required`,
-with a short reason.
+Sign in as **Abdelmoneim (PM)** and open the change.
 
 ### Pass when
 
-- [ ] The status moves off `notice_assessment`
-- [ ] **Abdelmoneim's task disappears too**, without him doing anything
-- [ ] The change now shows a notice section
+- [ ] One card, **Review change**, shows: reference, project, location, what
+      changed, the reporter's original message word for word, who reported it,
+      the instruction date, whether work has started, and the evidence
+- [ ] Under **Initial notice** it shows the **project's own** notice period,
+      the deadline and the days remaining, coloured
+- [ ] The notice period matches this project's contract rules and is **not** 28
+      unless that is what the rules say
+- [ ] Three buttons: Yes — send initial notice · No — notice not required ·
+      Need more information
 
-> Two people, one decision. Whoever acts first clears it for both.
+### Do — answer Yes
+
+- [ ] Nothing goes to the client yet, and the screen says so
+- [ ] A notice draft appears
+- [ ] **The QS pricing task exists immediately** — check Osman's list before
+      the notice has been sent. This is the whole point of the change
 
 ---
 
-# Stage 14 · Draft, approve and issue the notice
+# Stage 13b · No, and Need more information
 
-**Goal** — a formal document leaves the building.
+**Goal** — the two answers that are not "yes" still cost something to give.
 
 ### Do
 
-1. As **Abdelmoneim**, open the notice draft and read the AI-written narrative
-2. Edit a line of it, and save
-3. Approve as the project manager seat
-4. Sign in as **Mohammed**, approve as the managing director seat
-5. Issue it
+1. On a second change, answer **No — notice not required**
+2. On a third, answer **Need more information**
+
+### Pass when
+
+- [ ] "No" **cannot be recorded without a reason**, chosen from the list of six
+- [ ] The reason appears on the change and in the activity trail
+- [ ] "No" still creates the QS pricing task, and drafts no notice
+- [ ] "Need more information" **cannot be recorded without saying what is
+      missing**
+- [ ] It raises a task for **whoever reported the change**, quoting the PM's
+      words rather than a paraphrase
+- [ ] With the box **unticked**, no QS pricing task is created
+- [ ] With the box **ticked**, the QS task IS created, and the change still
+      reads as waiting for the missing information — not as "QS pricing"
+
+---
+
+# Stage 14 · Read it, then send it
+
+**Goal** — a formal document leaves the building, on one deliberate act.
+
+### Do
+
+1. As **Abdelmoneim**, open the notice. It opens as a **preview**, not a form
+2. Read the recipient, delivery method, reference, deadline and attachments
+3. **Edit notice**, change a line, **Save draft**
+4. **Send initial notice**
 
 ### Pass when
 
 - [ ] The draft quotes the reporter's own words and reads like a letter
-- [ ] Your edit survives into the issued PDF
-- [ ] It takes **both** seats before it can be issued
+- [ ] Your edit survives into the sent PDF
+- [ ] **No approval from anybody else is needed or offered**
+- [ ] Nothing was sent by choosing "Yes" in Stage 13 — only this button sends
 - [ ] The PDF opens, is laid out properly, and is addressed to Mohammed Hassan
 - [ ] The address used is the one from contract rules
-- [ ] Delivery is recorded, and shows **pending** until the send is confirmed
-- [ ] As **Aryia**, you can neither draft nor approve a notice
+- [ ] It reads **Pending delivery**, not Delivered, until the callback confirms
+- [ ] Once the callback lands it reads **Acknowledgement pending**, showing
+      Delivered underneath
+- [ ] As **Aryia**, you can neither draft nor send a notice
 
 > An administrator sets the system up. A notice is a contractual act, served in
-> the company's name, and the person who signs it must be the one who assessed
+> the company's name, and the person who sends it must be the one who assessed
 > it.
+
+---
+
+# Stage 14b · A delivery that fails
+
+**Goal** — the one failure that is invisible everywhere else.
+
+Post a delivery callback with `status: failed` for the notice's notification.
+
+### Pass when
+
+- [ ] The notice says **Delivery failed**, in red, and names it as such
+- [ ] A **Retry delivery** button appears
+- [ ] The QS pricing task is **untouched** and pricing carries on
+- [ ] The dashboard tile **Notice delivery failed** counts it
+- [ ] Retrying queues a new message, and the notice is not re-issued
 
 ---
 
@@ -666,17 +719,51 @@ Then add preliminaries % and overhead & profit %.
 
 ---
 
-# Stage 16 · Approval gates
+# Stage 16 · Final PM approval, which is also the sending
 
-**Goal** — value cannot leave the building unapproved.
+**Goal** — one screen, one button, and the client has it.
 
-Submit the priced variation. Approve as PM, then as MD.
+Submit the priced variation as **Osman (QS)**. Then open it as
+**Abdelmoneim (PM)**.
 
 ### Pass when
 
-- [ ] The submitted value is **frozen** — reprice afterwards and the submitted figure does not move
-- [ ] Approving as MD alone carries the money gate
+- [ ] The approval card shows, on ONE screen: reference, project, location,
+      original and changed scope, instruction source and date, whether work
+      started, the initial notice and its delivery state, the client recipient,
+      acknowledgement, the submitted value, the time impact, and the evidence
+      count
+- [ ] The submitted value is **frozen** — reprice afterwards and it does not move
+- [ ] **No managing director seat exists**, and none is opened. Check Mohammed's
+      task list: there is nothing there for this change
+- [ ] The PM's approval alone carries it
+- [ ] The button says **Approve and send final VO to client**, and pressing it
+      raises the VO, files the PDF in `09 Variation Orders`, sends it to the
+      contract-rules recipient and records the submission
+- [ ] **Return it to the QS** requires a reason and sends it back to pricing
 - [ ] The activity trail names who approved, and when
+
+### Do — the red warning
+
+Repeat on a change whose notice is required and still **Pending delivery**.
+
+- [ ] A red warning says the notice is required and delivery is not confirmed,
+      and names the state it is in
+- [ ] The approve button is **still there** — it warns, it does not block
+- [ ] Approving anyway is recorded
+
+---
+
+# Stage 16b · The changes that were already approved
+
+**Goal** — history still reads.
+
+Open a change a managing director approved before 22 September 2026.
+
+### Pass when
+
+- [ ] His approval, his name and his timestamp are still shown
+- [ ] Nothing about the screen suggests it was made by somebody else
 
 ---
 
