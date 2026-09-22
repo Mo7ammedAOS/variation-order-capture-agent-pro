@@ -42,7 +42,14 @@ export const dynamic = 'force-dynamic';
  * page, because nobody has ever changed their morning because of it.
  */
 
-const KPI_LIMIT = 25;
+/**
+ * How many rows the queue shows before it offers the rest.
+ *
+ * Not a performance limit — the rows are already in memory. It is a reading
+ * limit: a list of eighty actions is another haystack, and the sort has
+ * already put the eighty-first where it belongs.
+ */
+const QUEUE_LIMIT = 25;
 
 export default async function DashboardPage({
   searchParams,
@@ -57,7 +64,8 @@ export default async function DashboardPage({
   const sort = readSort(params.sort);
 
   const filtered = sortActions(filterActions(actions, filter, user.id), sort);
-  const visible = filtered.slice(0, KPI_LIMIT);
+  const showingAll = params.all === '1';
+  const visible = showingAll ? filtered : filtered.slice(0, QUEUE_LIMIT);
 
   const kpis = PERSONA_KPIS[persona];
   const red = actions.filter((row) => row.priority === 'red').length;
@@ -123,7 +131,8 @@ export default async function DashboardPage({
         total={filtered.length}
         filter={filter}
         sort={sort}
-        limit={KPI_LIMIT}
+        limit={QUEUE_LIMIT}
+        showingAll={showingAll}
       />
 
       {/* ── 3 · CHANGE WORKFLOW ────────────────────────────────────────── */}

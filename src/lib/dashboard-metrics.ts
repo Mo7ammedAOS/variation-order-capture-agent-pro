@@ -499,3 +499,45 @@ export function actionsForPersona(rows: ActionRow[], persona: Persona): ActionRo
   if (allowed === null) return rows;
   return rows.filter((row) => allowed.includes(row.type));
 }
+
+/* ───────────────────────────── blocked changes ───────────────────────────── */
+
+/**
+ * What to do about each kind of blockage.
+ *
+ * The page used to show the blockage type humanised — "Notice required not
+ * drafted" — and leave the reader to work out the rest. A type is a diagnosis;
+ * this is the prescription, and it is the column people actually read.
+ *
+ * `other` has no entry on purpose: a blockage the system cannot name should
+ * fall back to the reason somebody wrote, never to a guess dressed as advice.
+ */
+export const BLOCKAGE_NEXT_ACTION: Record<string, string> = {
+  notice_assessment_overdue: 'Decide if a notice is needed',
+  notice_required_not_drafted: 'Draft and send the notice',
+  notice_drafted_not_sent: 'Read the notice and send it',
+  notice_sent_no_proof: 'File the served copy',
+  pm_scope_review_overdue: 'Review the scope',
+  missing_client_instruction: 'Get the instruction in writing',
+  missing_drawing: 'Attach the drawing',
+  missing_specification: 'Attach the specification',
+  missing_site_photo: 'Attach a site photograph',
+  missing_labour_record: 'Attach the labour record',
+  qs_pricing_overdue: 'Submit pricing',
+  procurement_quotation_overdue: 'Chase the supplier quotation',
+  subcontractor_quotation_overdue: 'Chase the subcontractor quotation',
+  eot_assessment_overdue: 'Assess the time entitlement',
+  cm_review_overdue: 'Review it',
+  internal_approval_overdue: 'Approve final VO',
+  client_approval_overdue: 'Chase the client',
+  client_requested_information: 'Send what the client asked for',
+  client_rejected: 'Decide whether to rework or close it',
+  work_started_without_approval: 'Approve it or stop the work',
+  vo_not_submitted: 'Put it to the client',
+  approved_not_invoiced: 'Apply for the money',
+  invoice_overdue: 'Chase the payment',
+};
+
+export function blockageNextAction(type: string, reason: string | null): string {
+  return BLOCKAGE_NEXT_ACTION[type] ?? reason ?? 'Find out who owns it';
+}

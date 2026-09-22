@@ -45,19 +45,23 @@ export function ActionQueue({
   filter,
   sort,
   limit,
+  showingAll,
 }: {
   rows: ActionRow[];
   total: number;
   filter: QueueFilter;
   sort: QueueSort;
   limit: number;
+  showingAll: boolean;
 }) {
-  const href = (next: Partial<{ queue: QueueFilter; sort: QueueSort }>) => {
+  const href = (next: Partial<{ queue: QueueFilter; sort: QueueSort; all: boolean }>) => {
     const params = new URLSearchParams();
     const queue = next.queue ?? filter;
     const order = next.sort ?? sort;
+    const all = next.all ?? showingAll;
     if (queue !== 'all') params.set('queue', queue);
     if (order !== 'priority') params.set('sort', order);
+    if (all) params.set('all', '1');
     const query = params.toString();
     return query ? `/dashboard?${query}` : '/dashboard';
   };
@@ -216,11 +220,22 @@ export function ActionQueue({
         </>
       )}
 
-      {total > limit ? (
+      {/* "View all" opens the rest of THIS queue, not a different page. An
+          urgent row hidden behind a link to somewhere else is the failure the
+          whole rewrite was about. */}
+      {total > limit && !showingAll ? (
         <p className="text-xs text-muted-foreground">
           Showing the {limit} most urgent of {total}.{' '}
-          <Link href="/bottlenecks" className="font-semibold underline">
-            View all
+          <Link href={href({ all: true })} className="font-semibold underline">
+            View all {total}
+          </Link>
+        </p>
+      ) : null}
+      {showingAll && total > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Showing all {total}.{' '}
+          <Link href={href({ all: false })} className="font-semibold underline">
+            Show the most urgent only
           </Link>
         </p>
       ) : null}

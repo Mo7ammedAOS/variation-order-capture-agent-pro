@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionsForPersona,
+  blockageNextAction,
   buildPipeline,
   changeValue,
   daysBetween,
@@ -347,6 +348,39 @@ describe('who is looking', () => {
     const rows = [row({ key: '1', type: 'notice_decision' }), row({ key: '2', type: 'client_response_overdue' })];
     expect(actionsForPersona(rows, 'pm')).toHaveLength(2);
     expect(actionsForPersona(rows, 'management')).toHaveLength(2);
+  });
+});
+
+describe('blocked changes', () => {
+  it('turns a blockage type into something to do', () => {
+    expect(blockageNextAction('qs_pricing_overdue', null)).toBe('Submit pricing');
+    expect(blockageNextAction('invoice_overdue', null)).toBe('Chase the payment');
+    expect(blockageNextAction('notice_drafted_not_sent', null)).toBe('Read the notice and send it');
+  });
+
+  it('falls back to what a person wrote, never to a guess', () => {
+    expect(blockageNextAction('other', 'Waiting on the landlord')).toBe('Waiting on the landlord');
+  });
+
+  it('says something useful even with nothing to go on', () => {
+    expect(blockageNextAction('other', null)).toBe('Find out who owns it');
+  });
+
+  it('covers every blockage the detection sweep actually raises', () => {
+    // The sweep writes these eight. A type it raises with no prescription
+    // would put a humanised enum in the column people read.
+    for (const type of [
+      'notice_assessment_overdue',
+      'notice_required_not_drafted',
+      'notice_drafted_not_sent',
+      'notice_sent_no_proof',
+      'vo_not_submitted',
+      'client_approval_overdue',
+      'approved_not_invoiced',
+      'invoice_overdue',
+    ]) {
+      expect(blockageNextAction(type, null)).not.toBe('Find out who owns it');
+    }
   });
 });
 

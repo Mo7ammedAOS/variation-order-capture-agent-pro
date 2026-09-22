@@ -50,7 +50,7 @@ export const NAV_LINKS: NavLink[] = [
   { href: '/dashboard', label: 'Overview', short: 'Overview', capability: null },
   { href: '/my-tasks', label: 'My Tasks', short: 'Tasks', capability: null },
   { href: '/variations', label: 'Variations', short: 'Changes', capability: null },
-  { href: '/bottlenecks', label: 'Held Up', short: 'Held Up', capability: null },
+  { href: '/bottlenecks', label: 'Blocked', short: 'Blocked', capability: null },
   // The Capture Inbox is deliberately NOT here. Osman's call, 2026-09-13: the
   // screen listed every message that arrived and read as noise beside the work
   // it was supposed to support. The route still exists at `/inbox` and still

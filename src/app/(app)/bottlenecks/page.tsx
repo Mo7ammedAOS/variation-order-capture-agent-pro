@@ -10,8 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { RiskChip } from '@/components/domain/risk-chip';
 import { Money } from '@/components/domain/money';
 import { EmptyState } from '@/components/domain/empty-state';
+import { blockageNextAction } from '@/lib/dashboard-metrics';
 
-export const metadata: Metadata = { title: 'Held Up' };
+export const metadata: Metadata = { title: 'Blocked changes' };
 export const dynamic = 'force-dynamic';
 
 export default async function BottlenecksPage() {
@@ -21,10 +22,14 @@ export default async function BottlenecksPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <header>
-        <h1 className="page-title">Held Up</h1>
+        {/* "Badly held up" and "Held Up" said the same thing in two places and
+            neither named what a blocked change IS. A change is blocked when it
+            has waited on one person longer than the project's own threshold,
+            and that is what this page lists. */}
+        <h1 className="page-title">Blocked changes</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          What is stuck, who has to move it, and how much money is waiting behind
-          it.
+          Waiting on one person longer than they should be. What is blocked, who
+          owns the next action, how long it has waited, and the money behind it.
         </p>
       </header>
 
@@ -43,6 +48,7 @@ export default async function BottlenecksPage() {
                 <TableHead>Project</TableHead>
                 <TableHead>Change</TableHead>
                 <TableHead>Blocked by</TableHead>
+                <TableHead>Next action</TableHead>
                 <TableHead className="text-end">Waiting</TableHead>
                 <TableHead className="text-end">Value at risk</TableHead>
                 <TableHead>Since</TableHead>
@@ -77,6 +83,9 @@ export default async function BottlenecksPage() {
                     {bottleneck.blockedByUser?.fullName ??
                       bottleneck.blockedByContact?.fullName ??
                       (bottleneck.blockedByRole ? humanise(bottleneck.blockedByRole) : '—')}
+                  </TableCell>
+                  <TableCell className="font-semibold">
+                    {blockageNextAction(bottleneck.bottleneckType, bottleneck.blockerReason)}
                   </TableCell>
                   <TableCell className="tabular text-end">{bottleneck.overdueDays}d</TableCell>
                   <TableCell className="text-end">
