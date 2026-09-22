@@ -936,6 +936,21 @@ model PotentialChange {
   noticeAssessedByUserId String?    @map("notice_assessed_by_user_id") @db.Uuid
   noticeAssessmentNotes String?     @map("notice_assessment_notes")
 
+  /// Why the PM decided no notice was needed. One of the selectable reasons,
+  /// never free text on its own: "no" is the answer that gets asked about in a
+  /// year, and a blank beside it is indistinguishable from nobody having looked.
+  noticeNotRequiredReason String? @map("notice_not_required_reason")
+
+  /// What the PM said was missing when they answered "need more information".
+  /// Held apart from `blockerReason` so the request survives the blocker being
+  /// cleared, and so the site engineer's task can quote it back verbatim.
+  noticeMissingInformation String? @map("notice_missing_information")
+
+  /// Pricing was allowed to start while information was still outstanding.
+  /// The PM review is then NOT complete, and the register says so rather than
+  /// letting a half-answered change pass as a priced one.
+  pricingStartedEarly Boolean @default(false) @map("pricing_started_early")
+
   driveFolderId String? @map("drive_folder_id")
 
   createdAt DateTime @default(now()) @map("created_at")

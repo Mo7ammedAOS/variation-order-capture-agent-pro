@@ -29,8 +29,9 @@ import { BackButton } from '@/components/ui/page-actions';
 import { Badge } from '@/components/ui/badge';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
+import { calculateNoticeCountdown } from '@/lib/risk';
 import { Money } from '@/components/domain/money';
-import { AssessmentForm } from './assessment-form';
+import { ReviewPanel, type ReviewFacts } from './review-panel';
 import { ApprovalPanel } from './approval-panel';
 import { NoticePanel, type NoticeView } from './notice-panel';
 import { ConfirmationPanel } from './confirmation-panel';
@@ -345,9 +346,21 @@ export default async function PotentialChangeDetailPage({
     asked in every account meeting.
   */
   const pricingStages = ['qs_pricing', 'internal_approval', 'variation_approved'];
-  const pricing = pricingStages.includes(change.currentStatus)
-    ? await getPricing(user, change.id)
-    : null;
+
+  /*
+    Pricing can also run while the project manager is still chasing something.
+
+    When the PM answers "need more information" and ticks the box, the change
+    STAYS on their list — the register has to keep saying what is missing — but
+    the QS has a task and must be able to do it. So the panel follows the task,
+    not the headline status.
+  */
+  const pricingInParallel =
+    change.currentStatus === 'needs_evidence' && change.pricingStartedEarly;
+  const pricing =
+    pricingStages.includes(change.currentStatus) || pricingInParallel
+      ? await getPricing(user, change.id)
+      : null;
 
   const isReporter = change.reportedByUserId === user.id;
   const canEdit = mayEditAny || (isReporter && mayEditOwn);
@@ -398,6 +411,38 @@ export default async function PotentialChangeDetailPage({
   const reportingLagDays = daysSince(change.eventDate, change.sourceOccurredAt ?? undefined);
 
   const amberThreshold = 7;
+
+  /*
+    The project manager's review, assembled once.
+
+    Every value here is already loaded for the page; none of it is re-fetched.
+    The countdown is computed on the server so the panel can stay a plain
+    client component with no clock of its own — a browser in another timezone
+    must not be able to disagree with the register about how many days are left.
+  */
+  const reviewCountdown = calculateNoticeCountdown(change.noticeDueDate, {
+    amberThresholdDays: amberThreshold,
+  });
+  const reviewFacts: ReviewFacts = {
+    potentialChangeId: change.id,
+    reference: change.pcNumber,
+    projectName: `${change.project.projectCode} · ${change.project.projectName}`,
+    location: change.location,
+    whatChanged: change.title,
+    originalMessage: change.description,
+    reportedBy: change.reportedBy?.fullName ?? null,
+    eventDate: formatDate(change.eventDate),
+    workStarted: humanise(change.workStatus),
+    evidence: change.documents.map((document) => ({
+      id: document.id,
+      name: document.documentName,
+    })),
+    noticePeriodDays: change.project.contractRules?.noticePeriodDays ?? 28,
+    noticeDeadline: change.noticeDueDate ? formatDate(change.noticeDueDate) : 'Not set',
+    countdownLabel: reviewCountdown.label,
+    riskLevel: reviewCountdown.riskLevel,
+    isOverdue: reviewCountdown.isOverdue,
+  };
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -658,13 +703,13 @@ export default async function PotentialChangeDetailPage({
             />
           ) : null}
 
-          {canAssess ? <AssessmentForm potentialChangeId={change.id} /> : null}
+          {canAssess ? <ReviewPanel facts={reviewFacts} /> : null}
 
           {pricing ? (
             <PricingPanel
               potentialChangeId={change.id}
               currency={change.project.currency ?? 'AED'}
-              canPrice={mayPrice && change.currentStatus === 'qs_pricing'}
+              canPrice={mayPrice && (change.currentStatus === 'qs_pricing' || pricingInParallel)}
               pricingStatus={pricing.pricingStatus}
               submittedValue={pricing.submittedValue?.toFixed(2) ?? null}
               submittedAt={pricing.submittedAt ? formatInstant(pricing.submittedAt) : null}

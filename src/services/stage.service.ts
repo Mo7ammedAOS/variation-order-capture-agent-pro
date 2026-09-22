@@ -44,14 +44,6 @@ const STAGES: Partial<Record<PotentialChangeStatus, StageDefinition>> = {
     nextAction: 'Assess whether a contractual notice is required',
     dueDays: 3,
   },
-  pm_scope_review: {
-    capability: 'potentialChange.update',
-    preferredRoles: ['project_manager', 'commercial_manager'],
-    taskType: 'pm_scope_review',
-    waitingFor: 'PM scope review',
-    nextAction: 'Define exactly what the change is, so it can be priced',
-    dueDays: 3,
-  },
   qs_pricing: {
     capability: 'pricing.submit',
     preferredRoles: ['quantity_surveyor', 'commercial_manager'],
@@ -63,9 +55,14 @@ const STAGES: Partial<Record<PotentialChangeStatus, StageDefinition>> = {
 };
 
 /**
- * `internal_approval` is absent on purpose: that stage opens a two-seat gate,
+ * `internal_approval` is absent on purpose: that stage opens an approval gate,
  * which raises its own task per seat. Giving it a stage task as well would put
  * the same decision on somebody's list twice.
+ *
+ * `pm_scope_review` is absent since 2026-09-22, when the PM's notice decision
+ * became the PM review. A change no longer stops twice for the same person:
+ * they answer the notice question and it goes to the QS. The status value and
+ * its label stay, because changes that stopped there before still read.
  */
 
 export interface StageEntryResult {
@@ -122,6 +119,45 @@ export async function enterStage(
       nextActionDueDate: due,
     },
   });
+
+  return raiseStageTask(db, input);
+}
+
+/**
+ * The task half of a handover, without the headline.
+ *
+ * `enterStage` claims the change: owner, waiting-for, next action, date. That
+ * is right when the stage IS what the change is waiting for. It is wrong when
+ * two things run at once — a QS pricing in parallel with information the PM is
+ * still chasing — because the louder of the two would overwrite the other and
+ * the register would stop saying what is actually outstanding.
+ *
+ * So this raises the task, resolves its owner and tells them, and leaves the
+ * change row alone. Same dedupe guard, same notification.
+ */
+export async function raiseStageTask(
+  db: Prisma.TransactionClient,
+  input: {
+    potentialChangeId: string;
+    projectId: string;
+    pcNumber: string;
+    title: string;
+    status: PotentialChangeStatus;
+    actorUserId: string;
+    note?: string;
+  },
+): Promise<StageEntryResult> {
+  const stage = STAGES[input.status];
+  if (!stage) return { ownerUserId: null, taskCreated: false };
+
+  const owner = await pickResponsibleMember(
+    input.projectId,
+    stage.capability,
+    stage.preferredRoles,
+  );
+
+  const due = new Date(todayUtc());
+  due.setUTCDate(due.getUTCDate() + stage.dueDays);
 
   // Never a second task for work already on someone's list. Moving a change
   // back and forward between two stages would otherwise leave a trail of

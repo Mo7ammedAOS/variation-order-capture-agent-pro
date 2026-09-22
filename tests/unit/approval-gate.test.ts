@@ -160,7 +160,7 @@ describe('the two-seat approval gate', () => {
     const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
 
     expect(result.complete).toBe(true);
-    expect(result.movedTo).toBe('pm_scope_review');
+    expect(result.movedTo).toBe('qs_pricing');
   });
 
   it('does not let the project manager alone carry the money', async () => {
@@ -241,7 +241,7 @@ describe('the two-seat approval gate', () => {
 
     expect(result.complete).toBe(true);
     expect(result.rejected).toBe(false);
-    expect(result.movedTo).toBe('pm_scope_review');
+    expect(result.movedTo).toBe('qs_pricing');
   });
 
   it('releases the notice only when both seats have approved', async () => {
@@ -253,7 +253,7 @@ describe('the two-seat approval gate', () => {
     const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
 
     expect(result.complete).toBe(true);
-    expect(result.movedTo).toBe('pm_scope_review');
+    expect(result.movedTo).toBe('qs_pricing');
   });
 
   // Without this the acting director approves as project manager AND as

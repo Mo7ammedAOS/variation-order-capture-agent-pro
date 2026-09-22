@@ -389,7 +389,11 @@ export async function recordApprovalDecision(
         }
       }
     } else if (complete) {
-      movedTo = approval.gate === 'notice_issue' ? 'pm_scope_review' : 'variation_approved';
+      // `notice_issue` no longer opens on new changes — the project manager
+      // sends the notice directly. A round opened before 2026-09-22 can still
+      // be decided, and when it carries it lands in pricing, because the scope
+      // review stage it used to feed no longer exists.
+      movedTo = approval.gate === 'notice_issue' ? 'qs_pricing' : 'variation_approved';
 
       if (approval.gate === 'notice_issue') {
         // Freeze the text and queue the message. It is not sent here, and it

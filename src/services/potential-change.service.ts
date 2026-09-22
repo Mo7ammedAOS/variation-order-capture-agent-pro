@@ -608,11 +608,16 @@ export async function updatePotentialChange(
  * reads, and so a company that does have a commercial manager can have the
  * stage back by adding one line.
  */
-const REVIEW_CHAIN: readonly PotentialChangeStatus[] = [
-  'pm_scope_review',
-  'qs_pricing',
-  'internal_approval',
-];
+/**
+ * `pm_scope_review` left this chain on 2026-09-22.
+ *
+ * It asked the project manager to stop twice for the same change: once to
+ * decide the notice, then again to define the scope before the QS could start.
+ * The notice decision IS the PM review now, and it hands straight to pricing.
+ * The enum value and its label stay, so changes that stopped there still read,
+ * and `allowedNextStatuses` still offers those rows a way forward.
+ */
+const REVIEW_CHAIN: readonly PotentialChangeStatus[] = ['qs_pricing', 'internal_approval'];
 
 /**
  * Three ways a change ends, and they mean different things.
@@ -641,13 +646,11 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
   // Parked, not answered. The evidence arrived, so ask the question again.
   if (current === 'needs_evidence') return ['notice_assessment'];
 
-  // A notice is required, and two people have to agree before it is issued.
-  //
-  // Only `cancelled` is offered here on purpose. Leaving `pm_scope_review` in
-  // the dropdown would let anyone with `changeStatus` walk the change straight
-  // past a gate that exists precisely so one person cannot — a gate you can
-  // step around is not a gate. The approval itself is what advances it.
-  if (current === 'notice_required') return [];
+  // Retired stages, still reachable by rows that entered them before the
+  // workflow changed. Neither is offered as a destination anywhere; both are
+  // given one way out so nothing is stranded.
+  if (current === 'notice_required') return ['qs_pricing'];
+  if (current === 'pm_scope_review') return ['qs_pricing'];
 
   const position = REVIEW_CHAIN.indexOf(current);
   if (position === -1) return [];
@@ -662,8 +665,11 @@ export function allowedNextStatuses(current: PotentialChangeStatus): PotentialCh
   // is not a variation. Both are decisions with evidence behind them, and
   // neither belongs in a dropdown — the same rule as the approval gates. Only
   // rework backwards is offered here.
+  // Pricing is now the first link in the chain, so there is no earlier stage to
+  // slice back to. The way back is to the project manager with a question,
+  // which is what `needs_evidence` says.
   if (current === 'qs_pricing') {
-    return [...REVIEW_CHAIN.slice(0, position)];
+    return ['needs_evidence'];
   }
 
   const forward = REVIEW_CHAIN[position + 1] ?? 'variation_approved';

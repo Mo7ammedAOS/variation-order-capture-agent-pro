@@ -63,9 +63,15 @@ export async function submitNoticeAssessment(
   const user = await requirePageUser();
   const potentialChangeId = String(formData.get('potentialChangeId') ?? '');
 
+  // Each outcome carries its own fields, so the whole form goes to the schema
+  // and the union decides what was required. Picking fields per outcome here
+  // would put the rule in two places, and the second copy is the one that rots.
   const parsed = noticeAssessmentSchema.safeParse({
     outcome: formData.get('outcome'),
     notes: formData.get('notes') || undefined,
+    reason: formData.get('reason') || undefined,
+    missingInformation: formData.get('missingInformation') || undefined,
+    allowPricingToContinue: formData.get('allowPricingToContinue') ?? undefined,
   });
 
   if (!parsed.success) {

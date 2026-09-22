@@ -9,11 +9,15 @@ import { calculateNoticeCountdown, type NoticeCountdown } from '@/lib/risk';
 import type { AuthenticatedUser } from '@/lib/auth/provider';
 import { recordAudit } from '@/services/audit-log.service';
 import { recordTaskNotifications } from '@/services/notification.service';
-import { openGate } from '@/services/approval.service';
+import { enterStage, raiseStageTask } from '@/services/stage.service';
 import { assertProjectAccess } from '@/services/project-access.service';
 import { draftNotice, markNoticeDelivered } from '@/services/notice-document.service';
 import { getAiProvider } from '@/integrations/claude';
 import { CONFIDENCE_REVIEW_THRESHOLD } from '@/integrations/claude/provider';
+import {
+  NOTICE_NOT_REQUIRED_REASONS,
+  type NoticeNotRequiredReason,
+} from '@/lib/notice-reasons';
 
 /**
  * Notice control.
@@ -23,15 +27,53 @@ import { CONFIDENCE_REVIEW_THRESHOLD } from '@/integrations/claude/provider';
  *
  *   NOTICE SENT IS NOT CLIENT APPROVED.
  *
- * Phase 1 assesses and tracks. It does not draft automatically, does not send,
- * and never decides entitlement — a human marks Required, Not Required, or
- * Needs More Information, and the system records who and when.
+ * The project manager decides, on one screen, whether a notice is required.
+ * The system never decides entitlement: a human marks Required, Not Required or
+ * Needs More Information, and the system records who, when and why.
+ *
+ * ── Deciding is not sending ────────────────────────────────────────────────
+ * Answering "required" drafts a notice and nothing else. It is sent by a second,
+ * deliberate act on the draft itself (`sendNotice`), so that what goes to the
+ * client is a page of words somebody read, not an intention somebody had.
+ *
+ * ── The notice does not hold up the money ──────────────────────────────────
+ * Pricing starts the moment the decision is made, in parallel with drafting,
+ * sending and acknowledgement. The notice exists to protect entitlement inside
+ * a contractual window; making the QS wait for it spends the very days it was
+ * trying to save. The two run on separate axes: `currentStatus` follows the
+ * commercial chain, `noticeStatus` and the Notice row follow the notice.
  */
 
-export const noticeAssessmentSchema = z.object({
-  outcome: z.enum(['required', 'not_required', 'needs_more_information']),
-  notes: z.string().trim().max(4000).optional(),
-});
+export { NOTICE_NOT_REQUIRED_REASONS };
+export type { NoticeNotRequiredReason };
+
+const notes = z.string().trim().max(4000).optional();
+
+export const noticeAssessmentSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('required'), notes }),
+  z.object({
+    outcome: z.literal('not_required'),
+    // Required, deliberately. A PM cannot answer "no" and walk away.
+    reason: z.enum(NOTICE_NOT_REQUIRED_REASONS, {
+      errorMap: () => ({ message: 'Choose why no notice is required' }),
+    }),
+    notes,
+  }),
+  z.object({
+    outcome: z.literal('needs_more_information'),
+    missingInformation: z
+      .string()
+      .trim()
+      .min(5, 'Say what is missing, so somebody can go and get it'),
+    // A checkbox sends "on" when ticked and nothing at all when not, so the
+    // default is what decides this, never a cast of the string "false".
+    allowPricingToContinue: z
+      .union([z.literal('on'), z.literal('true'), z.boolean()])
+      .optional()
+      .transform((value) => value === 'on' || value === 'true' || value === true),
+    notes,
+  }),
+]);
 
 export type NoticeAssessmentInput = z.infer<typeof noticeAssessmentSchema>;
 
@@ -46,16 +88,15 @@ export async function assessNotice(
   });
   if (!change) throw new NotFoundError('Potential Change not found');
 
-  // Assessing entitlement is a Commercial Manager / Contract Administrator act.
-  // A Site Engineer who raised the change cannot answer their own question.
+  // Assessing entitlement is the project manager's act, resolved by capability
+  // rather than by job title. A Site Engineer who raised the change cannot
+  // answer their own question.
   await assertProjectAccess(user, change.projectId, 'potentialChange.assessNotice');
 
   const rules = change.project.contractRules;
-  // The first stage after the assessment is scope review, so the clock that
-  // matters here is the PM's, not the QS's. Reading qsPricingDueDays would give
-  // the PM the QS's allowance, and the change would look late or early for
-  // reasons nobody could trace back to a setting.
-  const scopeDueDays = rules?.pmScopeReviewDueDays ?? 3;
+  // How long the reporter has to come back with what is missing. The QS's own
+  // allowance is set by the pricing stage and is not this number.
+  const infoDueDays = rules?.pmScopeReviewDueDays ?? 3;
 
   // The notice wording, drafted BEFORE the transaction opens.
   //
@@ -77,8 +118,8 @@ export async function assessNotice(
       : null;
 
   return prisma.$transaction(async (tx) => {
-    const nextDue = new Date(todayUtc());
-    nextDue.setUTCDate(nextDue.getUTCDate() + scopeDueDays);
+    const infoDue = new Date(todayUtc());
+    infoDue.setUTCDate(infoDue.getUTCDate() + infoDueDays);
 
     const updates: Prisma.PotentialChangeUpdateInput = {
       noticeStatus: input.outcome,
@@ -86,38 +127,35 @@ export async function assessNotice(
       noticeAssessedAt: new Date(),
       noticeAssessedByUserId: user.id,
       noticeAssessmentNotes: input.notes ?? null,
+      noticeNotRequiredReason: input.outcome === 'not_required' ? input.reason : null,
+      noticeMissingInformation:
+        input.outcome === 'needs_more_information' ? input.missingInformation : null,
     };
 
-    if (input.outcome === 'required') {
-      // The notice is not sent because one person decided it should be. Two
-      // seats have to agree before anything reaches the client, because a
-      // notice states a contractual position in the company's name.
-      updates.currentStatus = 'notice_required';
-      updates.waitingFor = 'Approval to issue the notice';
-      updates.nextAction = 'Project manager and managing director must approve issuing it';
-      // The draft is written below, before the gate opens, so the two seats
-      // approve a page of text rather than an intention.
-      updates.noticeStatus = 'drafted';
-    } else if (input.outcome === 'not_required') {
-      // No notice needed does not mean no change. It goes into the commercial
-      // chain at the top of it — scope first.
-      //
-      // This used to route straight to QS pricing, which skipped scope review
-      // entirely and meant a change that needed no notice was priced against
-      // whatever the original message happened to say. Osman settled the order
-      // on 2026-08-30: the PM defines the change, then the QS prices what was
-      // defined. The status guard now forbids the skip, so leaving this pointing
-      // at qs_pricing would have put changes into a state the chain says they
-      // could not have reached.
-      updates.currentStatus = 'pm_scope_review';
-      updates.waitingFor = 'PM scope review';
-      updates.nextAction = 'Define the scope of the change';
-      updates.nextActionDueDate = nextDue;
-    } else {
+    // Required and not-required both go straight to pricing. The difference
+    // between them is a notice being drafted beside the work, not a different
+    // route through it.
+    const goesToPricing =
+      input.outcome === 'required' ||
+      input.outcome === 'not_required' ||
+      (input.outcome === 'needs_more_information' && input.allowPricingToContinue);
+
+    if (input.outcome === 'needs_more_information') {
+      // The change stays with the PM. Pricing may run beside it if the PM said
+      // so, but the review is not finished and the record must not read as if
+      // it were.
       updates.currentStatus = 'needs_evidence';
       updates.waitingFor = 'Missing information';
-      updates.nextAction = 'Provide the missing evidence';
-      updates.blockerReason = input.notes ?? 'Assessor needs more information';
+      updates.nextAction = `Provide: ${input.missingInformation}`;
+      updates.nextActionDueDate = infoDue;
+      updates.blockerReason = input.missingInformation;
+      updates.pricingStartedEarly = input.allowPricingToContinue;
+    } else {
+      updates.currentStatus = 'qs_pricing';
+      if (input.outcome === 'required') {
+        // The draft is written below. It is not sent by this decision.
+        updates.noticeStatus = 'drafted';
+      }
     }
 
     const updated = await tx.potentialChange.update({
@@ -139,58 +177,40 @@ export async function assessNotice(
         actorUserId: user.id,
         narrative,
       });
+    }
 
-      await openGate(tx, {
-        potentialChangeId,
-        projectId: change.projectId,
-        gate: 'notice_issue',
-        pcNumber: change.pcNumber,
-        title: change.title,
-        dueDate: nextDue,
-        openedByUserId: user.id,
+    if (input.outcome === 'needs_more_information') {
+      // Somebody has to go and get it. Assigned to whoever reported the change,
+      // because they were there, quoting the PM's words back rather than a
+      // paraphrase of them.
+      await raiseEvidenceTask(tx, {
+        change,
+        missingInformation: input.missingInformation,
+        actorUserId: user.id,
+        due: infoDue,
       });
     }
 
-    if (input.outcome === 'not_required') {
-      // Scope review, raised for the PM. It used to raise QS pricing for the
-      // QS, which sent the change to one person and the work to another.
-      const pm = await tx.projectMember.findFirst({
-        where: { projectId: change.projectId, active: true, projectRole: 'project_manager' },
-        select: { userId: true },
-      });
-      const reviewTask = await tx.task.create({
-        data: {
-          projectId: change.projectId,
-          potentialChangeId,
-          taskType: 'pm_scope_review',
-          title: `Scope review — ${change.pcNumber}`,
-          assignedToUserId: pm?.userId ?? null,
-          assignedByUserId: user.id,
-          dueDate: nextDue,
-        },
-      });
+    if (goesToPricing) {
+      const stageInput = {
+        potentialChangeId,
+        projectId: change.projectId,
+        pcNumber: change.pcNumber,
+        title: change.title,
+        status: 'qs_pricing' as const,
+        actorUserId: user.id,
+        note:
+          input.outcome === 'needs_more_information'
+            ? `Priced while information is still outstanding: ${input.missingInformation}`
+            : undefined,
+      };
 
-      if (pm?.userId) {
-        const reviewRecipients = await tx.user.findMany({
-          where: { id: pm.userId, active: true },
-          select: { id: true, fullName: true, email: true, phone: true },
-        });
-
-        await recordTaskNotifications(tx, {
-          taskId: reviewTask.id,
-          potentialChangeId,
-          kind: 'task_assigned',
-          subject: `Scope review needed — ${change.pcNumber}`,
-          body: `${change.title}. The notice assessment concluded no notice is required; review the scope.`,
-          on: todayUtc(),
-          recipients: reviewRecipients.map((r) => ({
-            userId: r.id,
-            fullName: r.fullName,
-            email: r.email,
-            phone: r.phone,
-          })),
-        });
-      }
+      // When information is still outstanding the QS gets the task but the
+      // change keeps saying what it is really waiting for. `enterStage` would
+      // overwrite that headline with "QS pricing" and hide the gap.
+      await (input.outcome === 'needs_more_information'
+        ? raiseStageTask(tx, stageInput)
+        : enterStage(tx, stageInput));
     }
 
     await recordAudit({
@@ -207,10 +227,83 @@ export async function assessNotice(
             : 'notice_needs_information',
       oldValue: { noticeStatus: change.noticeStatus },
       newValue: { noticeStatus: input.outcome, noticeRequired: input.outcome === 'required' },
-      metadata: input.notes ? { notes: input.notes } : undefined,
+      metadata: {
+        ...(input.notes ? { notes: input.notes } : {}),
+        ...(input.outcome === 'not_required' ? { reason: input.reason } : {}),
+        ...(input.outcome === 'needs_more_information'
+          ? {
+              missingInformation: input.missingInformation,
+              pricingContinued: input.allowPricingToContinue,
+            }
+          : {}),
+      },
     });
 
     return updated;
+  });
+}
+
+/**
+ * The "go and find out" task, raised for whoever reported the change.
+ *
+ * Falls back to the change's current owner when the report came in through a
+ * channel with no named sender. A task nobody holds is worse than one held by
+ * the person already carrying the change.
+ */
+async function raiseEvidenceTask(
+  tx: Prisma.TransactionClient,
+  input: {
+    change: { id: string; projectId: string; pcNumber: string; title: string; reportedByUserId: string | null; currentOwnerUserId: string | null };
+    missingInformation: string;
+    actorUserId: string;
+    due: Date;
+  },
+): Promise<void> {
+  const assignee = input.change.reportedByUserId ?? input.change.currentOwnerUserId;
+
+  const open = await tx.task.findFirst({
+    where: {
+      potentialChangeId: input.change.id,
+      taskType: 'evidence_collection',
+      status: { in: ['open', 'in_progress'] },
+    },
+    select: { id: true },
+  });
+  if (open) return;
+
+  const task = await tx.task.create({
+    data: {
+      projectId: input.change.projectId,
+      potentialChangeId: input.change.id,
+      taskType: 'evidence_collection',
+      title: `Information needed — ${input.change.pcNumber}`,
+      description: input.missingInformation,
+      assignedToUserId: assignee,
+      assignedByUserId: input.actorUserId,
+      dueDate: input.due,
+    },
+  });
+
+  if (!assignee) return;
+
+  const recipients = await tx.user.findMany({
+    where: { id: assignee, active: true },
+    select: { id: true, fullName: true, email: true, phone: true },
+  });
+
+  await recordTaskNotifications(tx, {
+    taskId: task.id,
+    potentialChangeId: input.change.id,
+    kind: 'task_assigned',
+    subject: `Information needed — ${input.change.pcNumber}`,
+    body: `${input.change.title}. The project manager needs: ${input.missingInformation}`,
+    on: todayUtc(),
+    recipients: recipients.map((r) => ({
+      userId: r.id,
+      fullName: r.fullName,
+      email: r.email,
+      phone: r.phone,
+    })),
   });
 }
 

@@ -135,10 +135,17 @@ describe('handing a change to the next stage', () => {
     expect(state.notifications).toHaveLength(0);
   });
 
-  it('routes scope review to the project manager', async () => {
-    await enter('pm_scope_review');
-    expect(state.askedFor[0]?.preferred[0]).toBe('project_manager');
-    expect(state.tasksCreated[0]).toMatchObject({ data: { taskType: 'pm_scope_review' } });
+  // Scope review was folded into the PM's notice decision on 2026-09-22. The
+  // project manager answers the notice question once and the change goes to
+  // the QS; stopping the same person twice for the same change is what this
+  // removal was for. A row that entered the stage before then still reads, but
+  // nothing routes there any more, so it raises no task and claims no owner.
+  it('raises nothing for the retired scope review stage', async () => {
+    const result = await enter('pm_scope_review');
+
+    expect(result.taskCreated).toBe(false);
+    expect(result.ownerUserId).toBeNull();
+    expect(state.tasksCreated).toHaveLength(0);
   });
 
   // The two-seat gate raises its own task per seat. A stage task as well would
