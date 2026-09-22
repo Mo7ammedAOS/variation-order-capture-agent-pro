@@ -225,28 +225,29 @@ function maxLevel(a: EscalationLevel, b: EscalationLevel): EscalationLevel {
   return rank(a) >= rank(b) ? a : b;
 }
 
-/** How long the managing director is left alone before a notice is chased. */
+/** How long a director seat is left alone before a notice round is chased. */
 const MD_NOTICE_GRACE_DAYS = 3;
 
 /**
  * How hard to chase one seat of one gate, and whether to widen the audience.
  *
- * Osman's rules, 2026-09-02, and each one has a reason:
+ * The project manager is the only seat a new gate opens, and he is chased
+ * every day. It is his decision, the clock is running, and there is nobody the
+ * chase could usefully widen to: he IS the escalation.
  *
- *   Notice, project manager   chased EVERY DAY, and never widened. It is his
- *                             decision, the clock is running, and copying his
- *                             director on day one is how you teach a director
- *                             to ignore the mail.
- *   Notice, managing director quiet for three days, then daily. He is the
- *                             backstop for a PM who has gone quiet, not the
+ * The director rules below survive for rounds opened before 2026-09-22, which
+ * can still be sitting unanswered:
+ *
+ *   Notice, managing director quiet for three days, then daily. He was the
+ *                             backstop for a PM who had gone quiet, never the
  *                             first line.
- *   Money, project manager    chased daily. Nothing moves without him.
- *   Money, managing director  quiet until the PM has approved. Before that the
- *                             ball is not with him, and chasing a man for a
+ *   Money, managing director  quiet until the PM had approved. Before that the
+ *                             ball was not with him, and chasing a man for a
  *                             decision he cannot yet make is noise.
  *
- * `widen` stays false throughout: these seats ARE the escalation. There is
- * nobody above a managing director to copy.
+ * Being chased for lateness is not the same as holding authority. A managing
+ * director still hears about work that is three working days late through
+ * `resolveAudience` below, on every kind of task, and that did not change.
  */
 export function approvalChase(input: {
   gate: 'notice_issue' | 'final_variation';

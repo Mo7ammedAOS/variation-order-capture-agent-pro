@@ -14,32 +14,31 @@ import { issueNotice, supersedeDraft } from '@/services/notice-document.service'
 import type { Capability } from '@/lib/rbac';
 
 /**
- * Two gates, two seats each, and nothing else gated.
+ * One gate, one seat, and nothing else gated.
  *
- *   notice_issue      before the initial notice of variation reaches the
- *                     client. EITHER seat alone opens it — see below.
- *   final_variation   after the price exists. It commits to a number, and
- *                     needs both seats.
+ *   final_variation   after the price exists. It commits to a number, and the
+ *                     project manager is the company's internal approver of it.
  *
- * ── The notice gate is deliberately weak ──────────────────────────────────
- * Both seats are still asked, and both still see it. But the FIRST approval
- * sends the notice, and an approval outranks a rejection on this gate alone.
+ * ── What changed on 2026-09-22, and what did not ───────────────────────────
+ * The managing director's seat came out of the workflow, on Osman's decision.
+ * Both gates used to need him: the notice gate asked him and the money gate
+ * could not carry without him. In a company this size that did not add a check,
+ * it added a person who can be on a plane, and the PM could finish nothing.
  *
- * That is not an oversight. A notice is protective: sending an unnecessary one
- * costs an awkward letter, and failing to send one costs the entitlement. The
- * two costs are not comparable, so the gate is built to fail in the direction
- * that cannot lose money. A rejection keeps its reason and stays on the file
- * for ever; it stops being a veto, not a fact.
+ * `notice_issue` is gone entirely — the project manager drafts, reads and
+ * sends the notice from the notice panel (`sendNotice`). The gate's code stays
+ * because rounds opened before that date can still be decided, and the rows
+ * they wrote still have to read.
  *
- * The money gate is unchanged, and that asymmetry is the point.
+ * The MD seat's enum value, capability and label all stay. Changes approved by
+ * a managing director go on showing that, for ever — a file that cannot explain
+ * its own history is the file you have to produce when a decision is challenged.
  *
  * ── Seats, not a list of approvers ─────────────────────────────────────────
- * A gate needs one operational decision and one commercial one. Requiring
- * every project manager to approve stalls a project that has two of them;
- * requiring "any one approval from a pool" would let the same person answer
- * for both sides, which is not two approvals at all. So each gate has exactly
- * two seats, and the same person may never fill both — enforced here rather
- * than left to the interface.
+ * A gate still resolves its seat through the permission matrix rather than a
+ * job title, and the same person may never fill two seats on one round. Both
+ * rules are kept even though one seat cannot currently break either, because
+ * losing them is how a second seat comes back later without its protections.
  *
  * ── Who may sit in a seat is the admin's decision ──────────────────────────
  * Not a hardcoded role name. That mistake put a notice assessment on a project
@@ -68,7 +67,11 @@ export const GATE_LABEL: Record<ApprovalGate, string> = {
   final_variation: 'Final variation approval',
 };
 
-const SEATS: ApprovalSeat[] = ['project_manager', 'managing_director'];
+/**
+ * The seats a NEW gate opens. Historical rounds may hold more than this; every
+ * read path works from the rows it finds, never from this list.
+ */
+const SEATS: ApprovalSeat[] = ['project_manager'];
 
 export const approvalDecisionSchema = z
   .object({
@@ -318,42 +321,28 @@ export async function recordApprovalDecision(
       select: { id: true, decision: true, taskId: true, seat: true },
     });
 
-    // ── Who has to agree, by gate ─────────────────────────────────────────
+    // ── Who has to agree ──────────────────────────────────────────────────
     //
-    // NOTICE: either seat alone is enough, and an approval beats a rejection.
-    // Osman's call, 2026-09-02, and the reasoning is sound: a notice is
-    // PROTECTIVE. Sending one that turns out to be unnecessary costs an
-    // awkward letter; failing to send one costs the entitlement outright. The
-    // two costs are not comparable, so the gate is deliberately weak in the
+    // The project manager. One seat, since 2026-09-22.
+    //
+    // `notice_issue` no longer opens, but a round opened before that date can
+    // still be decided, and it keeps its old behaviour: either seat alone
+    // carries it, and an approval outranks a rejection. A notice is protective
+    // — sending an unnecessary one costs an awkward letter, failing to send one
+    // costs the entitlement — so that gate was always built to fail in the
     // direction that cannot lose money.
     //
-    // A rejection is still recorded, still carries its reason, and stays
-    // visible on the change for ever. It stops being a veto, not a fact.
-    //
-    // MONEY: both seats, EXCEPT that the managing director alone is enough.
-    //
-    // Osman's call, 2026-09-04, and it reverses the narrower rule of 2026-09-02
-    // deliberately. The earlier reasoning — one signature on a number is how a
-    // company finds out a year later that nobody checked it — is sound in a
-    // company where the second signature belongs to someone the first cannot
-    // overrule. It does not describe this one. The managing director already
-    // holds every authority the project manager holds and answers for the
-    // figure himself, so requiring the PM's countersignature does not add a
-    // check; it adds a person who can be on a plane.
-    //
-    // What it is NOT: any two approvals. The PM alone still does not carry the
-    // money gate. Only the seat that owns the consequence can shorten it.
+    // On the money gate, any seat's approval carries. In practice that is the
+    // PM's. On a historical round it may be the managing director's, which is
+    // exactly what it meant then.
     const approvedByAnyone = siblings.some((row) => row.decision === 'approved');
     const anyRejection = siblings.some((row) => row.decision === 'rejected');
-    const directorApproved = siblings.some(
-      (row) => row.seat === 'managing_director' && row.decision === 'approved',
-    );
 
-    // On both gates now, an approval that carries the gate outranks a
-    // rejection. The "no" is never deleted — it keeps its author, its reason
-    // and its timestamp on the change for ever. It stops being a veto, not a
-    // fact, and a reader a year later can still see who disagreed.
-    const carried = approval.gate === 'notice_issue' ? approvedByAnyone : directorApproved;
+    // An approval that carries the gate outranks a rejection. The "no" is never
+    // deleted — it keeps its author, its reason and its timestamp on the change
+    // for ever. It stops being a veto, not a fact, and a reader a year later
+    // can still see who disagreed.
+    const carried = approvedByAnyone;
 
     const rejected = anyRejection && !carried;
     const complete =

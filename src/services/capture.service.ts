@@ -1298,33 +1298,30 @@ export async function createChangeFromCapture(args: {
     listCompanyWideHolders('project.viewAll'),
   ]);
 
-  // TASKED, not merely told.
+  // ONE task, for the person who decides.
   //
-  // Osman's call, 2026-09-05: the project manager and the managing director
-  // both get the decision on their list the moment an engineer reports, and
-  // both are chased until one of them acts. A notification is read once and
-  // scrolled past; a task is chased daily and shows up as overdue, and the
-  // notice clock does not care which of the two was too busy.
+  // Until 2026-09-22 a second `notice_assessment` task was raised for every
+  // director as well, because the decision needed two seats and the clock was
+  // already running. The decision is the project manager's alone now, so a
+  // director's copy would be a task he cannot usefully act on, chased daily,
+  // sitting in the same list as work that is genuinely his.
   //
-  // Two tasks, one decision. `assessNotice` closes EVERY open assessment task
-  // on the change, so whichever of them acts first clears it for both — the
-  // second person never works a decision that has already been made.
+  // Directors are still TOLD, below, with everyone else senior enough to want
+  // to know. Osman kept that deliberately: being told is about visibility,
+  // being tasked is about authority, and only the second one moved.
   const reachesEveryProject = new Set(companyWideReach);
-  const directors: string[] = [
+  const seniorWatchers = [
     ...new Set([
       ...projectDirectors.map((member) => member.userId),
       ...companyDirectors.filter((id) => reachesEveryProject.has(id)),
+      ...projectManagers.map((member) => member.userId),
     ]),
   ].filter((id) => id !== noticeOwner);
 
   const noticeRecipients = await loadRecipients([noticeOwner]);
-  const directorRecipients = await loadRecipients(directors);
   const ownerName = noticeRecipients[0]?.fullName ?? null;
 
-  // Whoever is left: senior enough to want to know, not the person deciding.
-  const watchers: string[] = projectManagers
-    .map((member) => member.userId)
-    .filter((id: string) => id !== noticeOwner && !directors.includes(id));
+  const watchers: string[] = seniorWatchers;
   const watcherRecipients = await loadRecipients(watchers);
 
   const outcome = await prisma.$transaction(async (tx): Promise<CaptureOutcome> => {
@@ -1431,48 +1428,8 @@ export async function createChangeFromCapture(args: {
       recipients: noticeRecipients,
     });
 
-    // The director's own copy of the same decision.
-    //
-    // A separate task row rather than a second name on one, because a task
-    // carries one assignee and everything downstream — the daily chase, the
-    // escalation ladder, "my tasks" — reads that field. A shared task would be
-    // chased on behalf of nobody.
-    //
-    // It says so plainly. A director who thinks he is the only one deciding
-    // acts on a change the project manager has already handled, and a director
-    // who thinks somebody else has it covered lets the clock run out.
-    for (const director of directorRecipients) {
-      const directorTask = await tx.task.create({
-        data: {
-          projectId,
-          potentialChangeId: change.id,
-          taskType: 'notice_assessment',
-          title: `Notice assessment — ${pcNumber}`,
-          description:
-            `Also with ${ownerName ?? 'the project team'}. Either of you can decide, and ` +
-            `deciding clears it from both lists.`,
-          assignedToUserId: director.userId,
-          dueDate: nextActionDue,
-        },
-      });
-
-      await recordTaskNotifications(tx, {
-        taskId: directorTask.id,
-        potentialChangeId: change.id,
-        kind: 'task_assigned',
-        subject: `Notice assessment needed — ${pcNumber}`,
-        body:
-          `${input.senderName ?? reporterName} reported this on ${project.projectCode}:\n\n` +
-          `"${input.text.length > 200 ? `${input.text.slice(0, 200).trimEnd()}…` : input.text}"\n\n` +
-          `Notice due ${formatDate(noticeDueDate)}. Decide whether a contractual notice is ` +
-          `required. ${ownerName ? `${ownerName} has the same task` : 'Nobody else holds this'}.`,
-        on: todayUtc(),
-        recipients: [director],
-      });
-    }
-
     // Told, not tasked. They are not being asked to assess it — that task
-    // belongs to the two people above. This is so nobody senior first hears
+    // belongs to the one person above. This is so nobody senior first hears
     // about a change when the notice period is half gone.
     if (watcherRecipients.length > 0) {
       await recordDirectNotifications(tx, {
@@ -1483,7 +1440,7 @@ export async function createChangeFromCapture(args: {
           `${input.senderName ?? reporterName} reported this on ${project.projectCode}:\n\n` +
           `"${input.text.length > 200 ? `${input.text.slice(0, 200).trimEnd()}…` : input.text}"\n\n` +
           `Filed as ${pcNumber}. Notice due ${formatDate(noticeDueDate)}. ` +
-          `The assessment is with the commercial team.`,
+          `The decision is with ${ownerName ?? 'the project manager'}.`,
         recipients: watcherRecipients,
         dedupeSeed: `raised:${change.id}`,
         on: new Date(),

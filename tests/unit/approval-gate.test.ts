@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * A gate is only worth having if it cannot be walked around.
  *
- * Four things have to hold, and each of them is a way the gate could look like
- * it works while meaning nothing:
+ * The managing director's seat came out on 2026-09-22 and the project manager
+ * is now the company's internal approver. What still has to hold:
  *
- *   · one approval is not two
- *   · the same person cannot supply both of them
+ *   · a new gate opens ONE seat, and never raises work for a director
+ *   · the same person cannot supply two approvals on one round
  *   · a rejection sends the change BACK, it does not cancel it
  *   · a rejection without a reason is not a decision anyone can act on
+ *   · rounds decided before the change still read exactly as they did
  */
 
 const state = {
@@ -94,7 +95,7 @@ const prismaMock = {
 };
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }));
 
-const { recordApprovalDecision, approvalDecisionSchema } = await import(
+const { recordApprovalDecision, approvalDecisionSchema, openGate } = await import(
   '@/services/approval.service'
 );
 
@@ -121,7 +122,7 @@ function approval(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('the two-seat approval gate', () => {
+describe('the approval gate', () => {
   beforeEach(() => {
     state.approval = approval();
     state.siblings = [];
@@ -163,27 +164,43 @@ describe('the two-seat approval gate', () => {
     expect(result.movedTo).toBe('qs_pricing');
   });
 
-  it('does not let the project manager alone carry the money', async () => {
-    // Not "any one approval". The seat that owns the consequence is the only
-    // one that may shorten the gate, and it is not this one.
+  it('opens one seat, and raises nothing for a managing director', async () => {
+    // The whole point of the 2026-09-22 change. If this ever counts two, a
+    // director is being asked for a decision the workflow no longer needs and
+    // the change waits on a list nobody is watching.
+    await openGate(prismaMock as never, {
+      potentialChangeId: 'pc-1',
+      projectId: 'proj-1',
+      gate: 'final_variation',
+      pcNumber: 'PC-1',
+      title: 'Flooring change',
+      dueDate: new Date('2026-09-30'),
+      openedByUserId: 'pm-1',
+    });
+
+    expect(state.tasksCreated).toHaveLength(1);
+    const seats = state.tasksCreated.map(
+      (task) => ((task.data as Record<string, unknown>).title as string) ?? '',
+    );
+    expect(seats.some((title) => /managing director/i.test(title))).toBe(false);
+  });
+
+  it('lets the project manager carry the money on his own', async () => {
+    // He is the only internal approver now. A gate that still waited for a
+    // second seat would wait for ever, because nothing opens one.
     state.approval = approval({ gate: 'final_variation', seat: 'project_manager' });
-    state.siblings = [
-      { id: ID, decision: 'approved', taskId: 'task-1', seat: 'project_manager' },
-      { id: 'other', decision: 'pending', taskId: 'task-2', seat: 'managing_director' },
-    ];
+    state.siblings = [{ id: ID, decision: 'approved', taskId: 'task-1', seat: 'project_manager' }];
 
     const result = await recordApprovalDecision(USER, { approvalId: ID, decision: 'approved' });
 
-    expect(result.complete).toBe(false);
-    expect(result.movedTo).toBeNull();
-    expect(state.pcUpdates).toHaveLength(0);
+    expect(result.complete).toBe(true);
+    expect(result.movedTo).toBe('variation_approved');
   });
 
-  it('lets the managing director carry the money on his own', async () => {
-    // Osman's call, 2026-09-04, reversing the both-seats rule of 2026-09-02.
-    // The managing director already holds every authority the project manager
-    // holds and answers for the figure himself, so the countersignature was
-    // not a second check — it was a second person who could be on a plane.
+  it('still honours a managing director who approved a round opened before the change', async () => {
+    // His approval meant "released" when he gave it, and it goes on meaning
+    // that. A file that cannot explain its own history is the file you have to
+    // produce when the decision is challenged.
     state.approval = approval({ gate: 'final_variation', seat: 'managing_director' });
     state.siblings = [
       { id: ID, decision: 'approved', taskId: 'task-1', seat: 'managing_director' },
@@ -244,7 +261,7 @@ describe('the two-seat approval gate', () => {
     expect(result.movedTo).toBe('qs_pricing');
   });
 
-  it('releases the notice only when both seats have approved', async () => {
+  it('releases the notice when the seats that exist have approved', async () => {
     state.siblings = [
       { id: ID, decision: 'approved', taskId: 'task-1' },
       { id: 'other', decision: 'approved', taskId: 'task-2' },

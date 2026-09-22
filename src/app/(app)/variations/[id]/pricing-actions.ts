@@ -106,7 +106,7 @@ export async function submitPricingAction(
     const totals = await submitPricing(user, id);
     refresh(id);
     return {
-      ok: `Submitted at ${totals.total}. It is now with the project manager and the managing director, and the figure is fixed.`,
+      ok: `Submitted at ${totals.total}. It is now with the project manager, and the figure is fixed.`,
     };
   } catch (error) {
     if (isAppError(error)) return { error: error.message };

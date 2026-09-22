@@ -44,7 +44,7 @@ const BLOCKED_COPY: Record<Exclude<BlockedReason, null>, { title: string; body: 
   },
   notice_gate: {
     title: 'Waiting on two approvals',
-    body: 'The project manager and the managing director both have to approve issuing the notice before this moves. Their decisions are what advance it.',
+    body: 'The project manager sends the notice from the notice panel below. That is what moves this on.',
   },
   pricing: {
     title: 'Waiting on the price',
@@ -52,7 +52,7 @@ const BLOCKED_COPY: Record<Exclude<BlockedReason, null>, { title: string; body: 
   },
   final_gate: {
     title: 'Waiting on the final approval',
-    body: 'The submitted price is with the project manager and the managing director. Both have to approve before the variation is agreed.',
+    body: 'The submitted price is with the project manager. His approval is what agrees the variation.',
   },
   ended: {
     title: 'This change is closed',

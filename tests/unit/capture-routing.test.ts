@@ -856,14 +856,14 @@ describe('who is put on the decision', () => {
     state.recentExchange = false;
   });
 
-  it('tasks the assessor and the managing director, and says they share it', async () => {
-    // Osman's call, 2026-09-05. A notification is read once and scrolled past;
-    // a task is chased daily and shows up overdue. The notice clock does not
-    // care which of the two was busy, so both carry it.
+  it('tasks one person with the decision, and tells the director instead', async () => {
+    // Until 2026-09-22 a second assessment task was raised for every director,
+    // because the decision needed two seats. It needs one now, so a director's
+    // copy would be a task he cannot usefully act on, chased daily, sitting
+    // among work that is genuinely his.
     //
-    // Two rows rather than two names on one, because a task holds a single
-    // assignee and the chase, the escalation ladder and "my tasks" all read
-    // that field. A shared task would be chased on behalf of nobody.
+    // He is still told. Being told is visibility; being tasked is authority,
+    // and only the second one moved.
     state.memberships = memberOf('proj-a');
     state.directors = ['md'];
     state.directorsWithReach = ['md'];
@@ -878,14 +878,8 @@ describe('who is put on the decision', () => {
     } as Parameters<typeof captureFromChannel>[0]);
 
     const assessments = state.tasks.filter((t) => t.taskType === 'notice_assessment');
-    expect(assessments).toHaveLength(2);
-    expect(assessments.map((t) => t.assignedToUserId)).toContain('md');
-
-    // The director's copy says he is not alone on it. A director who thinks
-    // he is the only one deciding acts on something already handled; one who
-    // assumes somebody else has it lets the clock run out.
-    const directorTask = assessments.find((t) => t.assignedToUserId === 'md');
-    expect(String(directorTask?.description ?? '')).toContain('Either of you can decide');
+    expect(assessments).toHaveLength(1);
+    expect(assessments.map((t) => t.assignedToUserId)).not.toContain('md');
   });
 
   it('does not task the same person twice when the director is also the assessor', async () => {

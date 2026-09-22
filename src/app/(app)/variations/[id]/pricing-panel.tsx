@@ -168,7 +168,7 @@ export function PricingPanel(props: PricingPanelProps) {
           {pricingStatus === 'approved'
             ? 'Agreed and fixed.'
             : frozen
-              ? `Submitted${props.submittedAt ? ` on ${props.submittedAt}` : ''} and now with the project manager and the managing director. The figure cannot change while they are deciding on it.`
+              ? `Submitted${props.submittedAt ? ` on ${props.submittedAt}` : ''} and now with the project manager. The figure cannot change while he is deciding on it.`
               : 'Build it up line by line. Every rate says where it came from, because that is the line that gets argued.'}
         </p>
       </CardHeader>
@@ -355,7 +355,7 @@ export function PricingPanel(props: PricingPanelProps) {
                 <div className="flex flex-wrap items-center gap-3">
                   <Submit label="Submit this price for approval" busy="Submitting…" />
                   <span className="text-sm text-muted-foreground">
-                    Goes to the project manager and the managing director. The figure is fixed
+                    Goes to the project manager. The figure is fixed
                     once it does.
                   </span>
                 </div>
