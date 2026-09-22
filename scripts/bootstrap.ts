@@ -174,7 +174,7 @@ async function main() {
       ? `!! Could not send the set-password email: ${linkError.message}\n   Use Settings → Users → Password once you are in, or send it again from Supabase.`
       : 'A set-password email is on its way to that address. Follow it, then sign in.',
   );
-  console.log('\nEverything else — projects, people, contacts — is the test. Follow TEST-PLAN.md.');
+  console.log('\nEverything else — projects, people, contacts — is the test. Follow docs/TEST-PLAN.md.');
 }
 
 main()

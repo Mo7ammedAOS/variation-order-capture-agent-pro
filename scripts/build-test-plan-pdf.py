@@ -12,7 +12,8 @@ command or it will not happen.
 
 The test plan is generated from TEST-PLAN.md, which is the single source of
 truth; the Arabic catalog is hand-authored HTML and is only printed. Both PDFs
-are gitignored — the repository is public and neither belongs in it.
+live in docs/pdf/, which is gitignored whole: the repository is public
+and no rendered document belongs in it.
 
 Chrome renders it. `--print-to-pdf` is headless Chrome's own print path, so the
 @page rules, the page breaks and the checkbox squares come out as the CSS
@@ -31,11 +32,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / 'TEST-PLAN.md'
-HTML_OUT = ROOT / 'docs' / 'VO-TEST-PLAN.html'
-PDF_OUT = ROOT / 'docs' / 'VO-TEST-PLAN.pdf'
-AR_HTML = ROOT / 'docs' / 'VO-CATALOG-AR.html'
-AR_PDF = ROOT / 'docs' / 'VO-CATALOG-AR.pdf'
+SOURCE = ROOT / 'docs' / 'TEST-PLAN.md'
+HTML_OUT = ROOT / 'docs' / 'pdf' / 'VO-TEST-PLAN.html'
+PDF_OUT = ROOT / 'docs' / 'pdf' / 'VO-TEST-PLAN.pdf'
+AR_HTML = ROOT / 'docs' / 'pdf' / 'VO-CATALOG-AR.html'
+AR_PDF = ROOT / 'docs' / 'pdf' / 'VO-CATALOG-AR.pdf'
 
 CHROME_CANDIDATES = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',

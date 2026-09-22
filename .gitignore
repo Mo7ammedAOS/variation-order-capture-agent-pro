@@ -85,11 +85,15 @@ desktop.ini
 .claude/settings.local.json
 .claude/settings.local.json.bak
 
-# The Arabic sales catalog. Kept out of a PUBLIC repo until you say otherwise.
-docs/VO-CATALOG-AR.*
-
-# Generated test-plan PDF. The markdown is the source and is tracked.
-docs/VO-TEST-PLAN.*
+# Every printable document, and the HTML each one is rendered from.
+#
+# The repo is PUBLIC. The markdown in docs/ is the source and IS tracked; the
+# PDFs are rendered from it and are not. Two of them must never be pushed at
+# all: the ROI sheet carries the setup price, and the meeting guide is the
+# script for selling it. Neither belongs anywhere a client can read it.
+#
+# Rebuild the test plan with: python3 scripts/build-test-plan-pdf.py
+docs/pdf/
 
 # Standalone design mock-ups, opened straight in a browser. They are working
 # sketches, not app code — nothing imports them and nothing builds them.

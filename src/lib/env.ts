@@ -113,7 +113,7 @@ function parseEnv(): ServerEnv {
       .join('\n');
     throw new Error(
       `Invalid environment configuration:\n${issues}\n\n` +
-        'Copy .env.example to .env and fill it in. See DEPLOYMENT_GUIDE.md.',
+        'Copy .env.example to .env and fill it in. See docs/DEPLOYMENT_GUIDE.md.',
     );
   }
 

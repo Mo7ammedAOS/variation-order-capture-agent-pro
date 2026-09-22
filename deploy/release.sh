@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ENV_FILE=".env.production"
-[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — see DEPLOYMENT_GUIDE.md"; exit 1; }
+[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — see docs/DEPLOYMENT_GUIDE.md"; exit 1; }
 
 echo "==> Building images"
 # BOTH, and the migrate one explicitly.

@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  * easy to lose in a refactor: a browser gets the login page, a `fetch` gets a
  * 401 it can act on. Redirecting an API call hands the caller login HTML with
  * status 200 — `res.ok` true, `res.json()` throwing on `<!DOCTYPE` — so the
- * 401 that API_SPEC.md promises would never arrive.
+ * 401 that docs/API_SPEC.md promises would never arrive.
  */
 
 let currentUser: { id: string } | null = null;

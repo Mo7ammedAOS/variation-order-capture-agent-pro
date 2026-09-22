@@ -6,7 +6,7 @@
 // One database per client deployment. Never shared, never multi-tenant.
 //
 // Three additions the product spec does not list, each load-bearing — see
-// DATABASE_SCHEMA.md for the reasoning:
+// docs/DATABASE_SCHEMA.md for the reasoning:
 //   Project.pcSequence        race-safe PC numbering
 //   IntegrationEvent          webhook idempotency (Rule 2)
 //   *.driveFolderId / driveFileId   Google Drive is the store, this table is the index
@@ -525,7 +525,7 @@ model CompanySettings {
   defaultApprovalMatrixJson Json?    @map("default_approval_matrix_json")
   defaultReminderRulesJson  Json?    @map("default_reminder_rules_json")
   defaultEscalationRulesJson Json?   @map("default_escalation_rules_json")
-  /// RAG thresholds in days remaining. Defaults documented in ARCHITECTURE.md.
+  /// RAG thresholds in days remaining. Defaults documented in docs/ARCHITECTURE.md.
   riskAmberThresholdDays    Int      @default(7) @map("risk_amber_threshold_days")
   /// UAE VAT, 5% since 2018. Held as a setting rather than a constant because
   /// a rate change must not require a deploy, and because a zero-rated or

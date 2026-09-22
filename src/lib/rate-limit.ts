@@ -6,7 +6,7 @@ import { RateLimitError } from '@/lib/errors';
  * Sufficient for one container: it protects the login form from credential
  * stuffing and the integration routes from a runaway retry loop. It is NOT
  * shared across replicas — when this deployment scales past one container,
- * move the counter to Redis. Documented in SECURITY.md rather than left as a
+ * move the counter to Redis. Documented in docs/SECURITY.md rather than left as a
  * surprise.
  */
 

@@ -1760,7 +1760,7 @@ this repository is.
 then a copy per deployment. All eight lanes live inside a single workflow,
 separated by sticky notes, with node names prefixed by the lane letter (`A:`,
 `C:`, `F:`) so a failure message names the lane. This supersedes any earlier
-one-file-per-lane naming. See `N8N_WORKFLOW_MAP.md` for the lanes and the
+one-file-per-lane naming. See `docs/N8N_WORKFLOW_MAP.md` for the lanes and the
 per-client duplication checklist, and `/n8n-workflows/README.md` for the export
 procedure and the secret-scrubbing rules.
 

@@ -3,7 +3,7 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   // Standalone output so the Docker image is a self-contained node server.
   // The VPS runs a long-lived process, which is what lets the local embedding
-  // model and the BullMQ worker share the same image. See DEPLOYMENT_GUIDE.md.
+  // model and the BullMQ worker share the same image. See docs/DEPLOYMENT_GUIDE.md.
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,

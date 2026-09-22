@@ -30,7 +30,7 @@ import { createContact } from '../src/services/contact.service';
 
 const prisma = new PrismaClient();
 
-// ── the cast, from TEST-PLAN.md ────────────────────────────────────────────
+// ── the cast, from docs/TEST-PLAN.md ────────────────────────────────────────────
 const STAFF = [
   { fullName: 'Abdelmoneim', email: 'osman.constructionsystems@hotmail.com', systemRole: 'standard_user' },
   { fullName: 'Hashim',      email: 'mohammedosman2400@outlook.com',        systemRole: 'standard_user' },

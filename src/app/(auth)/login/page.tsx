@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 /**
  * `/login` became `/signin` on 2026-09-05. This stays because the old address
  * is already in the wild — in sent invitation emails, in browser bookmarks, in
- * TEST-PLAN.md, and in whatever anybody wrote down. A dead front door is a
+ * docs/TEST-PLAN.md, and in whatever anybody wrote down. A dead front door is a
  * support call, and the cost of keeping it alive is this file.
  */
 export default async function LoginRedirect({

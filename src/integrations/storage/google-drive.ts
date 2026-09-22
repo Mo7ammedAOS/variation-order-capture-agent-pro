@@ -63,7 +63,7 @@ function getDrive(): drive_v3.Drive {
   if (missing.length > 0) {
     throw new IntegrationError(
       `GOOGLE_DRIVE_AUTH_MODE=oauth requires ${missing.join(', ')}. ` +
-        'Mint a refresh token with `npm run drive:token` — see DEPLOYMENT_GUIDE.md.',
+        'Mint a refresh token with `npm run drive:token` — see docs/DEPLOYMENT_GUIDE.md.',
     );
   }
 
@@ -146,7 +146,7 @@ export const googleDriveProvider: StorageProvider = {
         throw new IntegrationError(
           'Drive rejected the upload for lack of quota. A service account has no ' +
             'storage of its own — the target must be a Shared Drive, or switch ' +
-            'GOOGLE_DRIVE_AUTH_MODE to oauth. See DEPLOYMENT_GUIDE.md.',
+            'GOOGLE_DRIVE_AUTH_MODE to oauth. See docs/DEPLOYMENT_GUIDE.md.',
         );
       }
       throw new IntegrationError(`Drive upload failed: ${message}`);
