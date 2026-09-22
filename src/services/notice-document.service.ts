@@ -17,7 +17,7 @@ import { storeNoticeDocument } from '@/services/document.service';
  *
  * ── The order this runs in, and why ────────────────────────────────────────
  *   assess "required"  ->  the system DRAFTS immediately
- *   a human edits the draft
+ *   a human edits the draft, then SENDS it deliberately
  *   two seats approve THE TEXT
  *   approval issues it: the words are frozen, a PDF is filed, a message queued
  *   the courier reports back  ->  sent, with a message id, which is the proof
@@ -243,9 +243,9 @@ export type NoticeDraftInput = z.infer<typeof noticeDraftSchema>;
 /**
  * Editing the words. Only while it is a draft.
  *
- * Once two seats have approved, the text they approved is the text that goes
- * out. Allowing an edit after approval would mean the signatures sit under
- * something nobody read, which is worse than having no gate at all.
+ * Once it is sent, the text that went out is the text on the record. Allowing
+ * an edit afterwards would leave the file disagreeing with the letter the
+ * client is holding, which is worse than having no record at all.
  */
 export async function updateNoticeDraft(user: AuthenticatedUser, input: NoticeDraftInput) {
   const parsed = noticeDraftSchema.parse(input);
@@ -257,7 +257,7 @@ export async function updateNoticeDraft(user: AuthenticatedUser, input: NoticeDr
 
   if (notice.status !== 'draft') {
     throw new ValidationError(
-      'This notice has already been approved. Its wording is fixed. Reject the approval to redraft it.',
+      'This notice has already been issued. Its wording is fixed, because it is what the client was sent.',
     );
   }
 
@@ -360,6 +360,143 @@ export async function issueNotice(
   });
 
   return issued;
+}
+
+/**
+ * Sending the notice. The deliberate act, by one named person.
+ *
+ * It replaced a two-seat approval gate on 2026-09-22. The gate was answering
+ * the wrong question: a notice is not a commitment to pay, it is the company
+ * saying early that something may have changed. Serving one that turns out to
+ * be unnecessary costs an awkward letter. Failing to serve one inside the
+ * contractual window costs the claim. So the cheap direction is to send, and a
+ * second seat only bought delay against a deadline.
+ *
+ * What is kept is the part that mattered: nothing goes out that a person did
+ * not read. This is reachable only from the draft, by somebody holding
+ * `notice.draft`, and it freezes the text at the moment it is called.
+ *
+ * Returns the notice id so the caller can file the PDF and push the message
+ * AFTER the transaction commits — a Drive call and an HTTP hop have no place
+ * inside a five second transaction budget.
+ */
+export async function sendNotice(
+  user: AuthenticatedUser,
+  noticeId: string,
+): Promise<{ id: string; reference: string }> {
+  const notice = await prisma.notice.findUnique({
+    where: { id: noticeId },
+    select: {
+      id: true,
+      projectId: true,
+      potentialChangeId: true,
+      status: true,
+      kind: true,
+      recipientEmail: true,
+    },
+  });
+  if (!notice) throw new NotFoundError('Notice not found');
+
+  await assertProjectAccess(user, notice.projectId, 'notice.draft');
+
+  if (notice.status !== 'draft') {
+    throw new ValidationError('This notice has already been sent.');
+  }
+  if (!notice.recipientEmail) {
+    throw new ValidationError(
+      'There is nobody to send it to. Add the client recipient to the draft first, or set one in the project contract rules.',
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const issued = await issueNotice(tx, {
+      potentialChangeId: notice.potentialChangeId,
+      projectId: notice.projectId,
+      actorUserId: user.id,
+    });
+    if (!issued) throw new NotFoundError('Notice not found');
+
+    // `issued` is as far as this goes. The notice becomes `sent` when the
+    // courier reports back with a message id, and not one moment earlier.
+    await tx.potentialChange.update({
+      where: { id: notice.potentialChangeId },
+      data: { noticeStatus: 'drafted' },
+    });
+
+    return issued;
+  });
+}
+
+/**
+ * Re-queueing a notice whose delivery failed.
+ *
+ * The notice itself is untouched — it was issued, the words are frozen, and
+ * what failed was the carrying of it. A new message row is written with a
+ * dedupe key carrying the attempt number, because the original key is already
+ * spent and reusing it would make the sweep skip the retry silently.
+ */
+export async function retryNoticeDelivery(
+  user: AuthenticatedUser,
+  noticeId: string,
+): Promise<{ notificationId: string }> {
+  const notice = await prisma.notice.findUnique({
+    where: { id: noticeId },
+    include: { notification: { select: { id: true, status: true } } },
+  });
+  if (!notice) throw new NotFoundError('Notice not found');
+
+  await assertProjectAccess(user, notice.projectId, 'notice.draft');
+
+  if (notice.status !== 'issued') {
+    throw new ValidationError(
+      notice.status === 'sent' || notice.status === 'acknowledged'
+        ? 'This notice was delivered. There is nothing to retry.'
+        : 'This notice has not been sent yet.',
+    );
+  }
+  if (!notice.recipientEmail) {
+    throw new ValidationError('There is nobody to send it to.');
+  }
+
+  const attempt = (await prisma.notificationLog.count({
+    where: { potentialChangeId: notice.potentialChangeId, payloadSummary: notice.reference },
+  })) + 1;
+
+  return prisma.$transaction(async (tx) => {
+    const message = await tx.notificationLog.create({
+      data: {
+        potentialChangeId: notice.potentialChangeId,
+        kind: 'notice_issued',
+        channel: 'email',
+        recipient: notice.recipientEmail as string,
+        subject: notice.subject,
+        body: notice.body,
+        payloadSummary: notice.reference,
+        status: 'pending',
+        dedupeKey: `notice:${notice.id}:v${notice.version}:retry${attempt}:email:${notice.recipientEmail}`,
+      },
+      select: { id: true },
+    });
+
+    // The notice points at the live attempt, so the delivery callback that
+    // matters is the one for the message actually in flight.
+    await tx.notice.update({
+      where: { id: notice.id },
+      data: { notificationId: message.id },
+    });
+
+    await recordAudit({
+      db: tx,
+      projectId: notice.projectId,
+      userId: user.id,
+      recordType: 'notice',
+      recordId: notice.id,
+      actionType: 'issued',
+      newValue: { reference: notice.reference, retryAttempt: attempt },
+    });
+
+    return { notificationId: message.id };
+  });
 }
 
 /**

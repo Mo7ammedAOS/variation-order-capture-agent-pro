@@ -129,7 +129,7 @@ describe('what makes a notice served', () => {
   });
 });
 
-describe('the wording is fixed at approval', () => {
+describe('the wording is fixed at the moment it is sent', () => {
   beforeEach(() => {
     state.notice = issuedNotice({ status: 'draft' });
     state.noticeUpdates = [];
@@ -147,16 +147,16 @@ describe('the wording is fixed at approval', () => {
     expect((state.noticeUpdates.at(0)?.data as Record<string, unknown>).body).toBe('y'.repeat(80));
   });
 
-  it('refuses an edit once both seats have approved it', async () => {
+  it('refuses an edit once it has been sent', async () => {
     state.notice = issuedNotice({ status: 'issued' });
 
     await expect(
       updateNoticeDraft(USER, {
         noticeId: NOTICE_ID,
-        subject: 'Quietly reworded after approval',
+        subject: 'Quietly reworded after it went out',
         body: 'z'.repeat(80),
       }),
-    ).rejects.toThrow(/already been approved/);
+    ).rejects.toThrow(/already been issued/);
 
     expect(state.noticeUpdates).toHaveLength(0);
   });

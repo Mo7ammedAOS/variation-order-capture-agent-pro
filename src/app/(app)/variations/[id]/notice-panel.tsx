@@ -13,24 +13,29 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Textarea } from '@/components/ui/input';
+import { noticeDisplayStatus } from '@/lib/notice-status';
 import {
   acknowledgeNoticeAction,
+  retryNoticeAction,
   saveNoticeDraftAction,
+  sendNoticeAction,
   type NoticeState,
 } from './actions';
 
 /**
  * The notice, at whatever stage it has reached.
  *
- * ── The text is always visible, editable or not ────────────────────────────
- * A director approving this is approving a page of words, so the words are on
- * the page. Once approved they go read-only and say so — an approval sitting
- * under text that was changed afterwards is worse than no approval at all.
+ * ── Reading comes before sending ───────────────────────────────────────────
+ * A draft opens as a PREVIEW, not as a form. The person about to serve it sees
+ * the recipient, the subject, the words, the attachments and the deadline laid
+ * out as the client will meet them, and edits only if they choose to. An
+ * eighteen-row textarea as the first thing on the screen invites scrolling
+ * past it to the button underneath.
  *
- * ── "Queued" is not "sent" ─────────────────────────────────────────────────
- * The panel says queued until the courier reports back with a message id, and
- * then says served and shows the id. That distinction is the whole product:
- * asking for a notice to go out is not evidence that it went.
+ * ── "Pending delivery" is not "delivered" ──────────────────────────────────
+ * The panel says pending until the courier reports back with a message id, and
+ * then shows the id. That distinction is the whole product: asking for a notice
+ * to go out is not evidence that it went.
  */
 
 export interface NoticeView {
@@ -52,10 +57,28 @@ export interface NoticeView {
   documentId: string | null;
   deliveryStatus: string | null;
   deliveryFailureReason: string | null;
+  /** The change's own answer to whether a notice was needed at all. */
+  assessment: string;
+  /** The contractual deadline this notice is being served against. */
+  deadline: string | null;
+  /** How it goes out, from the project's contract rules. */
+  deliveryMethod: string;
+  /** Evidence on the change, which travels with the notice. */
+  attachments: { id: string; name: string }[];
   /** Whether the signed-in person may edit the wording. */
   canDraft: boolean;
   /** Whether they may record the client's acknowledgement. */
   canAcknowledge: boolean;
+}
+
+function SendButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="sm" disabled={pending || disabled}>
+      <Send aria-hidden className="size-3.5" />
+      {pending ? 'Sending…' : 'Send initial notice'}
+    </Button>
+  );
 }
 
 function SaveButton({ label }: { label: string }) {
@@ -68,34 +91,38 @@ function SaveButton({ label }: { label: string }) {
 }
 
 function StatusChip({ notice }: { notice: NoticeView }) {
-  if (notice.status === 'acknowledged') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-risk-green-bg px-2 py-0.5 text-xs font-semibold text-risk-green">
-        <CheckCircle2 aria-hidden className="size-3" />
-        Acknowledged
-      </span>
-    );
-  }
-  if (notice.status === 'sent') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-risk-green-bg px-2 py-0.5 text-xs font-semibold text-risk-green">
-        <Send aria-hidden className="size-3" />
-        Served
-      </span>
-    );
-  }
-  if (notice.status === 'issued') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-risk-amber-bg px-2 py-0.5 text-xs font-semibold text-risk-amber">
-        <Clock aria-hidden className="size-3" />
-        {notice.deliveryStatus === 'failed' ? 'Send failed' : 'Queued, not yet served'}
-      </span>
-    );
-  }
+  const reading = noticeDisplayStatus({
+    assessment: notice.assessment,
+    notice: { status: notice.status, acknowledgedAt: notice.acknowledgedAt },
+    delivery: notice.deliveryStatus,
+  });
+
+  const tone =
+    reading.tone === 'green'
+      ? 'bg-risk-green-bg text-risk-green'
+      : reading.tone === 'red'
+        ? 'bg-risk-red-bg text-risk-red'
+        : reading.tone === 'amber'
+          ? 'bg-risk-amber-bg text-risk-amber'
+          : 'bg-secondary text-muted-foreground';
+
+  const Icon =
+    reading.state === 'acknowledged'
+      ? CheckCircle2
+      : reading.state === 'delivery_failed'
+        ? AlertCircle
+        : reading.state === 'acknowledgement_pending'
+          ? Send
+          : reading.state === 'pending_delivery'
+            ? Clock
+            : FileText;
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-      <FileText aria-hidden className="size-3" />
-      Draft
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}
+    >
+      <Icon aria-hidden className="size-3" />
+      {reading.label}
     </span>
   );
 }
@@ -115,15 +142,24 @@ export function NoticePanel({
     acknowledgeNoticeAction,
     {},
   );
+  const [sendState, send] = useActionState<NoticeState, FormData>(sendNoticeAction, {});
+  const [retryState, retry] = useActionState<NoticeState, FormData>(retryNoticeAction, {});
   const [acknowledging, setAcknowledging] = useState(false);
+  const [editing, setEditing] = useState(false);
 
-  const editable = notice.status === 'draft' && notice.canDraft;
+  const mayEdit = notice.status === 'draft' && notice.canDraft;
+  // The draft opens as something to read. Editing is a choice, not the state
+  // the screen starts in.
+  const editable = mayEdit && editing;
+  const failed = notice.status === 'issued' && notice.deliveryStatus === 'failed';
 
   return (
     <Card tone={notice.status === 'draft' ? 'work' : 'plain'}>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="text-base">Notice {notice.reference}</CardTitle>
+          <CardTitle className="text-base">
+            {notice.status === 'draft' ? 'Review initial notice' : `Notice ${notice.reference}`}
+          </CardTitle>
           <StatusChip notice={notice} />
           {notice.version > 1 ? (
             <span className="text-xs text-muted-foreground">
@@ -134,14 +170,14 @@ export function NoticePanel({
         <p className="text-sm text-muted-foreground">
           {notice.status === 'draft'
             ? notice.recipientEmail
-              ? `Goes to ${notice.recipientName ?? notice.recipientEmail} once both seats approve it.`
-              : 'No notice recipient is set on this project. Set one in the project contract rules, or it will be approved with nowhere to go.'
+              ? `Nothing has gone yet. Read it, change anything you want to change, then send it to ${notice.recipientName ?? notice.recipientEmail}.`
+              : 'No notice recipient is set on this project. Add one below, or set one in the project contract rules — it cannot be sent with nowhere to go.'
             : notice.status === 'issued'
-              ? notice.deliveryStatus === 'failed'
-                ? `The send failed: ${notice.deliveryFailureReason ?? 'no reason given'}. It stays queued.`
-                : `Approved by ${notice.issuedByName ?? 'two seats'}${notice.issuedAt ? ` on ${notice.issuedAt}` : ''}, waiting for the courier to confirm.`
+              ? failed
+                ? `The send failed: ${notice.deliveryFailureReason ?? 'no reason given'}. The notice stands; only its delivery failed. Pricing carries on.`
+                : `Sent by ${notice.issuedByName ?? 'the project manager'}${notice.issuedAt ? ` on ${notice.issuedAt}` : ''}, waiting for the courier to confirm.`
               : notice.status === 'sent'
-                ? `Served${notice.sentAt ? ` on ${notice.sentAt}` : ''} to ${notice.recipientEmail ?? 'the client'}.`
+                ? `Delivered${notice.sentAt ? ` on ${notice.sentAt}` : ''} to ${notice.recipientEmail ?? 'the client'}. They have not acknowledged it yet.`
                 : `Acknowledged${notice.acknowledgedAt ? ` on ${notice.acknowledgedAt}` : ''}, recorded by ${notice.acknowledgedByName ?? 'a colleague'}.`}
         </p>
       </CardHeader>
@@ -196,7 +232,14 @@ export function NoticePanel({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <SaveButton label="Save the draft" />
+              <SaveButton label="Save draft" />
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Cancel
+              </button>
               {draftState.error ? (
                 <p role="alert" className="flex items-center gap-2 text-sm text-risk-red">
                   <AlertCircle aria-hidden className="size-4" />
@@ -212,24 +255,112 @@ export function NoticePanel({
             </div>
           </form>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
+            {/* The envelope, before the letter. Somebody about to serve this
+                needs to see where it is going and what it is answering as
+                plainly as they see the words. */}
+            {notice.status === 'draft' ? (
+              <dl className="grid gap-x-4 gap-y-2 rounded-xl bg-secondary/50 p-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Recipient
+                  </dt>
+                  <dd className="break-words">
+                    {notice.recipientEmail
+                      ? `${notice.recipientName ? `${notice.recipientName} — ` : ''}${notice.recipientEmail}`
+                      : 'Not set'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Delivery method
+                  </dt>
+                  <dd>{notice.deliveryMethod}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Change reference
+                  </dt>
+                  <dd className="tabular">{notice.reference}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Notice deadline
+                  </dt>
+                  <dd className="tabular">{notice.deadline ?? 'Not set'}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Attachments
+                  </dt>
+                  <dd>
+                    {notice.attachments.length === 0
+                      ? 'None'
+                      : notice.attachments.map((file) => file.name).join(', ')}
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
+
             <p className="text-sm font-semibold">{notice.subject}</p>
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl bg-secondary/50 p-4 font-mono text-xs leading-relaxed">
               {notice.body}
             </pre>
+
             {notice.status !== 'draft' ? (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Lock aria-hidden className="size-3" />
-                Fixed at approval. This is the wording that was approved.
+                Fixed when it was sent. This is the wording the client has.
               </p>
+            ) : mayEdit ? (
+              <form action={send} className="flex flex-wrap items-center gap-3">
+                <input type="hidden" name="noticeId" value={notice.id} />
+                <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
+                <SendButton disabled={!notice.recipientEmail} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                >
+                  Edit notice
+                </Button>
+                {sendState.error ? (
+                  <p role="alert" className="flex items-center gap-2 text-sm text-risk-red">
+                    <AlertCircle aria-hidden className="size-4" />
+                    {sendState.error}
+                  </p>
+                ) : null}
+              </form>
             ) : (
               <p className="text-xs text-muted-foreground">
                 Drafted by {notice.draftedByName ?? 'the system'}. You do not hold the authority
-                to edit it.
+                to edit or send it.
               </p>
             )}
           </div>
         )}
+
+        {/* Delivery failed. The notice stands, the carrying of it did not. */}
+        {failed && notice.canDraft ? (
+          <form
+            action={retry}
+            className="flex flex-wrap items-center gap-3 rounded-xl bg-risk-red-bg p-4"
+          >
+            <input type="hidden" name="noticeId" value={notice.id} />
+            <input type="hidden" name="potentialChangeId" value={potentialChangeId} />
+            <p className="w-full text-sm font-medium text-risk-red">
+              Initial notice delivery failed. Nothing reached the client.
+            </p>
+            <SaveButton label="Retry delivery" />
+            {retryState.error ? (
+              <p role="alert" className="text-sm text-risk-red">
+                {retryState.error}
+              </p>
+            ) : null}
+            {retryState.ok ? <p className="text-sm">{retryState.ok}</p> : null}
+          </form>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           {notice.documentId ? (

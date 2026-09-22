@@ -336,6 +336,15 @@ export default async function PotentialChangeDetailPage({
         deliveryFailureReason: noticeRecord.notification?.failureReason ?? null,
         canDraft: mayDraftNotice,
         canAcknowledge: mayAcknowledgeNotice,
+        assessment: change.noticeStatus,
+        deadline: change.noticeDueDate ? formatDate(change.noticeDueDate) : null,
+        // Stated so the person sending it knows how it travels. Not a choice
+        // on this screen: it is the project's contractual delivery method.
+        deliveryMethod: change.project.contractRules?.noticeDeliveryMethod ?? 'Email',
+        attachments: change.documents.map((document) => ({
+          id: document.id,
+          name: document.documentName,
+        })),
       }
     : null;
 

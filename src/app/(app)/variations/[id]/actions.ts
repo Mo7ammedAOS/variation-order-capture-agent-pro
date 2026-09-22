@@ -43,8 +43,11 @@ import {
   acknowledgementSchema,
   fileNoticeDocument,
   noticeDraftSchema,
+  retryNoticeDelivery,
+  sendNotice,
   updateNoticeDraft,
 } from '@/services/notice-document.service';
+import { dispatchNow } from '@/services/notification.service';
 
 export interface AssessmentState {
   error?: string;
@@ -417,6 +420,75 @@ export async function deleteChangeAction(
 export interface NoticeState {
   error?: string;
   ok?: string;
+}
+
+/**
+ * Sending the initial notice. The button that actually serves it.
+ *
+ * Choosing "yes" on the review screen drafted this. Nothing left the building
+ * then, and nothing leaves it now until somebody presses this having read the
+ * page in front of them.
+ *
+ * The filing and the push both happen after the transaction has committed, and
+ * both are tolerant: the notice IS issued and the message IS queued the moment
+ * this returns. A Drive outage or a slow n8n must delay the paperwork, never
+ * undo a decision a person has made.
+ */
+export async function sendNoticeAction(
+  _prev: NoticeState,
+  formData: FormData,
+): Promise<NoticeState> {
+  const user = await requirePageUser();
+  const noticeId = String(formData.get('noticeId') ?? '');
+  const potentialChangeId = String(formData.get('potentialChangeId') ?? '');
+
+  let sent: { id: string } | null = null;
+  try {
+    sent = await sendNotice(user, noticeId);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  try {
+    await fileNoticeDocument(sent.id);
+  } catch {
+    // Swallowed on purpose. The sweep raises `notice_sent_no_proof` until the
+    // PDF lands, which is a louder and more honest report than this button.
+  }
+  await dispatchNow(`notice:${sent.id}`);
+
+  revalidatePath(`/variations/${potentialChangeId}`);
+  revalidatePath('/dashboard');
+  return { ok: 'The notice has gone. It reads as delivered only when the courier confirms it.' };
+}
+
+/**
+ * Trying again after a failed delivery.
+ *
+ * The notice is untouched — it was issued, its words are frozen, and what
+ * failed was the carrying of it. Pricing is unaffected and carries on.
+ */
+export async function retryNoticeAction(
+  _prev: NoticeState,
+  formData: FormData,
+): Promise<NoticeState> {
+  const user = await requirePageUser();
+  const noticeId = String(formData.get('noticeId') ?? '');
+  const potentialChangeId = String(formData.get('potentialChangeId') ?? '');
+
+  try {
+    await retryNoticeDelivery(user, noticeId);
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  await dispatchNow(`notice:${noticeId}`);
+
+  revalidatePath(`/variations/${potentialChangeId}`);
+  revalidatePath('/dashboard');
+  return { ok: 'Queued again. Watch for the courier to confirm it.' };
 }
 
 /**
