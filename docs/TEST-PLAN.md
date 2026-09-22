@@ -53,7 +53,7 @@ so every sweep honestly says "nothing to do". Two levers instead of waiting:
 | `JOB` | What it does |
 |---|---|
 | `reminder_sweep` | Chases whoever owes a decision; escalates what is late |
-| `bottleneck_sweep` | Finds what is stuck, puts it on **Held Up** |
+| `bottleneck_sweep` | Finds what is stuck, puts it on **Blocked** |
 | `client_followup` | Chases the client on a submitted variation |
 | `notification_dispatch` | Pushes anything pending, files unfiled notices |
 
@@ -236,7 +236,7 @@ Post a delivery callback with `status: failed`.
 - [ ] The notice says **Delivery failed**, in red
 - [ ] A **Retry delivery** button appears
 - [ ] The QS pricing task is untouched and pricing carries on
-- [ ] The dashboard tile **Notice delivery failed** counts it
+- [ ] The dashboard action queue has a **red** row reading **Retry delivery**
 - [ ] Retry queues a new message; the notice is not re-issued
 
 ---
@@ -315,7 +315,7 @@ Lane M, one row at a time. Read the answer on `M4`.
 | `reminder_sweep` | *(empty)* | Almost nothing |
 | `reminder_sweep` | day before the notice deadline | The owner is chased |
 | `reminder_sweep` | a week after it | It escalates **above** them |
-| `bottleneck_sweep` | a week after it | On **Held Up**, with value at risk |
+| `bottleneck_sweep` | a week after it | On **Blocked**, with value at risk |
 
 ### Pass when
 - [ ] It chases the person who owes the decision, not everybody
@@ -382,6 +382,53 @@ register and the three documents.
 - [ ] Removing Hassan is reversible: re-adding restores the same role, and
       Activity shows both events
 - [ ] Deleting the last administrator is refused, with a reason
+
+---
+
+# Stage 19 · The dashboard
+
+**Goal** — a PM opens it and knows which change to handle first, without
+reading a chart.
+
+Do this last, when the projects above have produced real rows.
+
+### Do
+
+Open **Overview** as Abdelmoneim (PM), then as Osman (QS), then as Ahmed
+(engineer), then as Aryia (admin).
+
+### Pass when
+
+- [ ] **Four** KPI cards at most, never more
+- [ ] **Needs Action Today** is a table, not a wall of cards
+- [ ] Every row names the **next action** in words — "Send initial notice",
+      "Submit pricing", "Approve final VO" — not a status
+- [ ] Every row shows priority, reference, project, owner, value and the date
+- [ ] Clicking a row opens that change. A notice row lands **on the notice**,
+      not at the top of the page
+- [ ] The filters **All · Mine · Notices · QS pricing · PM approval · Client ·
+      Red only** each change the list, and the URL
+- [ ] Sorting by **Highest value** puts the big one first even if it is green
+- [ ] Sorting by **Nearest deadline** puts rows with no deadline **last**
+- [ ] The workflow pipeline shows six stages with count, value and the oldest
+      wait, and each one opens a filtered register
+- [ ] The project table is sorted with the **most unapproved work at the top**
+
+### As each person
+
+- [ ] **Ahmed (engineer)**: no money cards at all, no project table, and
+      `/reports` refuses him — a 403, not a blank page
+- [ ] **Osman (QS)**: pricing rows, no notice rows
+- [ ] **Abdelmoneim (PM)**: every notice state, pricing, approvals, client
+- [ ] **Aryia (admin)**: all four cards and the project table
+
+### The two that matter most
+
+- [ ] Start work on a change before it is approved → a **red** card *Work
+      started without approval* with the value, and a red row saying
+      **Approve it or stop the work**
+- [ ] Make a notice delivery fail → a **red** row saying **Retry delivery**,
+      and pricing carries on beside it
 
 ---
 

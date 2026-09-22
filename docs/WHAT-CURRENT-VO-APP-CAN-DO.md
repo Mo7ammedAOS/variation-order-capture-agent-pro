@@ -165,14 +165,19 @@ callback. An in-app screen with an unread count.
 ## Screens
 
 `/dashboard` · `/my-tasks` · `/projects` (8 tabs each) · `/variations` ·
-`/report-change` · `/bottlenecks` · `/notifications` · `/settings/*` ·
+`/report-change` · `/reports` · `/bottlenecks` · `/notifications` · `/settings/*` ·
 `/signin` · `/admin-signin`
 
-The dashboard opens with a money funnel (agreed → invoiced → received) and two
-gauges, then **26 cards ordered by urgency, not total** — overdue notices first
-— in four sections: Needs attention now, The money, Retention and time,
-Breakdowns. Four of the cards are the notice's own track, and they are the only
-place a stalled notice surfaces now that pricing no longer waits for it.
+The dashboard is **four figures and one action table**. Pending change value,
+approved-not-invoiced, work started without approval, overdue client
+decisions — then every urgent thing across the workflow as one row each,
+carrying the **next action**, the owner, the money and the date. Then a
+six-stage pipeline and a project-by-project table sorted by unapproved work.
+
+It **adapts to the reader**, by capability rather than job title: a site
+engineer gets no money cards and only his own changes. Everything else —
+retention, invoicing, payment, days conceded, the funnel, the gauges and the
+four charts — is on **Commercial Reports**, computed by the same services.
 
 The register has 15 columns, filters that live **in the URL** so a filtered view
 is a link you can send, and cards on a phone. The project report is ordered by **notice deadline, not PC number**:

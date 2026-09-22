@@ -174,7 +174,8 @@ the day when the detail has gone.
 | Route | Purpose |
 |---|---|
 | `/signin`, `/admin-signin` | Email + password, company branding, on the same photographic ground as the rest of the app — signing in should feel like opening a door, not crossing between two pieces of software. One error message for both failure modes. `/login` redirects to `/signin`. The theme toggle **is** here, above the card: this is the screen people see in the worst lighting they ever use the product in — a phone in direct sun on site, a laptop in a dark portacabin at six in the morning — and making somebody sign in first, at whatever brightness their OS chose, before they may turn the lights down is a small daily cruelty. It stores against the device rather than the account, which is right: the device is the thing with a screen |
-| `/dashboard` | A hero stating the position in words, then three **readings**, then 17 stat cards **ordered by urgency**, then 4 charts |
+| `/dashboard` | One sentence stating the position, then **four** KPI cards, **one action table**, a six-stage pipeline and a project table. Adapts to the reader: a site engineer gets no money cards at all |
+| `/reports` | Commercial Reports. Retention, invoicing, payment, days claimed and conceded, the money funnel, the two gauges and the four charts — everything that was on `/dashboard` until 23 Sep 2026 |
 | `/my-tasks` | Overdue → due today → upcoming |
 | `/projects` | A responsive **card grid** — 3 columns wide, 2 on a tablet, 1 on a phone. It replaced a ten-column table plus a separate cut-down phone list: two implementations to keep in step, one of which always showed less. Nobody scans a project list down a column — you do not ask "who is the QS on all my jobs", you ask "what is the state of DXB-001" — so the table shape was answering a question nobody had. The cards are `blur={false}` — grid items are flat, surfaces and chrome are glass |
 | `/projects/[id]` | 8 tabs as links, so a tab is shareable and Back works |
@@ -182,14 +183,27 @@ the day when the detail has gone.
 | `/variations` | The register. 15 columns, 4 filters, card view on phone |
 | `/variations/[id]` | Owner / next action / deadline / waiting **first** |
 | `/report-change` | Mobile-first capture, required fields only, rest behind a disclosure |
-| `/bottlenecks` | What is blocked, who by, how long, value at risk |
+| `/bottlenecks` | **Blocked changes.** What is blocked, who owns the next action, how long it has waited, the value, and what to do |
 | `/settings/users` | Invite, set company role, deactivate |
 
 ## Decisions
 
-**Urgency ordering on the dashboard.** Overdue notices, then due-in-7-days, then
-overdue tasks, then critical bottlenecks — before the totals. Someone scanning
-for ten seconds should land on what is already wrong.
+**One action table, not sixteen cards.** The dashboard carried 26 cards, 2
+gauges, a funnel and 4 charts. Every figure was true and the screen still
+failed: 26 numbers of equal size ask the reader to work out which matter, which
+is the job the dashboard existed to do. A card saying "Notices overdue: 4" is a
+count, and a count is not an instruction.
+
+So four figures are promoted, everything urgent becomes a row with a named
+**next action** and an owner, and the reading material moves to `/reports`.
+
+**The test for putting anything on `/dashboard`:** would a person DO something
+differently today on seeing it? Retention held is true, useful, and on the
+reports page, because nobody has ever changed their morning because of it.
+
+**The dashboard adapts by capability, never by job title** — the same rule the
+work routing follows. A contract administrator granted the notice right is
+doing the PM's job and gets the PM's screen.
 
 **The page-title scale is a class, `.page-title`, not a pasted value.** It was
 an arbitrary `text-[1.6rem] font-extrabold leading-tight tracking-[-0.035em]`
@@ -523,8 +537,10 @@ opacity forever, which is worse than the animation.
 
 ## The readings
 
-`src/components/domain/readings.tsx`. Instruments on the dashboard, above the
-grid of counts, answering the three questions the company is run on.
+`src/components/domain/readings.tsx`. They live on **`/reports`** since 23 Sep
+2026, not on the dashboard: each answers a question about the shape of the
+business, which is a different activity from clearing a queue, and mixing the
+two made the queue unreadable.
 
 | Reading | Shows | Source |
 |---|---|---|
@@ -554,7 +570,7 @@ From the interaction brief, with reasons rather than silence:
 | Asked for | Why not, yet |
 |---|---|
 | Virtualised tables | The register is 20 rows and a busy project might reach a few hundred. Virtualisation at that scale costs Cmd+F, printing and text selection to solve a problem nobody has. Revisit past ~1,000 rows, which is a real threshold rather than a feeling |
-| Drag-and-drop dashboards | Real cost, and it is nine cards. Per-user layout state, persistence and a migration path, so one director can move a card. Worth revisiting when there are several directors who disagree about the order |
+| Drag-and-drop dashboards | Real cost, and it is four cards. Per-user layout state, persistence and a migration path, so one director can move a card. Worth revisiting when there are several directors who disagree about the order |
 | Voice-to-action capture | Transcription exists now (ElevenLabs, `src/integrations/transcription/`) but it is wired to the CAPTURE lanes, not to a button in the browser. A microphone in the web form is a different problem — recording permission, a stream, an upload, and a person watching the page while they talk — and the people who send voice notes are on WhatsApp with a glove on one hand. It stays out until somebody asks for it from a desk |
 | AI copilot panel | Same reason. A panel that surfaces "insights" from a fixture is a panel that lies confidently, which is the failure mode this product is least able to afford |
 | Inline editing for high-volume entry | There is no data-entry persona here yet. Invoices, payments and variation orders are explicitly out of Phase 1, so the accountant this pattern serves has nothing to type into |

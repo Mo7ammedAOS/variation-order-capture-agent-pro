@@ -1,18 +1,43 @@
 # Implementation Status
 
-**Live at https://vo.osmanflow.com.** Last updated 22 September 2026, build
-`d1ece7e`.
+**Live at https://vo.osmanflow.com.** Last updated 23 September 2026, build
+`4b68c76`.
 
 ## Gates
 
 ```text
 npm run lint        PASS
 npm run typecheck   PASS
-npm test            PASS — 685 unit tests, 48 files
+npm test            PASS — 733 unit tests, 48 files
 npm run build       PASS
 migrations          35 applied, including 20260922100000_pm_notice_decision
 deployment          LIVE — valid certificate, HSTS, project scoping verified
 ```
+
+## What changed on 23 September 2026 — the dashboard
+
+Twenty-six cards, two gauges, a funnel and four charts became **four figures
+and one action table**. Every figure was true and the screen still failed:
+twenty-six numbers of equal size ask the reader to decide which matter, which
+is the job the dashboard existed to do.
+
+- Four KPI cards: pending change value, approved-not-invoiced, work started
+  without approval, overdue client decisions. Each with a count under the money.
+- One **Needs Action Today** table in place of sixteen attention cards. Every
+  row carries the next action, the owner, the value and the date. Filters and
+  sort live in the URL.
+- A six-stage customer-facing pipeline, and a project table sorted by
+  unapproved work first.
+- Everything removed is on **`/reports`** (Commercial Reports), computed by the
+  same services. Nothing was recalculated, so the two screens cannot disagree.
+- The dashboard **adapts by capability, never by job title**. A site engineer
+  gets no money cards, and `/reports` refuses him on the server.
+- "Badly held up" and "Held Up" both became **Blocked changes**, with a Next
+  action column.
+
+Metric definitions are centralised and pure in `src/lib/dashboard-metrics.ts`,
+proved by 48 tests with no database. `getOverview` is untouched, so
+`/api/dashboard/overview` answers exactly as before.
 
 ## What changed on 22 September 2026
 

@@ -4,13 +4,24 @@ For the **project manager**, the **quantity surveyor** and the
 **administrator**. Plain language, nothing you do not need.
 
 Sign in at **vo.osmanflow.com**. Your menu: **Overview · My Tasks · Variations ·
-Held Up**, plus **Projects, Company, Users, Permissions** if you are an admin.
+Blocked**, plus **Reports** for commercial people and **Projects, Company,
+Users, Permissions** for admins.
 
-**Start every day on My Tasks.** Overdue is at the top.
+**Start every day on Overview.** The top of it is a list called *Needs Action
+Today*: one row per thing, each saying what to do, who owes it, how much money
+is behind it and when it is due. Red rows first. That list is the whole job.
 
 ---
 
-## The seven words on every change
+## The Overview, and the seven words on every change
+
+The top of **Overview** is **Needs Action Today**: one row per thing that needs
+doing, each saying what to do, who owes it, the money and the date. Red first.
+Filter it to **Mine** and that is your day.
+
+Above it are at most four figures. Below it, the workflow and a line per
+project. Anything to do with retention, invoicing or payment is on **Reports**.
+
 
 ```
 New change → PM review → QS pricing → PM approval → Sent to client → Client decision → Closed
@@ -25,8 +36,8 @@ pricing.
 
 ### 1. Decide the notice
 
-A change lands on **My Tasks**. Open it. The **Review change** card holds
-everything in one place: what changed, the engineer's own words, the date,
+A change appears on **Overview** as a row saying **Decide if a notice is
+needed**. Click it. The **Review change** card holds everything in one place: what changed, the engineer's own words, the date,
 whether work has started, the evidence, and the **days remaining** on the
 notice.
 
@@ -80,7 +91,8 @@ you approved anyway is recorded.
 
 ### 1. Price it
 
-**My Tasks** → a **QS pricing** task → open the change → the **pricing panel**.
+**Overview** → a row saying **Submit pricing** → the **pricing panel** on the
+change. Filter the list to **QS pricing** to see only yours.
 
 Add a line at a time: description, quantity, unit, rate, and **where the rate
 came from** (contract BOQ, pro rata, star rate, quotation, daywork). Then the
@@ -156,6 +168,6 @@ automatically at the project's own percentage.
 | A project is missing | You are not on its team. An admin adds you |
 | No button where this guide says | You do not have that permission |
 | **Delivery failed** on a notice | Press **Retry delivery**. Pricing is unaffected |
-| Something feels stuck | **Held Up** lists it, who owns it, and the money behind it |
+| Something feels stuck | **Blocked** lists it, who owns the next action, how long it has waited, the money, and what to do |
 | A WhatsApp photo did not arrive | Known gap. Use the web form or email for photos |
 | An Arabic PDF | Not yet. Documents print in English |
