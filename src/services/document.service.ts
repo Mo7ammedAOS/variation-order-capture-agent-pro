@@ -11,6 +11,7 @@ import {
   PC_FOLDER_TREE,
   NOTICE_PARENT_FOLDER,
   PC_PARENT_FOLDER,
+  VO_PARENT_FOLDER,
   PROJECT_FOLDER_TREE,
 } from '@/integrations/storage';
 import { getEnv } from '@/lib/env';
@@ -241,6 +242,56 @@ export async function storeNoticeDocument(input: {
       sizeBytes: stored.sizeBytes,
       uploadedByUserId: input.uploadedByUserId,
       // The app produced this file, not a person and not an inbox.
+      sourceChannel: 'other',
+    },
+  });
+}
+
+/**
+ * Files the client-ready variation order in `09 Variation Orders`.
+ *
+ * Separate from the notice folder on purpose. The two documents answer
+ * different questions and get read by different people at different times: a
+ * notice is evidence that something was said in time, a variation order is the
+ * priced position being put. Mixing them makes the bundle you hand a QS
+ * something you have to sort first.
+ *
+ * Unlike a notice, this one IS re-rendered as the position changes, right up
+ * until submission. What is filed here is the copy that actually went out.
+ */
+export async function storeVariationOrderDocument(input: {
+  projectId: string;
+  potentialChangeId: string;
+  reference: string;
+  content: Buffer;
+  uploadedByUserId: string | null;
+}) {
+  const storage = getStorageProvider();
+  const projectFolderId = await ensureProjectFolders(input.projectId);
+  const voFolderId = await storage.ensureFolder(VO_PARENT_FOLDER, projectFolderId);
+
+  const fileName = `${input.reference}.pdf`;
+  const stored = await storage.upload({
+    folderId: voFolderId,
+    name: fileName,
+    mimeType: 'application/pdf',
+    content: input.content,
+  });
+
+  return prisma.projectDocument.create({
+    data: {
+      projectId: input.projectId,
+      potentialChangeId: input.potentialChangeId,
+      documentType: 'variation_proposal',
+      documentName: fileName,
+      documentNumber: input.reference,
+      issueDate: new Date(),
+      driveFileId: stored.fileId,
+      storagePath: stored.storagePath,
+      sourceUrl: stored.sourceUrl,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      uploadedByUserId: input.uploadedByUserId,
       sourceChannel: 'other',
     },
   });

@@ -30,8 +30,10 @@ import { Badge } from '@/components/ui/badge';
 import { RiskChip, StatusChip } from '@/components/domain/risk-chip';
 import { NoticeCountdown } from '@/components/domain/notice-countdown';
 import { calculateNoticeCountdown } from '@/lib/risk';
+import { noticeDisplayStatus, noticeNeedsWarning } from '@/lib/notice-status';
 import { Money } from '@/components/domain/money';
 import { ReviewPanel, type ReviewFacts } from './review-panel';
+import { ApprovalFact } from './approval-facts';
 import { ApprovalPanel } from './approval-panel';
 import { NoticePanel, type NoticeView } from './notice-panel';
 import { ConfirmationPanel } from './confirmation-panel';
@@ -422,6 +424,27 @@ export default async function PotentialChangeDetailPage({
   const amberThreshold = 7;
 
   /*
+    What the approver is told about the notice, and when it is shouted.
+
+    Not a block: an approver told "you cannot proceed" while a client waits
+    will proceed anyway, somewhere this system cannot see. The warning is loud,
+    the reason is named, the button stays, and pressing it is on the record.
+  */
+  const noticeReading = noticeDisplayStatus({
+    assessment: change.noticeStatus,
+    notice: noticeRecord
+      ? { status: noticeRecord.status, acknowledgedAt: noticeRecord.acknowledgedAt }
+      : null,
+    delivery: noticeRecord?.notification?.status ?? null,
+  });
+  const noticeWarning = noticeNeedsWarning({
+    noticeRequired: change.noticeRequired,
+    state: noticeReading.state,
+  })
+    ? `Initial notice is required but delivery has not been confirmed. It reads as "${noticeReading.label}".`
+    : null;
+
+  /*
     The project manager's review, assembled once.
 
     Every value here is already loaded for the page; none of it is re-fetched.
@@ -709,6 +732,83 @@ export default async function PotentialChangeDetailPage({
               gateLabel={GATE_LABEL[activeGate]}
               round={gateState.round}
               seats={gateSeats}
+              isFinal={activeGate === 'final_variation'}
+              noticeWarning={noticeWarning}
+              summary={
+                activeGate === 'final_variation' ? (
+                  <div className="flex flex-col gap-4">
+                    <dl className="grid gap-x-4 gap-y-2 rounded-xl bg-secondary/50 p-4 text-sm sm:grid-cols-2">
+                      <ApprovalFact label="Reference" value={change.pcNumber} />
+                      <ApprovalFact
+                        label="Project"
+                        value={`${change.project.projectCode} · ${change.project.projectName}`}
+                      />
+                      <ApprovalFact label="Location" value={change.location ?? '—'} />
+                      <ApprovalFact label="Instruction date" value={formatDate(change.eventDate)} />
+                      <ApprovalFact
+                        label="Instruction source"
+                        value={change.instructionRoute ? humanise(change.instructionRoute) : '—'}
+                      />
+                      <ApprovalFact label="Work started" value={humanise(change.workStatus)} />
+                      <ApprovalFact
+                        label="Original scope"
+                        value={change.scopeOriginal ?? 'Not recorded'}
+                        wide
+                      />
+                      <ApprovalFact
+                        label="Changed scope"
+                        value={change.scopeRevised ?? 'Not recorded'}
+                        wide
+                      />
+                    </dl>
+
+                    <dl className="grid gap-x-4 gap-y-2 rounded-xl bg-secondary/50 p-4 text-sm sm:grid-cols-2">
+                      <ApprovalFact label="Initial notice" value={noticeReading.label} />
+                      <ApprovalFact
+                        label="Notice reference"
+                        value={notice?.reference ?? 'None raised'}
+                      />
+                      <ApprovalFact
+                        label="Client recipient"
+                        value={notice?.recipientEmail ?? 'Not set'}
+                      />
+                      <ApprovalFact
+                        label="Acknowledged"
+                        value={notice?.acknowledgedAt ?? 'Not yet'}
+                      />
+                      {pricing ? (
+                        <>
+                          <ApprovalFact
+                            label="Submitted value"
+                            value={`${change.project.currency ?? 'AED'} ${pricing.totals.total}`}
+                          />
+                          <ApprovalFact
+                            label="Time impact"
+                            value={
+                              change.timeImpactDays
+                                ? `${change.timeImpactDays} days`
+                                : 'None claimed'
+                            }
+                          />
+                        </>
+                      ) : null}
+                      <ApprovalFact
+                        label="Evidence"
+                        value={
+                          change.documents.length === 0
+                            ? 'Nothing attached'
+                            : `${change.documents.length} file${change.documents.length === 1 ? '' : 's'}`
+                        }
+                      />
+                    </dl>
+
+                    <p className="text-sm text-muted-foreground">
+                      The full build-up is below. Approving sends the priced variation to the
+                      client and starts their response period.
+                    </p>
+                  </div>
+                ) : undefined
+              }
             />
           ) : null}
 

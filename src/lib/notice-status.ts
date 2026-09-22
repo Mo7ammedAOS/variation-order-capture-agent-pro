@@ -96,3 +96,22 @@ export function noticeDisplayStatus(input: {
 
   return { state: 'draft', label: label('draft'), tone: 'amber', detail: null };
 }
+
+/**
+ * Whether a required notice is confirmed enough to approve the variation
+ * quietly, or whether the approver has to be told first.
+ *
+ * "Delivered" is the bar, not "sent". A variation approved and issued on the
+ * back of a notice that never arrived is the exact shape of a claim that fails
+ * on procedure a year later, and the person pressing approve is the only one
+ * who can weigh that against a client waiting.
+ *
+ * This decides the WARNING, never a block. See the approval panel for why.
+ */
+export function noticeNeedsWarning(input: {
+  noticeRequired: boolean;
+  state: NoticeDisplayState;
+}): boolean {
+  if (!input.noticeRequired) return false;
+  return !['delivered', 'acknowledgement_pending', 'acknowledged'].includes(input.state);
+}

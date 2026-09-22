@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NotFoundError, ValidationError } from '@/lib/errors';
+import { buildVariationOrderPdf } from '@/services/vo-document.service';
+import { storeVariationOrderDocument } from '@/services/document.service';
 import { todayUtc } from '@/lib/dates';
 import { formatVoNumber } from '@/lib/pc-number';
 import { subtractDecimals } from '@/lib/money';
@@ -113,7 +115,7 @@ export async function raiseVariationOrder(user: AuthenticatedUser, potentialChan
 
   if (change.currentStatus !== 'variation_approved') {
     throw new ValidationError(
-      'Only a change both seats have approved can go to the client as a variation order.',
+      'Only an approved change can go to the client as a variation order.',
     );
   }
 
@@ -429,4 +431,98 @@ function assertNotFuture(date: Date, message: string) {
   const endOfToday = new Date(todayUtc());
   endOfToday.setUTCDate(endOfToday.getUTCDate() + 1);
   if (date.getTime() >= endOfToday.getTime()) throw new ValidationError(message);
+}
+
+/* ─── Approving and sending, in one act ──────────────────────────────────── */
+
+/**
+ * What happens when the project manager approves the priced variation.
+ *
+ * Raises the VO if it does not exist, renders the client-ready PDF, files a
+ * copy in `09 Variation Orders`, queues it to the client recipient, and records
+ * the submission — which is what starts the client's own response period and
+ * puts the variation in front of the follow-up sweep.
+ *
+ * ── Deliberately outside the approval transaction ─────────────────────────
+ * A PDF render, a Drive upload and an HTTP hop have no business inside a five
+ * second Prisma transaction: a nine second Drive call already destroyed a
+ * folder tree once on this project. The approval is committed before this
+ * runs, so a Drive outage delays the paperwork and never undoes a decision a
+ * person has made.
+ *
+ * ── Idempotent, because the retry is the recovery ─────────────────────────
+ * Raising returns the existing VO, filing is a fresh copy of the same words,
+ * and a second submission is refused outright. Calling this twice cannot
+ * double-submit.
+ *
+ * ── No separate follow-up task is created ─────────────────────────────────
+ * `recordSubmission` sets `clientResponse: 'awaiting'`, and the client
+ * follow-up sweep selects on exactly that. A task as well would chase the
+ * client twice from two mechanisms, and the one thing a chasing letter may
+ * never do is arrive twice.
+ */
+export async function finaliseVariation(
+  user: AuthenticatedUser,
+  potentialChangeId: string,
+): Promise<{ voNumber: string; sentTo: string | null; filed: boolean }> {
+  const vo = await raiseVariationOrder(user, potentialChangeId);
+
+  const change = await prisma.potentialChange.findUnique({
+    where: { id: potentialChangeId },
+    select: {
+      id: true,
+      projectId: true,
+      pcNumber: true,
+      title: true,
+      project: { select: { projectCode: true, contractRules: true } },
+    },
+  });
+  if (!change) throw new NotFoundError('Potential Change not found');
+
+  const recipient = change.project.contractRules?.noticeRecipientEmail ?? null;
+
+  let filed = false;
+  try {
+    const { pdf } = await buildVariationOrderPdf(user, potentialChangeId);
+    await storeVariationOrderDocument({
+      projectId: change.projectId,
+      potentialChangeId,
+      reference: vo.voNumber,
+      content: pdf,
+      uploadedByUserId: user.id,
+    });
+    filed = true;
+  } catch {
+    // Swallowed on purpose, and reported by the bottleneck sweep rather than
+    // by this button. The variation IS approved; what failed is a copy of it
+    // reaching a folder.
+  }
+
+  if (recipient) {
+    await prisma.notificationLog.create({
+      data: {
+        potentialChangeId,
+        // No `userId`: the addressee is the client, not one of our people. It
+        // must never appear in a staff member's bell as though it were a task.
+        kind: 'client_followup',
+        channel: 'email',
+        recipient,
+        subject: `${vo.voNumber} — variation order for ${change.project.projectCode}`,
+        body:
+          `${change.title}\n\n` +
+          `Our variation order ${vo.voNumber} is attached, covering potential change ` +
+          `${change.pcNumber}. Please confirm your instruction.`,
+        payloadSummary: vo.voNumber,
+        status: 'pending',
+        dedupeKey: `vo:${vo.id}:submitted:email:${recipient}`,
+      },
+    });
+  }
+
+  await recordSubmission(user, {
+    variationOrderId: vo.id,
+    submittedOn: todayUtc(),
+  });
+
+  return { voNumber: vo.voNumber, sentTo: recipient, filed };
 }

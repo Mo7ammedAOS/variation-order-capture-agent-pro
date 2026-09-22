@@ -38,6 +38,7 @@ import {
   recordConfirmationReceived,
 } from '@/services/verbal-confirmation.service';
 import { approvalDecisionSchema, recordApprovalDecision } from '@/services/approval.service';
+import { finaliseVariation } from '@/services/variation-order.service';
 import {
   acknowledgeNotice,
   acknowledgementSchema,
@@ -179,8 +180,8 @@ export async function decideApprovalAction(
         // Deliberately after the transaction, and deliberately tolerant. The
         // notice IS issued and the message IS queued — both are committed. All
         // this does is put a PDF copy in the project folder, and a Drive
-        // outage must not undo a decision two directors have made. If it
-        // fails, the dispatch job retries it and the bottleneck sweep raises
+        // outage must not undo a decision somebody has made. If it fails, the
+        // dispatch job retries it and the bottleneck sweep raises
         // `notice_sent_no_proof` until it lands.
         try {
           await fileNoticeDocument(result.noticeToFileId);
@@ -188,14 +189,25 @@ export async function decideApprovalAction(
           // Swallowed on purpose. Reported by the sweep, not by this button.
         }
       }
-      return {
-        ok:
-          result.gate === 'notice_issue'
-            ? 'Both approvals are in. The notice is issued and queued to the client.'
-            : 'Both approvals are in. The variation is approved.',
-      };
+
+      if (result.gate === 'final_variation') {
+        // Approving IS sending. The project manager pressed one button and the
+        // client has the priced variation: raised, rendered, filed, queued,
+        // submitted. Splitting it into "approve" and then "remember to send"
+        // is how an approved variation sits in a folder for three weeks.
+        const sent = await finaliseVariation(user, String(formData.get('potentialChangeId') ?? ''));
+        revalidatePath('/variations');
+        revalidatePath('/dashboard');
+        return {
+          ok: sent.sentTo
+            ? `Approved. ${sent.voNumber} has gone to ${sent.sentTo}.`
+            : `Approved and raised as ${sent.voNumber}. No client recipient is set on this project, so nothing was sent — add one in the contract rules.`,
+        };
+      }
+
+      return { ok: 'The notice is issued and queued to the client.' };
     }
-    return { ok: 'Your approval is recorded. The other seat is still to decide.' };
+    return { ok: 'Your approval is recorded. Another seat is still to decide.' };
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

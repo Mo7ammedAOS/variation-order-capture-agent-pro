@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noticeDisplayStatus } from '@/lib/notice-status';
+import { noticeDisplayStatus, noticeNeedsWarning } from '@/lib/notice-status';
 
 /**
  * One sentence, defended seven ways: the app may not say a notice was
@@ -83,5 +83,29 @@ describe('where the notice actually is', () => {
     });
     expect(result.label).toBe('Draft');
     expect(result.detail).toBe('Redrafting');
+  });
+});
+
+describe('what the approver is told before they commit the money', () => {
+  it('says nothing when no notice was ever required', () => {
+    expect(noticeNeedsWarning({ noticeRequired: false, state: 'not_applicable' })).toBe(false);
+    // Even in a state that would otherwise shout.
+    expect(noticeNeedsWarning({ noticeRequired: false, state: 'delivery_failed' })).toBe(false);
+  });
+
+  it('warns on anything short of the courier confirming it', () => {
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'draft' })).toBe(true);
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'pending_delivery' })).toBe(true);
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'delivery_failed' })).toBe(true);
+  });
+
+  it('goes quiet once it is delivered, acknowledged or waiting to be', () => {
+    // Delivered is the bar, not sent. A variation approved on the back of a
+    // notice that never arrived is a claim that fails on procedure later.
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'delivered' })).toBe(false);
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'acknowledgement_pending' })).toBe(
+      false,
+    );
+    expect(noticeNeedsWarning({ noticeRequired: true, state: 'acknowledged' })).toBe(false);
   });
 });

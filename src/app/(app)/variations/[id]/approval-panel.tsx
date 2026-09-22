@@ -2,7 +2,15 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AlertCircle, Check, CheckCircle2, Clock, ThumbsDown, X } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Clock,
+  ThumbsDown,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label, Textarea } from '@/components/ui/input';
@@ -61,7 +69,15 @@ function SubmitButton({
   );
 }
 
-function SeatRow({ seat, potentialChangeId }: { seat: SeatView; potentialChangeId: string }) {
+function SeatRow({
+  seat,
+  potentialChangeId,
+  isFinal,
+}: {
+  seat: SeatView;
+  potentialChangeId: string;
+  isFinal: boolean;
+}) {
   const [state, formAction] = useActionState<ApprovalState, FormData>(decideApprovalAction, {});
   const [rejecting, setRejecting] = useState(false);
 
@@ -106,7 +122,9 @@ function SeatRow({ seat, potentialChangeId }: { seat: SeatView; potentialChangeI
 
           {rejecting ? (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`comment-${seat.id}`}>Why are you rejecting it?</Label>
+              <Label htmlFor={`comment-${seat.id}`}>
+                {isFinal ? 'What does the QS need to change?' : 'Why are you rejecting it?'}
+              </Label>
               <Textarea
                 id={`comment-${seat.id}`}
                 name="comment"
@@ -120,7 +138,10 @@ function SeatRow({ seat, potentialChangeId }: { seat: SeatView; potentialChangeI
           <div className="flex flex-wrap items-center gap-2">
             {rejecting ? (
               <>
-                <SubmitButton decision="rejected" label="Confirm rejection" />
+                <SubmitButton
+                  decision="rejected"
+                  label={isFinal ? 'Return it to the QS' : 'Confirm rejection'}
+                />
                 <button
                   type="button"
                   onClick={() => setRejecting(false)}
@@ -131,13 +152,16 @@ function SeatRow({ seat, potentialChangeId }: { seat: SeatView; potentialChangeI
               </>
             ) : (
               <>
-                <SubmitButton decision="approved" label="Approve" />
+                <SubmitButton
+                  decision="approved"
+                  label={isFinal ? 'Approve and send final VO to client' : 'Approve'}
+                />
                 <button
                   type="button"
                   onClick={() => setRejecting(true)}
                   className="text-sm text-risk-red underline-offset-4 hover:underline"
                 >
-                  Reject instead
+                  {isFinal ? 'Return to QS instead' : 'Reject instead'}
                 </button>
               </>
             )}
@@ -166,11 +190,20 @@ export function ApprovalPanel({
   gateLabel,
   round,
   seats,
+  isFinal = false,
+  summary,
+  noticeWarning,
 }: {
   potentialChangeId: string;
   gateLabel: string;
   round: number;
   seats: SeatView[];
+  /** The money gate. Approving it sends the variation to the client. */
+  isFinal?: boolean;
+  /** Everything the approver needs, on this screen rather than up the page. */
+  summary?: React.ReactNode;
+  /** Shown in red when a required notice has not been confirmed delivered. */
+  noticeWarning?: string | null;
 }) {
   const done = seats.every((seat) => seat.decision === 'approved');
 
@@ -179,13 +212,44 @@ export function ApprovalPanel({
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{gateLabel}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Both are required. {round > 1 ? `Round ${round}, after an earlier rejection.` : null}
+          {seats.length > 1
+            ? 'Every seat is required. '
+            : isFinal
+              ? 'Approving this sends the priced variation to the client. '
+              : ''}
+          {round > 1 ? `Round ${round}, after an earlier rejection.` : null}
         </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
+        {summary}
+
+        {noticeWarning ? (
+          /*
+            Not a block. A stated fact with the decision left where it belongs.
+
+            An approver who is told "you cannot proceed" when the client is
+            waiting will proceed anyway, somewhere this system cannot see. So
+            the warning is loud, the reason is named, and the button is still
+            there — and the fact that it was pressed while the notice was
+            unconfirmed is on the record either way.
+          */
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-xl bg-risk-red-bg p-4 text-sm font-medium text-risk-red"
+          >
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
+            {noticeWarning}
+          </p>
+        ) : null}
+
         <ul className="flex flex-col gap-2.5">
           {seats.map((seat) => (
-            <SeatRow key={seat.id} seat={seat} potentialChangeId={potentialChangeId} />
+            <SeatRow
+              key={seat.id}
+              seat={seat}
+              potentialChangeId={potentialChangeId}
+              isFinal={isFinal}
+            />
           ))}
         </ul>
       </CardContent>
