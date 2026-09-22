@@ -64,6 +64,13 @@ export const NAV_LINKS: NavLink[] = [
   // project, somebody naming a job they are not assigned to, and a question
   // that went unanswered. Each one is a variation report that exists in the
   // database and that nobody will see.
+  // Commercial Reports. Everything that used to crowd the overview lives
+  // here: retention, invoicing, payment, the ageing funnel, the breakdown
+  // charts. Gated on `variationOrder.manage` because that is the narrowest
+  // right every commercial reader already holds and no site engineer does —
+  // and the page refuses on the server as well, so this only decides what is
+  // worth showing.
+  { href: '/reports', label: 'Reports', short: 'Reports', capability: 'variationOrder.manage' },
   { href: '/projects', label: 'Projects', short: 'Projects', capability: 'project.update' },
   { href: '/settings/company', label: 'Company', short: 'Company', capability: 'companySettings.manage' },
   { href: '/settings/users', label: 'Users', short: 'Users', capability: 'user.manage' },

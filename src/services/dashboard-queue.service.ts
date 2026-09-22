@@ -412,7 +412,7 @@ export async function getDashboard(user: AuthenticatedUser): Promise<DashboardDa
  * Project roles are read across every project they sit on, because a PM on one
  * job and an observer on another is still a PM.
  */
-async function resolvePersona(user: AuthenticatedUser): Promise<Persona> {
+export async function resolvePersona(user: AuthenticatedUser): Promise<Persona> {
   const memberships = await prisma.projectMember.findMany({
     where: { userId: user.id, active: true },
     select: { projectRole: true },

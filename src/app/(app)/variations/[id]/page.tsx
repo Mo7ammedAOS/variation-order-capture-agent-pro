@@ -713,7 +713,14 @@ export default async function PotentialChangeDetailPage({
             />
           ) : null}
 
-          {notice ? <NoticePanel potentialChangeId={change.id} notice={notice} /> : null}
+          {/* Anchored so a dashboard action row lands on the notice itself
+              rather than at the top of a long page. The row says "Retry
+              delivery"; the button it means is here. */}
+          {notice ? (
+            <div id="notice" className="scroll-mt-24">
+              <NoticePanel potentialChangeId={change.id} notice={notice} />
+            </div>
+          ) : null}
 
           <MoneyPanel
             potentialChangeId={change.id}
@@ -812,7 +819,11 @@ export default async function PotentialChangeDetailPage({
             />
           ) : null}
 
-          {canAssess ? <ReviewPanel facts={reviewFacts} /> : null}
+          {canAssess ? (
+            <div id="review" className="scroll-mt-24">
+              <ReviewPanel facts={reviewFacts} />
+            </div>
+          ) : null}
 
           {pricing ? (
             <PricingPanel

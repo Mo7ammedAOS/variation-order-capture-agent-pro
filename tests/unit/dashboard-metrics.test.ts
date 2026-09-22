@@ -207,21 +207,21 @@ describe('the queue sorts', () => {
   ];
 
   it('puts the late small one above the fat safe one', () => {
-    expect(sortActions(rows, 'priority')[0].key).toBe('red-small');
+    expect(sortActions(rows, 'priority')[0]!.key).toBe('red-small');
   });
 
   it('oldest is by age, not by deadline', () => {
-    expect(sortActions(rows, 'oldest')[0].key).toBe('red-small');
+    expect(sortActions(rows, 'oldest')[0]!.key).toBe('red-small');
   });
 
   it('highest value ignores priority', () => {
-    expect(sortActions(rows, 'value')[0].key).toBe('green-big');
+    expect(sortActions(rows, 'value')[0]!.key).toBe('green-big');
   });
 
   it('nearest deadline sends the undated row last, never first', () => {
     const sorted = sortActions(rows, 'deadline');
-    expect(sorted[0].key).toBe('red-small');
-    expect(sorted[sorted.length - 1].key).toBe('no-date');
+    expect(sorted[0]!.key).toBe('red-small');
+    expect(sorted[sorted.length - 1]!.key).toBe('no-date');
   });
 
   it('does not mutate what it was given', () => {
@@ -285,7 +285,7 @@ describe('project commercial position', () => {
       { ...base, projectId: 'rich', pendingValue: 900_000, workStartedUnapproved: 0 },
       { ...base, projectId: 'exposed', pendingValue: 10, workStartedUnapproved: 12_000 },
     ]);
-    expect(ranked[0].projectId).toBe('exposed');
+    expect(ranked[0]!.projectId).toBe('exposed');
   });
 
   it('falls back to pending value, then to overdue actions', () => {
