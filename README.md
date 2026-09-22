@@ -1,57 +1,66 @@
 # VO Capture & Control
 
-**Variation Notice, Capture, Approval & Bottleneck-Control System
-for UAE Fit-Out and Interior Contracting Companies**
+**Variation notice, capture, approval and bottleneck control for UAE fit-out and
+interior contractors.**
 
-Captures, protects, prices, approves, invoices, and collects Variation Orders,
-Change Orders, Notices of Claim, and project changes.
+Captures, protects, prices, approves, invoices and collects variation orders,
+change orders, notices of claim and project changes.
 
 > **Read [CLAUDE.md](CLAUDE.md) before writing any code.** It is the contract:
-> ownership boundaries, the deployment model, the n8n rules, and the Definition
-> of Done. Nothing here overrides it.
+> ownership boundaries, deployment model, n8n rules, Definition of Done.
 
 ## Status
 
-**Phase 1 code complete.** Lint, typecheck, 51 unit tests and the production
-build all pass. Nothing has run against a database yet — that needs the Supabase
-and Google Drive credentials in DEPLOYMENT_GUIDE.md.
-
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the goal-by-goal
-and test-by-test position.
+**Live at https://vo.osmanflow.com**, build `d1ece7e`. Lint, typecheck, 685 unit
+tests and the production build all pass. See
+[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## Documentation
 
 | File | Read it for |
 |---|---|
-| [CLAUDE.md](CLAUDE.md) | The contract. Ownership boundaries, deployment model, n8n rules |
+| [HOW-TO-USE.md](HOW-TO-USE.md) | **The user guide** — PM, QS and admin, in plain language |
+| [WHAT-CURRENT-VO-APP-CAN-DO.md](WHAT-CURRENT-VO-APP-CAN-DO.md) | What works, and what does not |
+| [TEST-PLAN.md](TEST-PLAN.md) | The manual walkthrough, 18 stages |
+| [VO-SERVICE.md](VO-SERVICE.md) | The product, for pricing and positioning |
+| [CLAUDE.md](CLAUDE.md) | The contract: boundaries, deployment, n8n rules |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Why the app owns truth and n8n does not |
-| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Tables, and why three exist that the spec never listed |
+| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Tables, and the three the spec never listed |
 | [API_SPEC.md](API_SPEC.md) | Both API families, payloads, the 4xx/5xx contract |
 | [UI_SPEC.md](UI_SPEC.md) | Who holds the device, and what follows from that |
-| [SECURITY.md](SECURITY.md) | Auth, authorisation, the integration boundary, limitations |
-| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Supabase, Drive, the VPS, Traefik routing, verification |
-| [N8N_WORKFLOW_MAP.md](N8N_WORKFLOW_MAP.md) | The eight lanes and the one-file-per-client rule |
+| [SECURITY.md](SECURITY.md) | Auth, authorisation, the integration boundary |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Supabase, Drive, the VPS, Traefik, verification |
+| [N8N_WORKFLOW_MAP.md](N8N_WORKFLOW_MAP.md) | The eight lanes, one file per client |
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env          # fill in Supabase; STORAGE_PROVIDER=local to skip Drive
+cp .env.example .env          # Supabase; STORAGE_PROVIDER=local to skip Drive
 npm run db:migrate            # includes pgvector indexes and RLS policies
 npm run db:seed
 npm run dev
 ```
 
+## Deploy
+
+```bash
+ssh root@187.127.210.248 'cd /docker/vo && git pull && ./deploy/release.sh'
+```
+
+Migrations run before the new code serves traffic. The script builds the
+`migrate` service **by name**, because a plain build skips it and ships today's
+code against yesterday's schema.
+
 ## Deployment model
 
-This is **not** multi-tenant SaaS. Each fit-out company gets a separate installation
-with its own database, storage, n8n workspace, credentials, users, and branding.
-Client A and Client B share nothing. This repository is the reusable master template.
+**Not multi-tenant SaaS.** Each company gets a separate installation with its own
+database, storage, n8n workspace, credentials, users and branding. Client A and
+Client B share nothing. This repository is the reusable master template.
 
-## Security
+## What never enters source control
 
 ```text
-This repository must stay PRIVATE.
-Client contracts, BOQs, pricing, and correspondence never enter source control.
-Secrets live in .env or a secret manager. Never in a commit, never in .mcp.json.
+Client contracts, BOQs, pricing and correspondence.
+Secrets — .env or a secret manager, never a commit, never .mcp.json.
 ```

@@ -1,500 +1,257 @@
-# What the current VO app can do
+# What the VO app can do
 
-An honest inventory of the deployed system, written by reading the code rather
-than the plan. Every line below was checked against the source, the database
-schema, and the live server's configuration.
+Checked against the code, not the plan.
 
 | | |
 |---|---|
 | **Live at** | `vo.osmanflow.com` |
-| **Build** | `d108634` |
-| **Checked** | 13 September 2026 |
-| **Tests passing** | 653 across 45 files |
-| **Database** | Supabase Postgres, **Singapore** (`ap-southeast-1`) |
-| **File storage** | Google Drive, OAuth mode |
-| **AI provider** | **`claude`** — Sonnet 5, live since 12 Sep, real spend per capture |
-| **Transcription** | **`elevenlabs`** — Scribe, live, and **idle** until WhatsApp media arrives |
-| **Automation** | n8n `VO Capture & Control · MASTER`, 62 nodes, **active** |
+| **Build** | `d1ece7e`, deployed 22 September 2026 |
+| **Tests** | 685 across 48 files |
+| **Database** | Supabase Postgres, Singapore |
+| **Files** | Google Drive |
+| **AI** | Claude Sonnet 5 — reads every capture. Billed per message |
+| **Voice** | ElevenLabs Scribe — live, and idle until WhatsApp media works |
+| **Automation** | n8n `VO Capture & Control · MASTER`, 62 nodes, active |
 
-Read the two halves together. Part 1 is what works. Part 2 is what does not, and
-both are equally load-bearing when you are deciding what to sell.
+Part 1 is what works. Part 2 is what does not. Read both.
 
 ---
 
-# Part 1 · What it can do
+# Part 1 · What it does
 
-## 1. Accounts, roles and authority
+## Accounts
 
-- **Invitation only.** There is no public sign-up. An account exists because an
-  administrator created it. Creating one sends no email and hits no rate limit.
-- **Two front doors.** `/signin` for everybody, `/admin-signin` for whoever
-  stands the company up. The set-up button only appears while the company has
-  **zero** users, and the first account closes it permanently.
-- **Set a password directly** (instant, no email) or **email a reset link**. No
-  minimum length of ours; the identity provider's own floor still applies.
-- **11 system roles** — company owner, company admin, managing director,
-  operations director, commercial director, commercial manager, contract
-  administrator, finance manager, procurement manager, standard user, viewer.
-- **13 project roles** — project manager, quantity surveyor, site engineer,
-  foreman, commercial manager, contract administrator, procurement officer,
-  planning engineer, finance officer, document controller, project viewer,
-  client viewer, consultant viewer.
-- **Company administration is a separate flag**, not a role — because whoever
-  runs the app is usually doing another job. The system refuses to leave the
-  company with zero administrators.
-- **30 capabilities** in a matrix an administrator can edit at runtime without a
-  deploy. A missing row is a denial, never a default allow.
-- **Deactivate** a leaver (keeps their name on their work) or **delete** an
-  account added by mistake. Delete is refused for anyone the record still points
-  at, and it removes the sign-in before the profile row.
-- **WhatsApp number per user**, movable between people — the number is *taken*,
-  not copied, so two people can never hold one handset identity.
+- **Invitation only.** No public sign-up. The set-up page closes for good once
+  the first account exists.
+- 11 system roles, 13 project roles, and **30 capabilities** an admin can change
+  at runtime with no deploy. A missing permission is a **denial**, never a
+  default allow.
+- Deactivate a leaver (his name stays on his work) or delete an account added by
+  mistake. Delete is refused for anyone the records still point at.
+- **One WhatsApp number belongs to one person.** Moving it *takes* it, so two
+  people can never hold one handset identity.
 
-## 2. Projects
+## Projects
 
-- Create, edit and list projects with code, name, client, consultant, location,
-  contract number, start and completion dates, original contract value, currency
-  and status.
-- **Eight tabs per project**, each a real link so it is shareable and Back works:
-  overview, potential changes, contract rules, contacts & authority, team,
-  documents, tasks, activity.
-- **Team assignment** by project role, with **notification separate from
-  access** — someone can watch a project without editing it, and work on one
-  without being messaged about every change.
-- **Remove from a project** marks the membership inactive rather than deleting
-  it, so who was entitled to instruct work last March can still be answered.
-- **Client contacts with explicit authority flags**: authority verified, can
-  request change, can issue technical instruction, can instruct work, can
-  approve cost, can approve time, can sign final VO. Each is set deliberately
-  rather than inferred from the contact type.
+- Code, name, client, consultant, contract number, dates, value, currency.
+- **Eight tabs**, each a real link: overview, changes, contract rules, contacts,
+  team, documents, tasks, activity.
+- Team members get access and notification **separately** — you can watch a
+  project without editing it.
+- Removing someone is reversible and keeps the history, so "who could instruct
+  work last March" still has an answer.
+- **Client contacts carry explicit authority flags** — can request a change, can
+  instruct work, can approve cost, can sign the final VO. Each set deliberately.
 
-## 3. Contract rules — configurable per project
+## Contract rules — per project, nothing hardcoded
 
-Everything below is set per project, not hardcoded:
+Notice period · detailed claim period · notice recipient and delivery method ·
+EOT required or not · approval thresholds · high-risk value · client response
+window · follow-up on/off and its interval · QS pricing days · approval days.
 
-| Rule | Default |
-|---|---|
-| Notice period (days) | 28 |
-| Detailed claim period (days) | 42 |
-| Notice delivery method, recipient name, email, company | — |
-| Notice + variation proposal template names | — |
-| EOT assessment required | yes |
-| Approval threshold — PM / CM / Commercial Director / MD | — |
-| High-risk VO value | — |
-| Client response window (days) | 14 |
-| Client follow-up enabled | yes |
-| Client follow-up interval (days) | 7 |
-| QS pricing due (days) | 7 |
-| PM scope review due (days) | 3 |
-| Internal approval due (days) | 5 |
+Defaults are 28 and 42 days, but **the project's own numbers are what the app
+uses**, everywhere.
 
-## 4. Capture — getting a change into the system
+## Getting a change in
 
-**Four routes in.**
+**Four ways in:** mobile web form, WhatsApp, email, watched folder.
 
-- **Mobile web form** (`/report-change`) — required fields only, everything else
-  behind a disclosure. Attaches photos, audio, PDF, Office files, and CAD/BIM
-  formats. The floating button is on every screen in the app.
-- **WhatsApp** — signed webhook, sender identified by number, project matched,
-  idempotent so a retried delivery never doubles a record.
-- **Email** — parsed the same way; replies land on the original thread.
-- **Watched document folder** — files arriving are registered and indexed.
-- **A voice note becomes words.** Attach a recording to the web form or to an
-  email report and it is transcribed, with the typed text kept first and the
-  transcript added under it, attributed. The audio is filed as evidence either
-  way and is never replaced. WhatsApp voice notes cannot do this yet — the
-  capture lane does not download the file.
+**It asks rather than guesses.** Which project, new or evidence for an existing
+one, when, who instructed it, has work started. One question at a time. It reads
+the record back before writing anything, and closes the conversation instead of
+leaving it hanging.
 
-**The conversation, when something is unclear.** The system asks rather than
-guesses — which project, is this new or evidence for an existing change, when
-did it happen, who instructed it, has work started, which drawing. It asks one
-thing at a time, reads a photo caption as a strong signal, understands a short
-reply ("the ceiling one", "yes"), reads the record back for confirmation before
-writing anything, and closes the conversation instead of leaving it open. Stale
-questions expire. It counts how many times it has asked and stops rather than
-badgering.
+**It standardises without overwriting.** "Yesterday" becomes a date, "the
+consultants" becomes a named party — and **what the reporter typed is kept word
+for word** underneath.
 
-**Standardisation on the way in.** "Yesterday", "last Monday", "the 15th" and "a
-couple of weeks back" all become one calendar date. "The consultants",
-"supervision consultant" and "MEP" become one named party. **What the reporter
-typed is kept word for word** — the standardised value is what the register
-counts.
+**A voice note becomes words** on the form and on email, filed as evidence
+either way, never replacing the audio.
 
-**A triage queue** for anything that could not be placed, so an unplaceable
-message sits on a screen instead of falling into a hole. It can be filed to a
-project or dismissed.
+**Anything it cannot place goes to a triage queue** instead of into a hole.
 
-**Recorded on every change:** the source type, where and when it was *raised*
-(which is not where and when it *happened*), the sender's name and number, their
-authority status, and how the instruction arrived — verbal, site instruction,
-drawing, email, WhatsApp, meeting.
+## The record
 
-## 5. The record and its lifecycle
+- References like `PC-DXB-001-0004`, from a race-safe counter.
+- **Seven stages in plain words:** new change → PM review → QS pricing → PM
+  approval → sent to client → client decision → closed.
+- Eleven statuses underneath, because the engine must tell "not assessed yet"
+  from "waiting for something we asked for". Two are retired; old rows still
+  read and still have a way forward.
+- Transitions are gated — you cannot jump a stage.
+- Cancel with a reason and reinstate with the **original capture date**. Delete
+  permanently is restricted, and refused once a notice is served.
+- **Duplicate detection suggests, never merges.**
+- Semantic search across the project's own documents, **scoped to that project
+  first**. Cross-project search is not missing, it is forbidden.
 
-- **Race-safe numbering** — `PC-DXB-001-0004`, from an atomic counter.
-- **Seven stages, in the words people read**: new change → PM review → QS
-  pricing → PM approval → sent to client → client decision → closed.
-- Eleven statuses still exist underneath, because the engine has to tell "not
-  yet assessed" from "waiting for something we asked for" to know whose list a
-  change is on. Two of them — `notice_required` and `pm_scope_review` — are
-  retired and nothing enters them; rows that stopped there before 22 September
-  2026 still read, and still have one way forward.
-- **The notice runs beside the chain, not inside it.** The project manager
-  decides it, and QS pricing starts at that moment. A notice being drafted,
-  sent or acknowledged never holds up a price.
-- **Transitions are gated.** You cannot jump a stage, and the allowed next
-  statuses are computed rather than listed in the UI.
-- Cancel with a reason, then reinstate with the **original capture date**
-  intact. Delete permanently (restricted, and refused once a notice is served).
-- Reopen a closed change.
-- **Duplicate detection** — vector similarity flags "this looks like one already
-  raised" as a suggestion with no action attached. Never merges, never closes.
-- **Semantic search across the project's own documents** — contracts, BOQs,
-  drawings, specifications — and scope matching against them.
-- **Every vector query is scoped to the project first.** Cross-project semantic
-  search is not a missing feature, it is a rule.
+## The notice
 
-## 6. The notice clock
+- Deadline = event date + **the project's** notice period. Green, amber, red —
+  and red at zero is not configurable.
+- **One PM screen** holds the whole decision: what changed, the reporter's own
+  words, the date, whether work started, the evidence, then the notice period,
+  deadline and days left.
+- **Three answers.** Yes drafts a notice. No needs a reason from a fixed list of
+  six. Need more information needs saying what is missing, and raises a task for
+  whoever reported it quoting those words.
+- **QS pricing starts at the decision**, not after the notice. A notice being
+  drafted, sent or acknowledged never holds up a price.
+- **Deciding is not sending.** The draft opens as a preview — recipient, method,
+  reference, deadline, attachments, then the words — with Edit, Save draft and
+  **Send initial notice**. Nothing reaches the client until that button.
+- **Seven delivery states:** not applicable · draft · pending delivery ·
+  delivered · delivery failed · acknowledgement pending · acknowledged.
+- **Delivered only on a callback.** Never on the strength of our own send. A
+  failure goes red, offers retry, and leaves pricing running.
 
-- Deadline = **event date + notice period**, calendar days, per project.
-- Live countdown with RAG colour: green above the amber threshold (7 days by
-  default, company-configurable), amber inside it, **red at zero or breached and
-  not configurable** — a passed deadline is not a preference.
-- **One PM review screen** carries the whole decision: reference, project,
-  location, what changed, the reporter's original message word for word, who
-  reported it, the instruction date, whether work has started, the evidence,
-  then the project's own notice period, the deadline and the days left.
-- **Three answers, each with what it requires.** Yes drafts a notice. No
-  requires a reason from a fixed list of six. Need more information requires
-  saying what is missing, raises a task for whoever reported it quoting those
-  words, and keeps the change with the PM — pricing may run beside it, but only
-  if the PM ticks the box, and the register goes on showing the gap.
-- **Deciding is not sending.** A draft opens as a preview — recipient, delivery
-  method, reference, deadline, attachments, then the words — with **Edit
-  notice**, **Save draft** and **Send initial notice**. Nothing reaches the
-  client until that last button.
-- Deadlines **recalculate** if the event date is corrected.
-- **Seven delivery states**, read from the change, the notice and the message
-  carrying it together, because no one of them answers "where is my notice":
-  not applicable, draft, pending delivery, delivered, delivery failed,
-  acknowledgement pending, acknowledged.
-- Delivery is **confirmed by callback**, never assumed. Nothing reads delivered
-  on the strength of our own outbound request. A failure says so in red, offers
-  a **retry**, and leaves pricing running.
+## Evidence
 
-## 7. Evidence
+A numbered folder tree per project (contract, drawings, specs, BOQ, programme,
+correspondence, changes, notices, variation orders), race-safe so two captures
+cannot make two folders of one name. **Originals are never overwritten or
+deleted.** Files are served through an access-checked route, never a Drive link.
 
-- A **folder tree per project**, numbered so it sorts: contract, drawings,
-  specifications, BOQ, programme, correspondence, potential changes, notices,
-  variation orders. Each change gets `Evidence/` and `Drafts/` beneath it.
-- Folder creation is **race-safe** — two simultaneous captures cannot produce two
-  folders of the same name.
-- **Originals are never overwritten and never deleted by the app.**
-- Files are served through an **access-checked route**, never a Drive link — a
-  shareable link would route around every permission in the system.
-- The document library is **indexed for meaning**, with an honest status when a
-  file has no readable text (a scanned contract is kept and served, just not
-  searchable, and the screen says so).
+## Pricing
 
-## 8. Pricing
+Line items with description, quantity, unit, rate and a **rate source** —
+contract BOQ → pro rata → star rate → quotation → daywork. The panel says how
+many lines rest on a star rate, because that is what a consultant attacks first.
+Prelims % and overhead & profit % per change. **"Not a variation" is a real
+outcome.** Every figure is calculated in code; the AI never computes a number.
 
-- **Line items**: description, quantity, unit, rate, and a **rate source** —
-  `contract_boq` → `pro_rata` → `star_rate` → `quotation` → `daywork`.
-- The panel reports **how many lines rest on a star rate**, because that is the
-  number a consultant attacks first.
-- **Prelims percent** and **overhead & profit percent** applied per change.
-- **"Not a variation"** is a first-class outcome — the QS can record that the
-  work was already in scope, and it closes differently from an approval.
-- Submit pricing, which advances the stage and creates the next task.
-- **Every commercial figure is calculated in code.** The AI never computes a
-  number.
+## Approval
 
-## 9. Approvals
+- **The project manager is the only internal approver.** One gate, one seat. The
+  managing director's seat came out on 22 September 2026.
+- **Approving sends it.** One button raises the VO, renders the PDF, files it in
+  `09 Variation Orders`, emails the contract-rules recipient and records the
+  submission — which starts the client's response clock.
+- A required notice that is not confirmed delivered shows a **red warning naming
+  the state it is in**. It warns; it does not block.
+- Seats are filled from the **capability matrix, not a job title**.
+- **Approvals given before the change stand.** A variation an MD approved goes on
+  showing that.
 
-- **The project manager is the only internal approver.** One gate, one seat.
-  The managing director's seat came out on 22 September 2026: in a company this
-  size the second signature did not add a check, it added a person who could be
-  on a plane.
-- **Approving sends it.** One button raises the VO, renders the client-ready
-  PDF, files a copy in `09 Variation Orders`, sends it to the recipient in the
-  project's contract rules, and records the submission — which starts the
-  client's response period and the follow-up.
-- **A required notice that is not confirmed delivered puts a red warning on
-  that screen**, naming the state it is actually in. It is a warning, not a
-  block: an approver told "you cannot proceed" while a client waits will
-  proceed somewhere this system cannot see.
-- The system works out who may fill a seat from the capability matrix, **not
-  from a job title**. Decisions record the approver, the timestamp and their
-  comments.
-- **Approvals given before the change are untouched.** A variation a managing
-  director approved goes on showing that, for ever.
-- **Value thresholds per project** are stored for PM, CM, Commercial Director
-  and MD, and are not currently wired into who may carry a gate.
+## Money
 
-## 10. Variation orders and the money
+Raise a VO, record submission and the client's response, withdraw one. Client
+follow-up on the project's own cadence, which **stops the moment they answer**
+and can be switched off per project. Applications and invoices with retention
+held automatically, retention release in moieties, credit notes, part payments.
+A commercial position per project: claimed, approved, invoiced, paid, retained,
+credited, outstanding. **VAT at 5% on the rounded net**, half-up — the UAE tax
+invoice convention, done deliberately.
 
-- **Raise a VO** from an approved change, record submission, record the client's
-  response, withdraw one.
-- **Client follow-up** on the project's own cadence, which **stops the moment the
-  client answers** — and can be switched off entirely per project.
-- **Progress applications and invoices**, with retention held automatically.
-- **Retention release** drafting, in contractual moieties.
-- **Credit notes** — draft, issue, cancel — with settlement refreshed against the
-  invoice.
-- **Payments** recorded against what is owed, part payments included.
-- **Commercial position** per project: claimed, approved, invoiced, paid,
-  retained, credited, outstanding.
-- **VAT at 5%**, charged on the **rounded net** rather than an unrounded
-  intermediate, rounding half-up away from zero — the UAE tax invoice
-  convention, implemented deliberately rather than by accident.
+## Time
 
-## 11. Time
+A time impact flag and estimated days. Days claimed, approved and conceded.
+**A time claim cannot be submitted without a stated basis** — a bare number is
+refused.
 
-- Potential time impact flag and estimated days on the change.
-- Days claimed, approved and conceded held against the variation.
-- **A time claim cannot be submitted without a stated basis** — a bare number is
-  refused.
-- EOT assessment can be required or not, per project.
+## Tasks and chasing
 
-## 12. Tasks, reminders and bottlenecks
+12 task types. **My Tasks** ordered overdue, today, upcoming. A reminder sweep
+that chases **by seat, not by name**, so it survives someone leaving. Bottleneck
+detection: what is blocked, who by, how long, and **the value waiting behind
+it** — including approved work not yet billed and invoices past their terms.
 
-- **12 task types**: notice assessment, PM scope review (retired), QS pricing, procurement
-  quotation, subcontractor quotation, EOT assessment, CM review, internal
-  approval, evidence collection, client follow-up, document request, other.
-- **My Tasks** — overdue, then due today, then upcoming.
-- **Reminder sweep** chases whoever owns the next decision, **by seat rather than
-  by name**, so it survives someone leaving the company.
-- **Approval chase** for decisions sitting unanswered.
-- **Bottleneck detection** — what is blocked, who by, how long, and the value
-  waiting behind it, including unbilled approved work and invoices past their
-  payment terms.
-- Bottlenecks can be resolved, and detection runs as a sweep.
+## Notifications
 
-## 13. Notifications
+Email and WhatsApp, recipients resolved by seat on the project.
+**Deduplicated** — one event cannot notify twice. Delivery confirmed by
+callback. An in-app screen with an unread count.
 
-- **Email and WhatsApp** channels, chosen by what is configured.
-- Recipients resolved **by seat on the project**, plus direct notifications.
-- **Deduplicated** — the same event cannot notify twice.
-- Delivery status reported back by callback; pending until confirmed.
-- An **in-app notification screen** with unread count, mark one read, mark all
-  read.
+## Screens
 
-## 14. Screens
+`/dashboard` · `/my-tasks` · `/projects` (8 tabs each) · `/variations` ·
+`/report-change` · `/bottlenecks` · `/notifications` · `/settings/*` ·
+`/signin` · `/admin-signin`
 
-`/dashboard` · `/my-tasks` · `/projects` · `/projects/[id]` (8 tabs) ·
-`/projects/new` · `/projects/[id]/report` · `/variations` · `/variations/[id]` ·
-`/report-change` · `/bottlenecks` · `/notifications` ·
-`/settings/company` · `/settings/users` · `/settings/permissions` · `/signin` ·
-`/admin-signin` · `/set-password`
+Dashboard cards are ordered by **urgency, not total** — overdue notices first —
+plus five notice tiles and four charts. The register has 15 columns, filters
+that live **in the URL** so a filtered view is a link you can send, and cards on
+a phone. The project report is ordered by **notice deadline, not PC number**:
+sorted by number it is a filing system, sorted by deadline it is a list of what
+to deal with.
 
-`/inbox` — the Capture Inbox — still answers but is **not in the navigation**
-since 13 Sep. Osman's call: it listed every message that arrived and read as
-noise. Nothing was deleted, and the consequence is stated plainly under
-**Deployment and compliance** below, because it is not visible from the screen
-itself.
+## Security
 
-- **Dashboard**: 18 stat cards ordered by **urgency, not by total** — overdue
-  notices first — plus four charts (by project, by status, by risk, overdue
-  tasks by role).
-- **Register**: 15 columns, filters that live in the **URL** so a filtered view
-  is a link you send, card view on a phone.
-- **Project report**: a printable document ordered by **notice deadline rather
-  than PC number** — sorted by number it is a filing system, sorted by deadline
-  it is a list of what to deal with. Prints through the browser, so Save as PDF
-  gives selectable text.
-- **Command palette** searching changes and projects.
-- Light and dark themes, RTL-ready structure, mobile layouts throughout, a 404,
-  loading states, and a skip link.
+Project access is enforced **on the server**, in one choke point every service
+calls. A user on one project gets **403, not an empty list**, on every route
+belonging to another — search included. Row-level security in the database as a
+second layer. Signed integration endpoints with idempotency. A complete audit
+trail written **in the same transaction** as the change, so a gap cannot happen.
+One installation per company; nothing is shared between clients.
 
-## 15. Security
+## n8n
 
-- **Project access enforced on the server**, in a single choke point every
-  service calls. A user on one project gets **403, not an empty list**, on every
-  route belonging to another — search included.
-- **Row-level security** in the database as a second layer.
-- **Signed (HMAC) integration endpoints** with idempotency on every inbound
-  event.
-- **Complete audit trail** — who, when, before and after — written in the **same
-  transaction** as the change, so an audit gap cannot happen.
-- Session cookies `httpOnly` + `secure` + `sameSite=lax`; the service-role key
-  never leaves the server.
-- One installation per company. Nothing shared between clients — not the
-  database, not the search index, not the file storage.
-
-## 16. Automation (n8n)
-
-One all-in-one workflow per client, **active**, 62 nodes. Lanes A–H: WhatsApp in,
-email in, document watch, email out, WhatsApp out, client follow-up, weekly
-report, error trigger. Plus scheduled jobs the app owns — `reminder_sweep`,
-`bottleneck_sweep`, `notification_dispatch`, `client_followup` — and a manual
-"run now" lane so any time-based behaviour can be tested on demand.
-
-**n8n decides nothing and writes nothing to the database.** Every lane is a
-courier carrying a payload the app authored.
+One workflow per client, 62 nodes, lanes A–H. **n8n decides nothing and writes
+nothing to the database.** Every lane is a courier carrying a payload the app
+wrote.
 
 ---
 
 # Part 2 · The limits
 
-> **Updated 13 Sep 2026.** Nine of the gaps below were closed after this file
-> was first written, and the two that needed a key are now live and paid for: the verbal-instruction flag and its confirmation letter,
-> the client-ready VO PDF, original-versus-changed scope, the CSV register
-> export, the evidence-pack download, the three money figures on the dashboard,
-> and voice-note transcription. They are recorded at the end of this part under
-> **Closed since this file was written**, with what each one does and does not
-> do, rather than quietly deleted — a list of weaknesses is only worth anything
-> if it is honest in both directions.
+## Does not work at all
 
-## Things that do not work at all
-
-| | What is actually true |
+| | What is true |
 |---|---|
-| **WhatsApp photos, voice notes, PDFs** | Text arrives. **Media does not.** The capture lane has no download step and `media: []` is hard-coded, so a photo arrives as a message with no file attached. This is the one gap that still holds back two of the features below: transcription works, and has nothing to transcribe until media arrives. |
-| **Employer-specific forms** | No Emaar, Nakheel, DM or RTA templates. No Aconex export. If the QS retypes it into Aconex, the integration has sold nothing. |
-| **Arabic documents** | The interface is structurally RTL-ready and each user has a language preference, but the PDF generator has **no Arabic font embedded**. English output only. |
-| **Escalation service** | An empty stub. Reminders and chasing exist; formal escalation levels do not. |
-| **Affected programme activities** | No programme link. You can record 14 days; you cannot say which activities. |
-| **Drawing revision comparison** | Documents are stored and searchable. Nothing compares a revision against the tendered drawing. |
+| **WhatsApp photos, voice notes, PDFs** | Text arrives, **media does not**. The lane has no download step. This one gap also idles the transcription vendor |
+| **Employer forms** | No Emaar, Nakheel, DM or RTA templates. No Aconex export |
+| **Arabic documents** | The interface is RTL-ready; the PDF writer has **no Arabic font**. English output only |
+| **Escalation service** | A 21-line stub. Reminders and chasing are real; formal escalation levels are not written |
+| **Programme link** | You can record 14 days. You cannot say which activities |
+| **Drawing revisions** | Stored and searchable. Nothing compares a revision to the tendered drawing |
 
-## Things that half work
+## Half works
 
-- **Voice-note transcription.** Live — ElevenLabs Scribe, key in place, model
-  id verified against the real API. It has **nothing to hear.** Until the
-  capture lane downloads the file, no audio reaches the app. Everything on our
-  side of that line is built, tested and idle.
-- **Outbound WhatsApp.** `N8N_NOTIFY_WHATSAPP_URL` is now set and the n8n lane
-  is active, but `EVOLUTION_API_URL` is empty, so the lane has no gateway to
-  hand the message to. Email notification is unaffected and does send.
-- **Weekly report lane.** Defined in the workflow map, not built.
-  `N8N_REPORT_DELIVERY_URL` is empty.
-- **Escalation.** `escalation.service.ts` is 21 lines and one export — a stub.
-  Reminders and daily chasing are real and work; formal escalation levels are
-  not written.
+- **Voice transcription** — built, paid for, and has nothing to hear until
+  WhatsApp media lands.
+- **Outbound WhatsApp** — the n8n lane is active, but no gateway is configured.
+  Email is unaffected.
+- **Weekly report lane** — mapped, not built.
 
-## In the database but with no screen
+## In the database with no screen
 
-These are real, used by the engine, and **cannot be changed without a developer**:
-
-| Field | Stuck at |
-|---|---|
-| Retention percent | 5% |
-| Payment terms | 30 days |
-| Retention release at practical completion | 50% |
-| Defects liability period | 365 days |
-| VAT percent | 5% |
-| Company logo, brand colours, default language | unset / defaults |
-| Notice and VO template names | unset |
-| Approval matrix JSON, reminder rules JSON, escalation rules JSON | unset |
-
-## Closed since this file was written
-
-Nine, in order of what they are worth commercially. Every one is built, tested,
-merged and **deployed** — the two that needed a vendor key were switched on
-during the 12 September release and are being paid for now.
-
-**The verbal-instruction flag, and the letter that answers it.** A change
-instructed verbally or in a progress meeting now raises a red panel on its own
-screen and offers to write a confirmation of verbal instruction — a letter that
-records what was said, by whom, when and where, says plainly that work has been
-put in hand where it has, and asks for a written reply. It is not behind an
-approval gate, because its value is almost entirely in going out the same day.
-The panel stays red until the **client acknowledges**, not when it is sent:
-Article 887 asks for the employer's agreement, and a screen that turned green
-on "sent" would tell a QS the position was safe when it is merely documented.
-WhatsApp deliberately does not raise the flag — it is written, timestamped and
-the normal instruction channel here, and flagging it would put a warning on
-most of the register and teach everyone to ignore warnings.
-
-**Three money figures on the dashboard.** Pending VO value, approved VO value,
-and **work started without approval** — the count and the exposure. The last
-one is the number a commercial manager is actually asked for.
-
-**The evidence pack, as one download.** A change comes out as a single archive:
-the photographs, the notices with their delivery references, the drawings, the
-approvals, and a contents file that states what is inside — including, by name,
-anything too large to include. Nothing is dropped silently.
-
-**A client-ready variation order PDF.** Separate from the notice letter. It
-prints the build-up line by line with the basis of each rate, and claims time
-only where days are claimed.
-
-**Original scope versus changed scope.** Two fields rather than one
-description, so the tendered scope and the revised scope sit side by side and
-print that way.
-
-**CSV export of the QS register.** The register's own filters apply, so what
-downloads is what is on screen. UTF-8 with a byte-order mark, because without
-it Excel renders Arabic as mojibake, and leading formula characters are
-defused.
-
-**Real AI reading every capture.** `AI_PROVIDER=claude`, Sonnet 5, live since
-12 September. Before that every message on screen had been read by a keyword
-matcher. It costs money per captured message, and a vendor failure falls back
-to the keyword reader and records that it did — a report is never lost because
-Anthropic is having a bad afternoon.
-
-**Voice-note transcription.** ElevenLabs Scribe, behind its own provider
-because Claude has no speech-to-text. `tag_audio_events` is sent as `false`:
-Scribe writes non-speech tags into the text by default, so a voice note
-recorded beside a core drill would otherwise reach a notice carrying
-`[drilling]`. See **Things that half work** for what it is still waiting on.
+Cannot be changed without a developer: retention 5%, payment terms 30 days,
+retention release 50%, defects liability 365 days, VAT 5%, company logo and
+brand colours, template names, the approval and reminder rule JSON.
 
 ## Deployment and compliance
 
-- **Data is hosted in Singapore** (`ap-southeast-1`), not the UAE. For
-  government clients and some developers this is a procurement blocker rather
-  than a preference. It is cheapest to move now, at 7 users and 4 projects.
-- The GitHub repository is **public**.
-- `ALLOW_JOB_TIME_TRAVEL` is off, which is correct — turning it on makes
-  simulated runs send real messages to real people.
-- **Two vendors are now billed per use** — Anthropic per captured message,
-  ElevenLabs per minute of audio. Neither was spending anything before 12
-  September, and neither has a spend cap set on our side.
-- **A message the system cannot place is now visible on no screen anybody
-  opens.** The Capture Inbox came out of the navigation on 13 Sep. It happens
-  when the sender is not a known user, when two people share a number, when the
-  sender is on no active project, when somebody names a job they are not
-  assigned to, and when a follow-up question goes unanswered. Each is a
-  variation report sitting in the database. `/inbox` still reaches them if you
+- **Data is in Singapore, not the UAE.** For government clients and some
+  developers that is a procurement blocker, not a preference. Cheapest to move
+  now, at this size.
+- The GitHub repository is **public**. Osman's call.
+- `ALLOW_JOB_TIME_TRAVEL` is off, which is right — on, a simulated run sends
+  real messages to real people.
+- **Two vendors bill per use** (Anthropic per message, ElevenLabs per minute)
+  and **neither has a spend cap**.
+- **A message the system cannot place is on no screen anybody opens.** The
+  Capture Inbox left the navigation on 13 Sep. `/inbox` still reaches it if you
   type it.
-- **Nothing in Part 1 has been walked by a person on production since the 12
-  September release.** `TEST-PLAN.md` stages 23 to 27 exist for exactly that
-  and have not been run. The unit suite proves the logic; it proves nothing
-  about whether a button is reachable or a PDF opens.
-
-## Smaller known gaps
-
-- **The company's name appears nowhere in the app shell.** It is in Settings and
-  on the printed report only.
-- **The projects page accepts a search parameter that nothing produces.** Dead
-  wiring; search from the top bar instead.
-- `DXB-001`'s stored project name contains a **ligature character** (`ﬃ`), so
-  searching "Office" does not match it. Its client is still literally
-  "Client 1".
-- Background images are heavy — 510 KB light, 400 KB dark, at 2000×1116.
+- **Nothing since 12 September has been walked by a person on production.** The
+  unit suite proves the logic. It proves nothing about whether a button is
+  reachable or a PDF opens. `TEST-PLAN.md` exists for exactly that.
 
 ---
 
 # The short version
 
-The **hard half is built**: the notice clock with per-contract configuration,
-the eleven-stage lifecycle with gated transitions, approval thresholds resolved
-through a capability matrix, a pricing build-up with a real rate hierarchy, the
-money engine through to payment with correct UAE VAT rounding, project isolation
-proven at the service layer, and an audit trail that cannot have gaps. That is
-the part that takes months.
+**The hard half is built**: the notice clock with per-contract configuration,
+the gated lifecycle, permissions through a capability matrix, a pricing build-up
+with a real rate hierarchy, the money engine to payment with correct UAE VAT,
+project isolation proven at the service layer, and an audit trail that cannot
+have gaps. That is the part that takes months.
 
-What is missing falls into three groups:
+What is missing is three things:
 
-**Forty minutes of somebody's attention** — nothing shipped on 12 September has
-been used by a person on the live system. Stages 23 to 27 of `TEST-PLAN.md`
-cover it. This is the cheapest item on the list and the only one that can tell
-you whether the other nine are real.
-
-**One lane in n8n** — WhatsApp media. Until the capture lane downloads the
-file, a photograph arrives as a message with nothing attached and a voice note
-has nothing to transcribe. It gates more of the product than its size suggests,
-and it now gates a transcription vendor that is live and idle.
-
-**Real projects, and two of them decide which customers you can sell to at
-all** — **Arabic documents**, employer forms and Aconex, and **UAE hosting**.
+1. **Forty minutes of attention** — nobody has used the new workflow on the live
+   system. Cheapest item on the list, and the only one that tells you whether the
+   rest is real.
+2. **One n8n lane** — WhatsApp media. It gates more of the product than its size
+   suggests.
+3. **Three things that decide who you can sell to** — Arabic documents, employer
+   forms and Aconex, and **UAE hosting**.

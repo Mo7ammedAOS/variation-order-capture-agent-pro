@@ -1,267 +1,191 @@
 # VO Capture & Control — Service Reference
 
-A reference description of what this product is and does. Written to be handed
-to an AI as context when asking for plans, strategy, positioning, pricing, or
-go-to-market work. It describes capability, not implementation.
+What this product is and does. Hand it to an AI as context for plans, pricing,
+positioning or go-to-market. It describes capability, not code.
 
 ---
 
 ## In one paragraph
 
-VO Capture & Control is a variation-order management system for fit-out and
-interior contractors. It captures site-level changes the moment they happen —
-from a WhatsApp message, a photograph, or an email — turns each one into a
-tracked contractual record with a live deadline, drives it through internal
-assessment, approval, pricing and client submission, and follows the money all
-the way to payment. It exists because the commercial value of a change is
-decided in the first days after it occurs, and most of that value is lost to
-paperwork that nobody had time to start.
+VO Capture & Control is a variation-order system for fit-out and interior
+contractors. It captures a site change the moment it happens — WhatsApp, photo,
+email or form — turns it into a numbered contractual record with a live
+deadline, drives it through the PM's notice decision, pricing, approval and
+client submission, and follows the money to payment. It exists because the
+value of a change is decided in the first days after it occurs, and most of that
+value is lost to paperwork nobody had time to start.
 
 ---
 
-## The problem it addresses
+## The problem
 
-On a fit-out project, changes arrive constantly and informally: a consultant
-asks for a different finish, a landlord restricts access, a civil defence
-officer requires an extra detail, a drawing is revised. Each one may carry a
-cost and a time entitlement — but only if it is **noticed in writing, within the
-contractual window**, and only if the evidence still exists when somebody
-argues about it months later.
-
-Three failures cost contractors money on almost every project:
+Three failures cost fit-out contractors money on almost every project:
 
 1. **The change is never captured.** It lives in a WhatsApp thread and is
-   remembered at final account, when it is too late to claim.
+   remembered at final account, too late to claim.
 2. **The notice window closes.** Most contracts require written notice within a
-   fixed number of days of the event. Miss it and entitlement is lost, however
-   good the underlying case.
-3. **The submission is never chased.** A priced variation sits unanswered with
-   the client for months because nobody owns following it up.
+   fixed number of days. Miss it and entitlement is lost, however good the case.
+3. **The submission is never chased.** A priced variation sits unanswered for
+   months because nobody owns following it up.
 
-This system is built so that all three are structurally difficult to get wrong.
+The system is built so all three are structurally hard to get wrong.
 
 ---
 
 ## Who uses it
 
-| Role | What they do in the system |
+| Role | What they do |
 |---|---|
-| **Site engineer / foreman** | Reports a change from the field, usually by WhatsApp with a photo. Never has to open the app. |
-| **Project manager** | Decides whether a change needs a formal notice, sends it, and approves the final priced variation. The company's internal approver. |
-| **Quantity surveyor / commercial** | Prices the variation, raises applications and invoices, tracks payment. |
-| **Commercial manager / director** | Oversees the register, approves value, watches the exposure across projects. |
-| **Managing director** | Sees everything, and is told about anything three working days late. Holds no approval seat: a second signature on every change was a person who could be on a plane. |
-| **Client / main contractor** | Receives notices and priced variations, and is followed up automatically. |
+| **Site engineer** | Reports a change from the field, usually by WhatsApp with a photo. Never has to open the app |
+| **Project manager** | Decides whether a change needs a notice, sends it, and approves the final priced variation. The only internal approver |
+| **Quantity surveyor** | Prices the variation, raises applications and invoices, tracks payment |
+| **Commercial manager** | Watches the register and the exposure across projects |
+| **Managing director** | Sees everything, and is told about anything three working days late. **Holds no approval seat** — a second signature on every change was a person who could be on a plane |
+| **Client** | Receives notices and priced variations, and is chased automatically |
 
-Authority is defined by a **capability matrix**, not by job title. Who may
-approve, price, or issue a notice is a configurable permission per project, so
-the system fits a company's real delegation rather than forcing an org chart.
-
----
-
-## How work enters the system
-
-### WhatsApp capture
-A site engineer sends a message, a photo, a voice note, or a document to the
-company's number. The system identifies the sender, works out which of their
-projects it relates to, and files it. If anything is ambiguous it **asks a
-question rather than guessing** — which project, whether this is a new change
-or evidence for an existing one, when the event happened, how many days notice
-the contract requires.
-
-The exchange is conversational and asks one thing at a time: whether the work
-has started, when it happened, who asked for it, and which drawing it came
-from. It understands a short reply ("the ceiling one", "yes", "thanks"), reads
-a photo caption as a strong signal, accepts several files at once, reads the
-whole thing back for confirmation before anything is written, and closes the
-conversation politely instead of leaving an open loop.
-
-Answers are standardised as they arrive. "Yesterday", "last Monday", "the
-15th", "23rd of August" and "a couple of weeks back" all become one calendar
-date; "the consultants", "supervision consultant" and "MEP" all become one
-named party. What the reporter typed is kept word for word; what the register
-counts is consistent.
-
-### Email capture
-Mail sent to the project inbox is parsed the same way, with attachments
-preserved as evidence. Replies land on the original thread, so a question from
-the system appears where the person expects it rather than as unrelated noise.
-
-### Direct entry
-A mobile-first web form for anybody who prefers to type it in, and a full
-desktop interface for the commercial team.
-
-### Document watch
-Files landing in the project's document folder are registered automatically and
-indexed, so drawings, specifications and correspondence are searchable and can
-be attached to a change as supporting evidence.
+Authority comes from a **capability matrix, not a job title**. Who may approve,
+price or issue a notice is configurable per project, so the system fits the
+company's real delegation.
 
 ---
 
-## The lifecycle of a change
+## How work gets in
+
+**WhatsApp** — the engineer sends a message. The system identifies the sender,
+works out the project, and **asks a question rather than guessing** when
+anything is unclear. One thing at a time. It reads the record back before
+writing, and closes the conversation instead of leaving it open.
+
+**Email** — parsed the same way, attachments kept as evidence, replies landing
+on the original thread.
+
+**Web form** — mobile-first for the field, full desktop for the commercial team.
+
+**Document watch** — files landing in the project folder are registered and
+indexed, so drawings and specs are searchable and attachable as evidence.
+
+Answers are standardised on the way in — "last Monday" becomes a date, "the
+consultants" becomes a named party — and **what the reporter typed is kept word
+for word underneath**.
+
+---
+
+## The life of a change
 
 ```
-Reported  →  Potential Change  →  Notice assessment  →  Notice issued
-                                                              ↓
-Payment  ←  Invoice  ←  Client approval  ←  Submitted  ←  Priced & approved
+Reported → PM review → QS pricing → PM approval → Sent to client → Client decision → Closed
+              │
+              └── Initial notice runs beside it, on its own track
 ```
 
-**1 · Potential Change.** Every report becomes a numbered record —
-`PC-{PROJECT}-0001` — with the reporter's own words preserved verbatim, the
-event date, evidence, and an owner. Nothing is thrown away and nothing is
-edited into a summary.
+**1 · The record.** `PC-DXB-001-0001`, the reporter's own words, the event date,
+evidence, an owner. Nothing is thrown away or edited into a summary.
 
-**2 · The notice clock starts immediately.** The contractual notice period is
-configured per project. The deadline is calculated from the event date, shown
-as a live countdown, and colour-coded — green with time in hand, amber
-approaching, red once breached.
+**2 · The clock starts at once.** The deadline is the event date plus **the
+project's own** notice period. Live countdown, green to red.
 
-**3 · Notice assessment.** The project manager decides: notice required, not
-required, or more information needed. Both the project manager and the managing
-director are told the moment a change is captured, so nobody discovers a
-deadline on the day it expires.
+**3 · The PM decides, on one screen.** Notice required, not required, or more
+information needed. "No" requires a reason. "More information" requires saying
+what is missing, and raises a task for whoever reported it.
 
-**4 · The notice goes to the client** as a formal document the moment it is
-approved, and the delivery is recorded as evidence of service.
+**4 · Pricing starts at that decision**, not after the notice clears. The notice
+never holds up a price.
 
-**5 · Pricing.** The commercial team builds the value from line items —
-labour, materials, plant, subcontract, preliminaries, overhead and profit —
-with the contract's own rates and mark-ups applied.
+**5 · The notice goes out on one deliberate act.** The PM reads the draft, edits
+it, and presses send. Delivery is confirmed by callback, never assumed.
 
-**6 · Approval.** Value passes through configurable approval gates before it
-can leave the building. Thresholds are per project, so a small variation does
-not need the same signatures as a large one.
+**6 · Approval is the sending.** The PM approves the priced variation, and that
+one act raises the VO, renders the PDF, files it, emails the client and records
+the submission.
 
-**7 · Submission and client follow-up.** The priced variation is submitted, and
-the client is followed up automatically on a cadence the company sets — or not
-at all, if that relationship is handled in person.
+**7 · Follow-up.** The client is chased on the company's own cadence, which
+stops the moment they answer, and can be switched off per project.
 
-**8 · The money.** Approved variations flow into progress applications and
-invoices, with retention held and released, credit notes where value comes
-back, and payments recorded against what is owed.
+**8 · The money.** Applications, invoices, retention, credit notes and payments,
+with a live commercial position per project.
 
 ---
 
-## Feature summary
+## What it does
 
-### Capture and evidence
-- WhatsApp, email, web form, and document-folder ingestion
-- Conversational follow-up that asks rather than assumes
-- Photographs, voice notes, drawings and documents held as immutable evidence
-- Every message deduplicated, so a retried delivery never creates a duplicate record
-- The reporter's original words preserved for the life of the record
+**Capture and evidence** — four channels, conversational follow-up, immutable
+photographs and voice notes, deduplicated so a retried delivery never doubles a
+record.
 
-### Contractual control
-- Per-project contract rules: notice period, detailed claim period, response
-  periods, delivery method, named recipient
-- Automatic notice deadlines with live countdown and risk colouring
-- Formal notice documents generated from the record and issued to the client
-- Delivery confirmed by callback, never assumed
+**Contractual control** — per-project notice and claim periods, live deadlines
+with risk colouring, formal notice documents generated from the record,
+**delivery confirmed by callback and never assumed**.
 
-### Commercial management
-- Full variation register with filtering, search and mobile card view
-- Line-item pricing with contract rates, mark-ups and preliminaries
-- Approval gates by value, resolved through the permission matrix
-- Progress applications and invoices, with retention held automatically
-- Credit notes, retention release in contractual moieties, and payment tracking
-- A live commercial position per project: claimed, approved, invoiced, paid,
-  retained, credited, outstanding
+**Commercial** — a full register with URL-based filters, line-item pricing with
+a real rate hierarchy, approval through the permission matrix, applications and
+invoices with retention held automatically, credit notes, retention release in
+moieties, payment tracking, and a live position: claimed, approved, invoiced,
+paid, retained, credited, outstanding. UAE VAT done correctly.
 
-### Time and extension of time
-- Days claimed, days approved and days conceded recorded against each variation
-- Every time claim requires a stated basis, so a bare number cannot be submitted
+**Time** — days claimed, approved and conceded. **A time claim cannot be
+submitted without a stated basis.**
 
-### Follow-up and escalation
-- Daily chasing of whoever owns the next decision, by seat rather than by name
-- Escalation when a decision goes unanswered
-- Automatic client follow-up on submitted variations, at a company-set interval,
-  which stops the moment the client answers
-- Bottleneck detection: what is blocked, for how long, and how much value is
-  waiting behind it
+**Chasing** — daily chasing of whoever owns the next decision, **by seat rather
+than by name**, so it survives someone leaving. Bottleneck detection showing
+what is blocked, for how long, and **the value waiting behind it**.
 
-### Intelligence
-- Duplicate detection — flags when a change looks like one already raised
-- Semantic search across the project's commercial documents
-- Automatic extraction of dates, document references, work status and the
-  instructing party from a free-text report, standardised on the way in
-- **Every commercial figure is calculated in code.** The AI reads, suggests and
-  routes; it never computes a number and never decides anything on its own.
+**Intelligence** — duplicate detection that suggests and never merges, semantic
+search across the project's own documents, and extraction of dates, references
+and the instructing party from free text. **Every commercial figure is
+calculated in code.** The AI reads, suggests and routes. It never computes a
+number and never decides anything.
 
-### Visibility
-- Company dashboard: exposure, ageing, risk, value by stage
-- Per-project dashboard and a personal task list
-- Complete audit trail — every change to every record, with who, when, before
-  and after, written in the same transaction as the change itself
-
-### Security and isolation
-- Project-level access enforced on the server, not hidden in the interface
-- A user on one project cannot reach another project's data by any route,
-  including search
-- Row-level security in the database as a second layer
-- Signed, verified integration endpoints
-- Invitation-only accounts; no public sign-up
+**Security** — project access enforced on the server, not hidden in the
+interface. A user on one project cannot reach another's data by any route,
+search included. Row-level security as a second layer. A complete audit trail
+written in the same transaction as the change.
 
 ---
 
 ## Deployment model
 
-One self-contained stack per client: their own application instance, their own
-database, their own file storage, their own phone number and mailbox. Nothing
-is shared between clients — not the database, not the search index, not the
-message queue. Adding a client is a new deployment, not a new tenant row.
-
-The automation layer is packaged as a single importable workflow file per
-client, carrying every inbound and outbound channel, so a new deployment is one
-import and a credential rebind rather than a rebuild.
+One self-contained stack per client: their own app, database, file storage,
+phone number and mailbox. **Nothing is shared between clients.** Adding a client
+is a new deployment, not a new tenant row. The automation layer is one
+importable workflow file per client, so a new deployment is an import and a
+credential rebind rather than a rebuild.
 
 ---
 
-## Design principles worth knowing
+## Principles worth knowing
 
-These shape what the product will and will not do, and are useful context when
-planning around it.
-
-**The system captures; people decide.** It will file a change, calculate a
-deadline, and route it to whoever owns the decision. It will not decide whether
+**The system captures; people decide.** It files the change, calculates the
+deadline, and routes it to whoever owns the decision. It does not decide whether
 a change is a variation, what it is worth, or whether to claim it.
 
-**It asks rather than guesses.** When it cannot tell which project a message
-belongs to, or whether a photo is new evidence or a new change, it asks. A
-wrong guess puts a claim on the wrong job, and that is worse than a question.
+**It asks rather than guesses.** A wrong guess puts a claim on the wrong job,
+and that is worse than a question.
 
-**Evidence is immutable.** Original photographs and messages are never
-overwritten, never edited, and never deleted by the system. Anything the
-software derives is stored beside the original, never in place of it.
+**Evidence is immutable.** Originals are never overwritten, edited or deleted.
+Anything derived is stored beside the original, never in place of it.
 
-**Money is arithmetic, not judgement.** Every figure is computed from stored
-rates and quantities and is reproducible from the record. Issued paperwork
-freezes the rates that produced it, so a document reissued a year later shows
-the same numbers.
+**Money is arithmetic, not judgement.** Every figure is reproducible from the
+record, and issued paperwork freezes the rates that produced it.
 
-**Silence is a designed behaviour.** Not everyone is told everything. A
-director copied on every decision from hour one stops reading all of them, so
-the system deliberately stays quiet until a decision is actually owed.
+**Silence is designed.** A director copied on everything from hour one stops
+reading any of it, so the system stays quiet until a decision is actually owed.
 
-**Cadence belongs to the company.** How hard a client is chased, what the
-notice period is, what thresholds require which approval — all configurable per
-project, because these are commercial postures and they differ by contract.
+**Cadence belongs to the company.** Notice periods, chasing intervals and
+thresholds are commercial postures, and they differ by contract.
 
 ---
 
 ## Market position
 
-**Who it is for:** fit-out, interior and specialist contractors running
-multiple concurrent projects where changes are frequent, informal and
-contractually time-bound. Initially UAE, where fit-out programmes are short,
-change volume is high, and notice provisions are strictly enforced.
+**For** fit-out, interior and specialist contractors running several projects
+where changes are frequent, informal and time-bound. UAE first, where programmes
+are short, change volume is high, and notice provisions are enforced.
 
-**What it replaces:** a spreadsheet register that is always out of date, a
-WhatsApp thread nobody can search, and a commercial manager's memory.
+**It replaces** a register that is always out of date, a WhatsApp thread nobody
+can search, and a commercial manager's memory.
 
-**What makes it different from generic project management:** it is built around
-the *contractual clock*, not around tasks. The deadline, the evidence, and the
-chain of authority are the product. Everything else follows from them.
+**It is not generic project management.** It is built around the *contractual
+clock*. The deadline, the evidence and the chain of authority are the product.
 
-**The value proposition in one line:** every change captured the day it
-happens, every notice served inside its window, and every submitted variation
-chased until the client answers.
+**In one line:** every change captured the day it happens, every notice served
+inside its window, and every submitted variation chased until the client answers.
